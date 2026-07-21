@@ -18,6 +18,7 @@ enum UsageTab: String, CaseIterable, Identifiable {
 struct UsagePanel: View {
     @Bindable var store: UsageStore
     @Bindable var settings: SettingsStore
+    @Bindable var updates: UpdateManager
     var glassNamespace: Namespace.ID
     var onOpenSettings: () -> Void
 
@@ -41,6 +42,12 @@ struct UsagePanel: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 14)
                     .padding(.bottom, 10)
+
+                if let update = updates.availableUpdate {
+                    updateBanner(update)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 8)
+                }
 
                 content
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -226,6 +233,16 @@ struct UsagePanel: View {
                     .glassEffect(.regular.interactive())
 
                     Menu {
+                        Button("Check for Updates…") {
+                            Task { await updates.checkForUpdates(userInitiated: true) }
+                            MenuBarPanelKeeper.keepOpen()
+                        }
+                        if let update = updates.availableUpdate {
+                            Button("Install \(update.version)…") {
+                                Task { await updates.installAvailableUpdate() }
+                            }
+                            .disabled(updates.isInstalling)
+                        }
                         Button("Open Cursor Dashboard") {
                             if let url = URL(string: "https://cursor.com/dashboard") {
                                 NSWorkspace.shared.open(url)
@@ -247,6 +264,30 @@ struct UsagePanel: View {
             }
         }
         .foregroundStyle(.primary.opacity(0.9))
+    }
+
+    private func updateBanner(_ update: AvailableUpdate) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: "arrow.down.circle.fill")
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Update \(update.version) available")
+                    .font(.caption.weight(.semibold))
+                Text("Not notarized — replaces this app, then relaunches.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            Button(updates.isInstalling ? "Installing…" : "Install") {
+                Task { await updates.installAvailableUpdate() }
+                MenuBarPanelKeeper.keepOpen()
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .disabled(updates.isInstalling)
+        }
+        .padding(10)
+        .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private func footerIcon(_ systemName: String) -> some View {

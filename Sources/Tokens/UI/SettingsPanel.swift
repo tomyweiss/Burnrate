@@ -2,9 +2,10 @@ import SwiftUI
 
 struct SettingsPanel: View {
     @Bindable var settings: SettingsStore
+    @Bindable var updates: UpdateManager
+    @Bindable var store: UsageStore
     var glassNamespace: Namespace.ID
     var onBack: () -> Void
-    var onTestNotification: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -78,9 +79,52 @@ struct SettingsPanel: View {
                     .foregroundStyle(.secondary)
 
                     Button("Test notification") {
-                        onTestNotification()
+                        Task { await store.sendTestNotification() }
                         MenuBarPanelKeeper.keepOpen()
                     }
+
+                    if let feedback = store.notificationFeedback {
+                        Text(feedback)
+                            .font(.caption)
+                            .foregroundStyle(
+                                feedback.hasPrefix("Test notification")
+                                    ? Color.secondary
+                                    : Color.orange
+                            )
+                    }
+                }
+
+                Section("Updates") {
+                    Toggle("Check for updates automatically", isOn: $settings.autoCheckForUpdates)
+                        .onChange(of: settings.autoCheckForUpdates) { _, _ in
+                            MenuBarPanelKeeper.keepOpen()
+                        }
+
+                    Button(updates.isChecking ? "Checking…" : "Check for Updates…") {
+                        Task { await updates.checkForUpdates(userInitiated: true) }
+                        MenuBarPanelKeeper.keepOpen()
+                    }
+                    .disabled(updates.isChecking || updates.isInstalling)
+
+                    if let update = updates.availableUpdate {
+                        Text("Version \(update.version) is available.")
+                            .font(.caption)
+                        Button(updates.isInstalling ? "Installing…" : "Download & Install") {
+                            Task { await updates.installAvailableUpdate() }
+                            MenuBarPanelKeeper.keepOpen()
+                        }
+                        .disabled(updates.isInstalling)
+                    }
+
+                    if let status = updates.statusMessage {
+                        Text(status)
+                            .font(.caption)
+                            .foregroundStyle(updates.lastError == nil ? Color.secondary : Color.red)
+                    }
+
+                    Text("Updates download from GitHub Releases, verify a SHA-256 checksum, then replace this app. Builds are not Apple-notarized.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("General") {
@@ -110,6 +154,6 @@ struct SettingsPanel: View {
     }
 
     private var appVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.2"
     }
 }

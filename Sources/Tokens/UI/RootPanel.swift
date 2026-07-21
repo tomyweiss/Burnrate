@@ -8,6 +8,7 @@ enum PanelRoute: Hashable {
 struct RootPanel: View {
     @Bindable var store: UsageStore
     @Bindable var settings: SettingsStore
+    @Bindable var updates: UpdateManager
     @State private var route: PanelRoute = .usage
     @Namespace private var glassNamespace
 
@@ -21,22 +22,25 @@ struct RootPanel: View {
                 UsagePanel(
                     store: store,
                     settings: settings,
+                    updates: updates,
                     glassNamespace: glassNamespace,
                     onOpenSettings: { route = .settings }
                 )
             case .settings:
                 SettingsPanel(
                     settings: settings,
+                    updates: updates,
+                    store: store,
                     glassNamespace: glassNamespace,
-                    onBack: { route = .usage },
-                    onTestNotification: {
-                        Task { await store.sendTestNotification() }
-                    }
+                    onBack: { route = .usage }
                 )
             }
         }
         .frame(width: panelWidth, height: panelHeight)
-        .onAppear { MenuBarPanelKeeper.keepOpen() }
+        .onAppear {
+            MenuBarPanelKeeper.keepOpen()
+            updates.autoCheckIfNeeded()
+        }
         .onDisappear {
             route = .usage
         }

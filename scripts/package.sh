@@ -11,17 +11,27 @@ APP_DIR="$BUILD_DIR/App/${APP_NAME}.app"
 CONTENTS="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS/MacOS"
 RESOURCES_DIR="$CONTENTS/Resources"
+DIST_DIR="$ROOT/dist"
+
+# Version can be overridden: VERSION=0.0.3 bash scripts/package.sh --release
+VERSION="${VERSION:-0.0.2}"
+BUNDLE_VERSION="${BUNDLE_VERSION:-$(echo "$VERSION" | tr -cd '0-9')}"
+if [[ -z "$BUNDLE_VERSION" ]]; then
+  BUNDLE_VERSION=2
+fi
 
 INSTALL=0
 OPEN=0
+RELEASE=0
 for arg in "$@"; do
   case "$arg" in
     --install) INSTALL=1 ;;
     --open) OPEN=1 ;;
+    --release) RELEASE=1 ;;
   esac
 done
 
-echo "Building ${APP_NAME} (release)…"
+echo "Building ${APP_NAME} ${VERSION} (release)…"
 swift build -c release
 
 BINARY="$BUILD_DIR/release/${EXECUTABLE_NAME}"
@@ -42,7 +52,7 @@ fi
 # Remove old Tokens.app install if present
 rm -rf "/Applications/Tokens.app" 2>/dev/null || true
 
-cat > "$CONTENTS/Info.plist" <<'PLIST'
+cat > "$CONTENTS/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -64,9 +74,9 @@ cat > "$CONTENTS/Info.plist" <<'PLIST'
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>1.0.0</string>
+  <string>${VERSION}</string>
   <key>CFBundleVersion</key>
-  <string>1</string>
+  <string>${BUNDLE_VERSION}</string>
   <key>LSMinimumSystemVersion</key>
   <string>26.0</string>
   <key>LSUIElement</key>
@@ -82,6 +92,26 @@ PLIST
 codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1 || true
 
 echo "Built $APP_DIR"
+
+if [[ "$RELEASE" -eq 1 ]]; then
+  mkdir -p "$DIST_DIR"
+  ZIP_NAME="${APP_NAME}-${VERSION}.zip"
+  ZIP_PATH="$DIST_DIR/$ZIP_NAME"
+  SHA_PATH="$DIST_DIR/${APP_NAME}-${VERSION}.sha256"
+  rm -f "$ZIP_PATH" "$SHA_PATH"
+  (
+    cd "$BUILD_DIR/App"
+    /usr/bin/ditto -c -k --sequesterRsrc --keepParent "${APP_NAME}.app" "$ZIP_PATH"
+  )
+  (
+    cd "$DIST_DIR"
+    shasum -a 256 "$ZIP_NAME" | awk '{print $1"  '$ZIP_NAME'"}' > "${APP_NAME}-${VERSION}.sha256"
+  )
+  echo "Release artifacts:"
+  echo "  $ZIP_PATH"
+  echo "  $SHA_PATH"
+  echo "Upload both to a GitHub Release tagged v${VERSION} (or ${VERSION})."
+fi
 
 if [[ "$INSTALL" -eq 1 ]]; then
   DEST="/Applications/${APP_NAME}.app"
