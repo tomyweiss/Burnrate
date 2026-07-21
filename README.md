@@ -66,21 +66,24 @@ Example: `OK $12.40 today (67 events)`
 Burnrate can update itself from [GitHub Releases](https://github.com/tomyweiss/Burnrate/releases) without an Apple Developer ID:
 
 1. Checks `releases/latest` for a newer version tag
-2. Downloads `Burnrate-x.y.z.zip` and verifies `Burnrate-x.y.z.sha256`
+2. Downloads `Burnrate-x.y.z.zip`, verifies `Burnrate-x.y.z.sha256`, then verifies the minisign signature (`Burnrate-x.y.z.zip.minisig`) against the embedded public key
 3. Quits, replaces the running `.app`, strips quarantine, relaunches
 
 Use **⋯ → Check for Updates…** or Settings → Updates. You confirm before install. Builds are **not notarized**; if macOS blocks a new build, right-click → Open or run `xattr -dr com.apple.quarantine` on the app.
 
 ### Cutting a release (maintainers)
 
+Requires [minisign](https://jedisct1.github.io/minisign/) and the release signing secret key at `~/.config/burnrate/burnrate.key` (or set `MINISIGN_SECRET_KEY`). The matching public key is committed as [`burnrate.pub`](burnrate.pub) and embedded in the app.
+
 ```bash
 VERSION=0.0.2 bash scripts/package.sh --release
 # uploads:
 #   dist/Burnrate-0.0.2.zip
 #   dist/Burnrate-0.0.2.sha256
+#   dist/Burnrate-0.0.2.zip.minisig
 ```
 
-Create a GitHub Release tagged `0.0.2` or `v0.0.2` and attach **both** files. The zip must contain `Burnrate.app` at the top level (as produced by the script).
+Create a GitHub Release tagged `0.0.2` or `v0.0.2` and attach **all three** files. The zip must contain `Burnrate.app` at the top level (as produced by the script). Updates without a valid `.minisig` are rejected.
 
 ## Privacy & security
 
@@ -88,6 +91,7 @@ Create a GitHub Release tagged `0.0.2` or `v0.0.2` and attach **both** files. Th
 - Fetches usage over HTTPS from Cursor’s dashboard endpoints using that session
 - Session names and workspace folders come from **local** Cursor composer metadata
 - No analytics, no third-party servers, no model/API calls that consume Cursor usage
+- Self-updates require a minisign signature matching the embedded public key (not only a SHA-256 checksum from the same release)
 
 ## How it works
 

@@ -98,7 +98,8 @@ if [[ "$RELEASE" -eq 1 ]]; then
   ZIP_NAME="${APP_NAME}-${VERSION}.zip"
   ZIP_PATH="$DIST_DIR/$ZIP_NAME"
   SHA_PATH="$DIST_DIR/${APP_NAME}-${VERSION}.sha256"
-  rm -f "$ZIP_PATH" "$SHA_PATH"
+  SIG_PATH="$DIST_DIR/${APP_NAME}-${VERSION}.zip.minisig"
+  rm -f "$ZIP_PATH" "$SHA_PATH" "$SIG_PATH"
   (
     cd "$BUILD_DIR/App"
     /usr/bin/ditto -c -k --sequesterRsrc --keepParent "${APP_NAME}.app" "$ZIP_PATH"
@@ -107,10 +108,34 @@ if [[ "$RELEASE" -eq 1 ]]; then
     cd "$DIST_DIR"
     shasum -a 256 "$ZIP_NAME" | awk '{print $1"  '$ZIP_NAME'"}' > "${APP_NAME}-${VERSION}.sha256"
   )
+
+  MINISIGN_SECRET_KEY="${MINISIGN_SECRET_KEY:-$HOME/.config/burnrate/burnrate.key}"
+  if ! command -v minisign &>/dev/null; then
+    echo "minisign is required for --release (brew install minisign)" >&2
+    exit 1
+  fi
+  if [[ ! -f "$MINISIGN_SECRET_KEY" ]]; then
+    echo "Missing minisign secret key at $MINISIGN_SECRET_KEY" >&2
+    echo "Set MINISIGN_SECRET_KEY or place the key at ~/.config/burnrate/burnrate.key" >&2
+    exit 1
+  fi
+  # Legacy (-l) unhashed Ed25519 signatures — matches SignatureVerifier in the app.
+  # Empty password prompt for keys generated without a passphrase.
+  printf '\n' | minisign -Sm "$ZIP_PATH" -s "$MINISIGN_SECRET_KEY" -l
+  # minisign writes next to the zip; normalize the expected release asset name.
+  if [[ -f "${ZIP_PATH}.minisig" && "${ZIP_PATH}.minisig" != "$SIG_PATH" ]]; then
+    mv "${ZIP_PATH}.minisig" "$SIG_PATH"
+  fi
+  if [[ ! -f "$SIG_PATH" ]]; then
+    echo "Expected signature at $SIG_PATH after minisign" >&2
+    exit 1
+  fi
+
   echo "Release artifacts:"
   echo "  $ZIP_PATH"
   echo "  $SHA_PATH"
-  echo "Upload both to a GitHub Release tagged v${VERSION} (or ${VERSION})."
+  echo "  $SIG_PATH"
+  echo "Upload all three to a GitHub Release tagged v${VERSION} (or ${VERSION})."
 fi
 
 if [[ "$INSTALL" -eq 1 ]]; then

@@ -6,3 +6,6 @@ DerivedData/
 .swiftpm/
 .DS_Store
 dist/
+
+# Minisign secret key — never commit
+burnrate.key
