@@ -84,3 +84,8 @@ No Dock icon. Auth comes from the local Cursor IDE login.
 | Alert cooldown | 15 minutes |
 | Hide menu-bar amount | off |
 | Launch at login | off unless already enabled |
+
+## License
+
+[MIT](LICENSE)
+

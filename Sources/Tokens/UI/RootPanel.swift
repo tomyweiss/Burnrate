@@ -37,6 +37,9 @@ struct RootPanel: View {
         }
         .frame(width: panelWidth, height: panelHeight)
         .onAppear { MenuBarPanelKeeper.keepOpen() }
+        .onDisappear {
+            route = .usage
+        }
         .onChange(of: route) { _, _ in
             MenuBarPanelKeeper.keepOpen()
         }
