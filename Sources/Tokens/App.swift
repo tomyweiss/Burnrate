@@ -5,6 +5,7 @@ import AppKit
 struct TokensApp: App {
     @State private var settings: SettingsStore
     @State private var store: UsageStore
+    @State private var updates: UpdateManager
 
     init() {
         if CommandLine.arguments.contains("--status") {
@@ -14,6 +15,7 @@ struct TokensApp: App {
         let settings = SettingsStore()
         _settings = State(initialValue: settings)
         _store = State(initialValue: UsageStore(settings: settings))
+        _updates = State(initialValue: UpdateManager(settings: settings))
     }
 
     private static func runStatusAndExit() -> Never {
@@ -63,8 +65,11 @@ struct TokensApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            RootPanel(store: store, settings: settings)
-                .onAppear { store.start() }
+            RootPanel(store: store, settings: settings, updates: updates)
+                .onAppear {
+                    store.start()
+                    updates.autoCheckIfNeeded()
+                }
         } label: {
             Label {
                 if let amount = store.menuAmountText {

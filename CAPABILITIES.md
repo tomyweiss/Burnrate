@@ -65,6 +65,12 @@ No Dock icon. Auth comes from the local Cursor IDE login.
 /Applications/Burnrate.app/Contents/MacOS/Tokens --status
 ```
 
+### Updates
+
+- Auto-check GitHub Releases (toggle in Settings, default on)
+- Manual check from overflow menu / Settings
+- SHA-256 verified zip replace of the running app (not notarized)
+
 ---
 
 ## Limitations

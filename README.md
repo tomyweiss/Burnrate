@@ -16,6 +16,7 @@ Burnrate is a lightweight macOS menu bar app that shows today’s Cursor usage s
 - **Spike alerts** — macOS notification when spend crosses your threshold (default $10 / 10 min)
 - **Zero cookie paste** — uses your signed-in Cursor IDE session on this Mac
 - **Privacy-minded** — does not store your auth token; does not call models (won’t bump AI usage)
+- **Self-updates** — checks GitHub Releases, verifies SHA-256, replaces the app (not Apple-notarized)
 
 ## Requirements
 
@@ -58,7 +59,28 @@ Example: `OK $12.40 today (67 events)`
 
 **Panel:** today total, burn pill, sparkline, **Models** / **Sessions** tabs, Settings, Refresh, and overflow (open Cursor dashboard / Quit).
 
-**Settings:** poll interval, spike threshold / window / cooldown, launch at login, hide amount in the menu bar, test notification.
+**Settings:** poll interval, spike threshold / window / cooldown, launch at login, hide amount in the menu bar, test notification, updates.
+
+## Updates (messy OTA)
+
+Burnrate can update itself from [GitHub Releases](https://github.com/tomyweiss/Burnrate/releases) without an Apple Developer ID:
+
+1. Checks `releases/latest` for a newer version tag
+2. Downloads `Burnrate-x.y.z.zip` and verifies `Burnrate-x.y.z.sha256`
+3. Quits, replaces the running `.app`, strips quarantine, relaunches
+
+Use **⋯ → Check for Updates…** or Settings → Updates. You confirm before install. Builds are **not notarized**; if macOS blocks a new build, right-click → Open or run `xattr -dr com.apple.quarantine` on the app.
+
+### Cutting a release (maintainers)
+
+```bash
+VERSION=0.0.2 bash scripts/package.sh --release
+# uploads:
+#   dist/Burnrate-0.0.2.zip
+#   dist/Burnrate-0.0.2.sha256
+```
+
+Create a GitHub Release tagged `0.0.2` or `v0.0.2` and attach **both** files. The zip must contain `Burnrate.app` at the top level (as produced by the script).
 
 ## Privacy & security
 

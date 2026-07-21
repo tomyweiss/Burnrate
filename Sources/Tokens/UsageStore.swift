@@ -8,6 +8,7 @@ final class UsageStore {
     private(set) var hasCompletedFetch = false
     private(set) var lastError: String?
     private(set) var isSpikeActive = false
+    private(set) var notificationFeedback: String?
 
     private let api = CursorAPI()
     private let anomalyMonitor: AnomalyMonitor?
@@ -17,6 +18,9 @@ final class UsageStore {
     init(settings: SettingsStore, enableAnomalyAlerts: Bool = true) {
         self.settings = settings
         self.anomalyMonitor = enableAnomalyAlerts ? AnomalyMonitor() : nil
+        if enableAnomalyAlerts {
+            NotificationPresenter.shared.install()
+        }
     }
 
     var isStale: Bool {
@@ -95,6 +99,10 @@ final class UsageStore {
     }
 
     func sendTestNotification() async {
-        await anomalyMonitor?.sendTestNotification(settings: settings)
+        guard let anomalyMonitor else {
+            notificationFeedback = "Notifications are unavailable."
+            return
+        }
+        notificationFeedback = await anomalyMonitor.sendTestNotification(settings: settings)
     }
 }

@@ -9,6 +9,7 @@ final class SettingsStore {
         static let anomalyWindowMinutes = "anomalyWindowMinutes"
         static let anomalyCooldownMinutes = "anomalyCooldownMinutes"
         static let hideAmountInMenuBar = "hideAmountInMenuBar"
+        static let autoCheckForUpdates = "autoCheckForUpdates"
     }
 
     static let refreshIntervalOptions: [Double] = [15, 30, 60, 120, 300, 600]
@@ -61,6 +62,10 @@ final class SettingsStore {
         didSet { defaults.set(hideAmountInMenuBar, forKey: Keys.hideAmountInMenuBar) }
     }
 
+    var autoCheckForUpdates: Bool {
+        didSet { defaults.set(autoCheckForUpdates, forKey: Keys.autoCheckForUpdates) }
+    }
+
     var launchAtLogin: Bool {
         didSet { applyLaunchAtLogin() }
     }
@@ -83,6 +88,12 @@ final class SettingsStore {
         anomalyCooldownMinutes = cooldown ?? 15
 
         hideAmountInMenuBar = defaults.bool(forKey: Keys.hideAmountInMenuBar)
+
+        if defaults.object(forKey: Keys.autoCheckForUpdates) == nil {
+            autoCheckForUpdates = true
+        } else {
+            autoCheckForUpdates = defaults.bool(forKey: Keys.autoCheckForUpdates)
+        }
 
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }
