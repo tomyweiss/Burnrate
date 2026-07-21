@@ -5,8 +5,9 @@ import Foundation
 final class UsageStore {
     private(set) var snapshot: UsageSnapshot = .empty
     private(set) var isLoading = false
+    private(set) var hasCompletedFetch = false
     private(set) var lastError: String?
-    private(set) var menuTitle = "$—"
+    private(set) var isSpikeActive = false
 
     private let api = CursorAPI()
     private let anomalyMonitor: AnomalyMonitor?
@@ -16,6 +17,30 @@ final class UsageStore {
     init(settings: SettingsStore, enableAnomalyAlerts: Bool = true) {
         self.settings = settings
         self.anomalyMonitor = enableAnomalyAlerts ? AnomalyMonitor() : nil
+    }
+
+    var isStale: Bool {
+        guard hasCompletedFetch, snapshot.fetchedAt != .distantPast else { return false }
+        let limit = max(15, settings.refreshIntervalSeconds) * 3
+        return Date().timeIntervalSince(snapshot.fetchedAt) > limit
+    }
+
+    var menuSymbolName: String {
+        if lastError != nil {
+            return "exclamationmark.triangle"
+        }
+        if isSpikeActive {
+            return "flame.fill"
+        }
+        return "flame"
+    }
+
+    var menuAmountText: String? {
+        if settings.hideAmountInMenuBar { return nil }
+        if !hasCompletedFetch, lastError == nil {
+            return "$—.——"
+        }
+        return MoneyFormat.dollars(snapshot.todayDollars)
     }
 
     func start() {
@@ -59,15 +84,17 @@ final class UsageStore {
             )
             snapshot = next
             lastError = nil
-            menuTitle = formatDollars(next.todayDollars)
+            hasCompletedFetch = true
+            isSpikeActive = next.recentCostCents >= settings.anomalyThresholdDollars * 100
             await anomalyMonitor?.evaluate(snapshot: next, settings: settings)
         } catch {
             lastError = error.localizedDescription
-            menuTitle = "!"
+            hasCompletedFetch = true
+            // Keep last good snapshot and amount visible.
         }
     }
 
-    private func formatDollars(_ value: Double) -> String {
-        String(format: "$%.2f", value)
+    func sendTestNotification() async {
+        await anomalyMonitor?.sendTestNotification(settings: settings)
     }
 }

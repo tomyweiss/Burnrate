@@ -28,27 +28,43 @@ final class AnomalyMonitor {
         }
 
         await requestAuthorizationIfNeeded()
-
-        let dollars = snapshot.recentDollars
-        let window = settings.anomalyWindowMinutes
-        let content = UNMutableNotificationContent()
-        content.title = "Cursor spend spike"
-        content.body = String(
-            format: "$%.2f in the last %d minutes",
-            dollars,
-            window
+        await postNotification(
+            title: "Burnrate spike",
+            body: String(
+                format: "%@ in the last %d minutes",
+                MoneyFormat.dollars(snapshot.recentDollars),
+                settings.anomalyWindowMinutes
+            )
         )
+        lastNotificationAt = Date()
+    }
+
+    func sendTestNotification(settings: SettingsStore) async {
+        await requestAuthorizationIfNeeded()
+        await postNotification(
+            title: "Burnrate test",
+            body: String(
+                format: "Sample alert: ≥ %@ in %d minutes.",
+                MoneyFormat.dollars(settings.anomalyThresholdDollars),
+                settings.anomalyWindowMinutes
+            )
+        )
+    }
+
+    private func postNotification(title: String, body: String) async {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
         content.sound = .default
 
         let request = UNNotificationRequest(
-            identifier: "tokens.anomaly.\(UUID().uuidString)",
+            identifier: "burnrate.anomaly.\(UUID().uuidString)",
             content: content,
             trigger: nil
         )
 
         do {
             try await center.add(request)
-            lastNotificationAt = Date()
         } catch {
             // Ignore delivery failures.
         }
