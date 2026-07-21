@@ -14,6 +14,7 @@ struct UsageEvent: Decodable, Sendable, Hashable {
     let isTokenBasedCall: Bool?
     let tokenUsage: TokenUsage?
     let usageBasedCosts: String?
+    let conversationId: String?
 
     var timestampMs: Double {
         Double(timestamp) ?? 0
@@ -33,6 +34,11 @@ struct UsageEvent: Decodable, Sendable, Hashable {
     var outputTokens: Int { tokenUsage?.outputTokens ?? 0 }
     var cacheReadTokens: Int { tokenUsage?.cacheReadTokens ?? 0 }
     var cacheWriteTokens: Int { tokenUsage?.cacheWriteTokens ?? 0 }
+
+    var sessionKey: String {
+        let id = conversationId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return id.isEmpty ? "unknown-session" : id
+    }
 }
 
 struct TokenUsage: Decodable, Sendable, Hashable {
@@ -44,6 +50,54 @@ struct TokenUsage: Decodable, Sendable, Hashable {
     let discountPercentOff: Double?
 }
 
+struct SessionUsage: Identifiable, Sendable, Hashable {
+    var id: String { conversationId }
+    let conversationId: String
+    let name: String?
+    let workspaceName: String?
+    let costCents: Double
+    let inputTokens: Int
+    let outputTokens: Int
+    let cacheReadTokens: Int
+    let cacheWriteTokens: Int
+    let eventCount: Int
+    let lastTimestampMs: Double
+    /// Models used in this session, sorted by that session's per-model cost desc.
+    let models: [String]
+
+    var costDollars: Double { costCents / 100.0 }
+
+    var totalTokens: Int {
+        inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens
+    }
+
+    var displayName: String {
+        let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmed.isEmpty { return trimmed }
+        let short = conversationId.count > 8
+            ? String(conversationId.prefix(8))
+            : conversationId
+        return "Session \(short)"
+    }
+
+    func enriched(with meta: SessionMeta?) -> SessionUsage {
+        guard let meta else { return self }
+        return SessionUsage(
+            conversationId: conversationId,
+            name: meta.name ?? name,
+            workspaceName: meta.workspaceName ?? workspaceName,
+            costCents: costCents,
+            inputTokens: inputTokens,
+            outputTokens: outputTokens,
+            cacheReadTokens: cacheReadTokens,
+            cacheWriteTokens: cacheWriteTokens,
+            eventCount: eventCount,
+            lastTimestampMs: lastTimestampMs,
+            models: models
+        )
+    }
+}
+
 struct ModelUsage: Identifiable, Sendable, Hashable {
     var id: String { model }
     let model: String
@@ -53,14 +107,36 @@ struct ModelUsage: Identifiable, Sendable, Hashable {
     let cacheReadTokens: Int
     let cacheWriteTokens: Int
     let eventCount: Int
+    let sessions: [SessionUsage]
 
     var costDollars: Double { costCents / 100.0 }
+
+    var totalTokens: Int {
+        inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens
+    }
+
+    func withSessions(_ sessions: [SessionUsage]) -> ModelUsage {
+        ModelUsage(
+            model: model,
+            costCents: costCents,
+            inputTokens: inputTokens,
+            outputTokens: outputTokens,
+            cacheReadTokens: cacheReadTokens,
+            cacheWriteTokens: cacheWriteTokens,
+            eventCount: eventCount,
+            sessions: sessions
+        )
+    }
 }
 
 struct UsageSnapshot: Sendable {
     let todayCostCents: Double
     let recentCostCents: Double
     let models: [ModelUsage]
+    /// Sessions aggregated across all models, sorted by cost desc.
+    let sessionsAcrossModels: [SessionUsage]
+    /// 24 entries, index = hour of local day (0…23).
+    let hourlyCostCents: [Double]
     let eventCount: Int
     let fetchedAt: Date
 
@@ -71,6 +147,8 @@ struct UsageSnapshot: Sendable {
         todayCostCents: 0,
         recentCostCents: 0,
         models: [],
+        sessionsAcrossModels: [],
+        hourlyCostCents: Array(repeating: 0, count: 24),
         eventCount: 0,
         fetchedAt: .distantPast
     )
