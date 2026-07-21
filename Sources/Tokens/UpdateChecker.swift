@@ -6,6 +6,7 @@ struct AvailableUpdate: Sendable, Equatable {
     let version: String
     let zipURL: URL
     let sha256URL: URL?
+    let signatureURL: URL?
     let releasePageURL: URL?
     let notes: String?
 }
@@ -15,6 +16,8 @@ enum UpdateError: Error, LocalizedError {
     case missingZipAsset
     case checksumMissing
     case checksumMismatch
+    case signatureMissing
+    case signatureInvalid
     case downloadFailed
     case unzipFailed
     case invalidAppBundle
@@ -26,6 +29,8 @@ enum UpdateError: Error, LocalizedError {
         case .missingZipAsset: "Release has no Burnrate-*.zip asset."
         case .checksumMissing: "Release is missing a .sha256 checksum file."
         case .checksumMismatch: "Downloaded update failed checksum verification."
+        case .signatureMissing: "Release is missing a .minisig signature file."
+        case .signatureInvalid: "Downloaded update failed signature verification."
         case .downloadFailed: "Could not download the update."
         case .unzipFailed: "Could not unpack the update archive."
         case .invalidAppBundle: "Update archive did not contain Burnrate.app."
@@ -83,10 +88,16 @@ actor UpdateChecker {
         }
         let shaURL = shaAsset.flatMap { URL(string: $0.browserDownloadURL) }
 
+        let sigAsset = release.assets.first {
+            $0.name.hasSuffix(".minisig")
+        }
+        let sigURL = sigAsset.flatMap { URL(string: $0.browserDownloadURL) }
+
         return AvailableUpdate(
             version: remote,
             zipURL: zipURL,
             sha256URL: shaURL,
+            signatureURL: sigURL,
             releasePageURL: URL(string: release.htmlURL),
             notes: release.body
         )
@@ -111,6 +122,11 @@ actor UpdateChecker {
         let actual = try Self.sha256Hex(of: zipPath)
         guard actual.caseInsensitiveCompare(expected) == .orderedSame else {
             throw UpdateError.checksumMismatch
+        }
+
+        let signatureText = try await loadSignature(update: update)
+        guard SignatureVerifier.verify(fileAt: zipPath, signature: signatureText) else {
+            throw UpdateError.signatureInvalid
         }
 
         let unzip = Process()
@@ -183,6 +199,20 @@ actor UpdateChecker {
         let _ = cache
         let _ = version
         return hex
+    }
+
+    private func loadSignature(update: AvailableUpdate) async throws -> String {
+        guard let sigURL = update.signatureURL else {
+            throw UpdateError.signatureMissing
+        }
+        let (data, response) = try await session.data(from: sigURL)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+              let text = String(data: data, encoding: .utf8),
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            throw UpdateError.signatureMissing
+        }
+        return text
     }
 
     private func updatesDirectory() throws -> URL {
