@@ -13,11 +13,11 @@ MACOS_DIR="$CONTENTS/MacOS"
 RESOURCES_DIR="$CONTENTS/Resources"
 DIST_DIR="$ROOT/dist"
 
-# Version can be overridden: VERSION=0.0.6 bash scripts/package.sh --release
-VERSION="${VERSION:-0.0.6}"
+# Version can be overridden: VERSION=0.0.7 bash scripts/package.sh --release
+VERSION="${VERSION:-0.0.7}"
 BUNDLE_VERSION="${BUNDLE_VERSION:-$(echo "$VERSION" | tr -cd '0-9')}"
 if [[ -z "$BUNDLE_VERSION" ]]; then
-  BUNDLE_VERSION=6
+  BUNDLE_VERSION=7
 fi
 
 INSTALL=0

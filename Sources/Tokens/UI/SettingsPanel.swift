@@ -97,6 +97,7 @@ struct SettingsPanel: View {
                 Section("Updates") {
                     Toggle("Check for updates automatically", isOn: $settings.autoCheckForUpdates)
                         .onChange(of: settings.autoCheckForUpdates) { _, _ in
+                            updates.autoCheckIfNeeded()
                             MenuBarPanelKeeper.keepOpen()
                         }
 
@@ -122,7 +123,7 @@ struct SettingsPanel: View {
                             .foregroundStyle(updates.lastError == nil ? Color.secondary : Color.red)
                     }
 
-                    Text("Updates download from GitHub Releases, verify a SHA-256 checksum, then replace this app. Builds are not Apple-notarized.")
+                    Text("Automatic checks run about once an hour. Updates download from GitHub Releases, verify a minisign signature, then replace this app. Builds are not Apple-notarized.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -154,6 +155,6 @@ struct SettingsPanel: View {
     }
 
     private var appVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.6"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.7"
     }
 }
