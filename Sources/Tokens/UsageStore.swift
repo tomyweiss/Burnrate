@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 @MainActor
 @Observable
@@ -29,14 +30,21 @@ final class UsageStore {
         return Date().timeIntervalSince(snapshot.fetchedAt) > limit
     }
 
+    /// Matches the burn-pill severity for the rolling spike window.
+    var burnLevel: BurnLevel {
+        BurnLevel.level(
+            recentDollars: snapshot.recentDollars,
+            thresholdDollars: settings.anomalyThresholdDollars,
+            hasError: lastError != nil
+        )
+    }
+
     var menuSymbolName: String {
-        if lastError != nil {
-            return "exclamationmark.triangle"
-        }
-        if isSpikeActive {
-            return "flame.fill"
-        }
-        return "flame"
+        burnLevel.symbolName
+    }
+
+    var menuBarIcon: NSImage {
+        burnLevel.menuBarImage()
     }
 
     var menuAmountText: String? {

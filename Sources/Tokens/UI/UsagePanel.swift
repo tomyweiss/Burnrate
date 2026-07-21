@@ -90,13 +90,7 @@ struct UsagePanel: View {
     }
 
     private var burnPill: some View {
-        let threshold = max(settings.anomalyThresholdDollars, 0.01)
-        let ratio = store.snapshot.recentDollars / threshold
-        let tint: Color = {
-            if ratio >= 1 { return .red }
-            if ratio >= 0.25 { return .orange }
-            return .secondary
-        }()
+        let tint = store.burnLevel.swiftUIColor
 
         return Text(
             "▲ \(MoneyFormat.dollars(store.snapshot.recentDollars)) · \(settings.anomalyWindowMinutes)m"

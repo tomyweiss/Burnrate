@@ -77,7 +77,7 @@ struct TokensApp: App {
                         .monospacedDigit()
                 }
             } icon: {
-                Image(systemName: store.menuSymbolName)
+                Image(nsImage: store.menuBarIcon)
             }
             .labelStyle(.titleAndIcon)
         }
