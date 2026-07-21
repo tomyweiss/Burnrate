@@ -154,6 +154,6 @@ struct SettingsPanel: View {
     }
 
     private var appVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.2"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.6"
     }
 }
