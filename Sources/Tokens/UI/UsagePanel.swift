@@ -203,8 +203,7 @@ struct UsagePanel: View {
                     onOpenSettings()
                     MenuBarPanelKeeper.keepOpen()
                 } label: {
-                    Image(systemName: "gearshape")
-                        .frame(width: 28, height: 28)
+                    footerIcon("gearshape")
                 }
                 .buttonStyle(.borderless)
                 .help("Settings")
@@ -218,8 +217,7 @@ struct UsagePanel: View {
                         Task { await store.refresh() }
                         MenuBarPanelKeeper.keepOpen()
                     } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .frame(width: 28, height: 28)
+                        footerIcon("arrow.clockwise")
                     }
                     .buttonStyle(.borderless)
                     .disabled(store.isLoading)
@@ -240,15 +238,22 @@ struct UsagePanel: View {
                         }
                         .keyboardShortcut("q")
                     } label: {
-                        Image(systemName: "ellipsis")
-                            .frame(width: 28, height: 28)
+                        footerIcon("ellipsis")
                     }
-                    .menuStyle(.borderlessButton)
+                    .buttonStyle(.borderless)
                     .help("More")
                     .glassEffect(.regular.interactive())
                 }
             }
         }
-        .foregroundStyle(.secondary)
+        .foregroundStyle(.primary.opacity(0.9))
+    }
+
+    private func footerIcon(_ systemName: String) -> some View {
+        Image(systemName: systemName)
+            .font(.body.weight(.medium))
+            .imageScale(.medium)
+            .frame(width: 30, height: 30, alignment: .center)
+            .contentShape(Rectangle())
     }
 }

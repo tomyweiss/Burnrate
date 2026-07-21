@@ -14,7 +14,7 @@ Lightweight macOS menu bar app for **Cursor spend since local midnight** — how
 bash scripts/package.sh --install --open
 ```
 
-Installs `Burnrate.app` to `/Applications` and launches it.
+Installs `Burnrate.app` to `/Applications` and launches it. The app uses a flame icon in Finder (matching the menu bar symbol).
 
 ## Usage
 

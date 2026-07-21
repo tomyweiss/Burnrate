@@ -35,6 +35,10 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 cp "$BINARY" "$MACOS_DIR/${EXECUTABLE_NAME}"
 chmod +x "$MACOS_DIR/${EXECUTABLE_NAME}"
 
+if [[ -f "$ROOT/Resources/AppIcon.icns" ]]; then
+  cp "$ROOT/Resources/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
+fi
+
 # Remove old Tokens.app install if present
 rm -rf "/Applications/Tokens.app" 2>/dev/null || true
 
@@ -55,6 +59,8 @@ cat > "$CONTENTS/Info.plist" <<'PLIST'
   <string>Burnrate</string>
   <key>CFBundleDisplayName</key>
   <string>Burnrate</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
