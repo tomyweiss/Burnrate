@@ -145,6 +145,10 @@ if [[ "$RELEASE" -eq 1 ]]; then
     echo "Upload manually to a GitHub Release tagged ${TAG}." >&2
     exit 1
   fi
+  if ! gh version &>/dev/null; then
+    echo "gh is on PATH but failed to run. If you use asdf, add 'github-cli <version>' to .tool-versions." >&2
+    exit 1
+  fi
 
   if gh release view "$TAG" >/dev/null 2>&1; then
     echo "Uploading assets to existing release ${TAG}…"
