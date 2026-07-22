@@ -59,4 +59,36 @@ enum BurnLevel: Equatable, Sendable {
         copy.isTemplate = false
         return copy
     }
+
+    /// Flame plus a small gray dot so -dev is distinct without replacing the $ amount.
+    func menuBarImageWithDevDot(pointSize: CGFloat = 15) -> NSImage {
+        let flame = menuBarImage(pointSize: pointSize)
+        let gap: CGFloat = 3
+        let dotSize: CGFloat = 5
+        let width = flame.size.width + gap + dotSize
+        let height = max(flame.size.height, dotSize)
+        let image = NSImage(size: NSSize(width: width, height: height))
+        image.lockFocus()
+        defer { image.unlockFocus() }
+
+        let flameY = (height - flame.size.height) / 2
+        flame.draw(
+            in: NSRect(x: 0, y: flameY, width: flame.size.width, height: flame.size.height),
+            from: .zero,
+            operation: .sourceOver,
+            fraction: 1
+        )
+
+        let dotRect = NSRect(
+            x: flame.size.width + gap,
+            y: (height - dotSize) / 2,
+            width: dotSize,
+            height: dotSize
+        )
+        NSColor.secondaryLabelColor.setFill()
+        NSBezierPath(ovalIn: dotRect).fill()
+
+        image.isTemplate = false
+        return image
+    }
 }

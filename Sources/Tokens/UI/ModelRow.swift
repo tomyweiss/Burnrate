@@ -23,6 +23,7 @@ struct ModelRowView: View {
     let isExpanded: Bool
     let reduceMotion: Bool
     var showLocationSubtitle: Bool = false
+    var hideArchivedSessions: Bool = false
     let onToggle: () -> Void
 
     @State private var hovering = false
@@ -30,6 +31,11 @@ struct ModelRowView: View {
     private var share: Double {
         guard windowCostCents > 0 else { return 0 }
         return model.costCents / windowCostCents
+    }
+
+    private var visibleSessions: [SessionUsage] {
+        guard hideArchivedSessions else { return model.sessions }
+        return model.sessions.filter { !$0.isArchived }
     }
 
     var body: some View {
@@ -77,7 +83,7 @@ struct ModelRowView: View {
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 4)
 
-                    ForEach(model.sessions) { session in
+                    ForEach(visibleSessions) { session in
                         SessionRowView(
                             session: session,
                             windowCostCents: windowCostCents,

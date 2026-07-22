@@ -70,6 +70,16 @@ struct UsagePanel: View {
 
                 Spacer(minLength: 8)
 
+                if AppIdentity.isDevBuild {
+                    Text("DEV")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(Color.orange))
+                        .accessibilityLabel("Development build")
+                }
+
                 timelinePicker
 
                 if store.isLoading {
@@ -184,12 +194,13 @@ struct UsagePanel: View {
                                     isExpanded: expandedModels.contains(model.id),
                                     reduceMotion: reduceMotion,
                                     showLocationSubtitle: settings.showLocationSubtitle,
+                                    hideArchivedSessions: settings.hideArchivedSessions,
                                     onToggle: { toggleExpanded(model.id) }
                                 )
                                 Divider().opacity(0.35)
                             }
                         case .sessions:
-                            ForEach(store.snapshot.sessionsAcrossModels) { session in
+                            ForEach(visibleSessions) { session in
                                 SessionRowView(
                                     session: session,
                                     windowCostCents: store.snapshot.windowCostCents,
@@ -206,6 +217,12 @@ struct UsagePanel: View {
                 }
             }
         }
+    }
+
+    private var visibleSessions: [SessionUsage] {
+        let sessions = store.snapshot.sessionsAcrossModels
+        guard settings.hideArchivedSessions else { return sessions }
+        return sessions.filter { !$0.isArchived }
     }
 
     private func toggleExpanded(_ modelID: String) {

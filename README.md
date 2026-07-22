@@ -137,7 +137,7 @@ bash scripts/package.sh --dev --install --open
 # or: make install-dev
 ```
 
-This installs `Burnrate-dev.app` with bundle id `com.tomyweiss.burnrate.dev`. Self-updates are disabled in -dev builds.
+This installs `Burnrate-dev.app` with bundle id `com.tomyweiss.burnrate.dev`. The menu bar keeps the normal `$` amount and adds a small gray dot next to the flame; the panel shows an orange **DEV** badge. Self-updates are disabled. Version defaults to the latest git tag (override with `VERSION=…`).
 
 Package layout: Swift package target `Tokens` (internal name), shipped as **Burnrate.app**.
 
