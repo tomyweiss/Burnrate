@@ -183,6 +183,7 @@ struct UsagePanel: View {
                                     windowCostCents: store.snapshot.windowCostCents,
                                     isExpanded: expandedModels.contains(model.id),
                                     reduceMotion: reduceMotion,
+                                    showLocationSubtitle: settings.showLocationSubtitle,
                                     onToggle: { toggleExpanded(model.id) }
                                 )
                                 Divider().opacity(0.35)
@@ -193,7 +194,8 @@ struct UsagePanel: View {
                                     session: session,
                                     windowCostCents: store.snapshot.windowCostCents,
                                     showModelChips: true,
-                                    showShareBar: true
+                                    showShareBar: true,
+                                    showLocationSubtitle: settings.showLocationSubtitle
                                 )
                                 Divider().opacity(0.35)
                             }

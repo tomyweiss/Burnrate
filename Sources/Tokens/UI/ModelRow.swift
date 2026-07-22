@@ -22,6 +22,7 @@ struct ModelRowView: View {
     let windowCostCents: Double
     let isExpanded: Bool
     let reduceMotion: Bool
+    var showLocationSubtitle: Bool = false
     let onToggle: () -> Void
 
     @State private var hovering = false
@@ -81,7 +82,8 @@ struct ModelRowView: View {
                             session: session,
                             windowCostCents: windowCostCents,
                             showModelChips: false,
-                            showShareBar: false
+                            showShareBar: false,
+                            showLocationSubtitle: showLocationSubtitle
                         )
                     }
                 }

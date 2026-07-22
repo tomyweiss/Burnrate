@@ -13,6 +13,7 @@ final class SettingsStore {
         static let usageTimelinePreset = "usageTimelinePreset"
         static let billingDayOfMonth = "billingDayOfMonth"
         static let usageTimezoneIdentifier = "usageTimezoneIdentifier"
+        static let showLocationSubtitle = "showLocationSubtitle"
     }
 
     static let refreshIntervalOptions: [Double] = [15, 30, 60, 120, 300, 600]
@@ -63,6 +64,10 @@ final class SettingsStore {
 
     var hideAmountInMenuBar: Bool {
         didSet { defaults.set(hideAmountInMenuBar, forKey: Keys.hideAmountInMenuBar) }
+    }
+
+    var showLocationSubtitle: Bool {
+        didSet { defaults.set(showLocationSubtitle, forKey: Keys.showLocationSubtitle) }
     }
 
     var autoCheckForUpdates: Bool {
@@ -140,6 +145,7 @@ final class SettingsStore {
         anomalyCooldownMinutes = cooldown ?? 15
 
         hideAmountInMenuBar = defaults.bool(forKey: Keys.hideAmountInMenuBar)
+        showLocationSubtitle = defaults.bool(forKey: Keys.showLocationSubtitle)
 
         if defaults.object(forKey: Keys.autoCheckForUpdates) == nil {
             autoCheckForUpdates = true

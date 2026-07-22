@@ -24,9 +24,15 @@ final class UpdateManager {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
     }
 
+    /// Side-by-side contributor builds use bundle id `….burnrate.dev`.
+    var isDevBuild: Bool {
+        Bundle.main.bundleIdentifier?.hasSuffix(".dev") == true
+    }
+
     var hasUpdate: Bool { availableUpdate != nil }
 
     func autoCheckIfNeeded() {
+        guard !isDevBuild else { return }
         guard settings.autoCheckForUpdates else {
             autoCheckTask?.cancel()
             autoCheckTask = nil
@@ -54,6 +60,12 @@ final class UpdateManager {
     }
 
     func checkForUpdates(userInitiated: Bool) async {
+        if isDevBuild {
+            if userInitiated {
+                statusMessage = "Updates are disabled in Burnrate-dev"
+            }
+            return
+        }
         guard !isChecking, !isInstalling else { return }
         isChecking = true
         lastError = nil
