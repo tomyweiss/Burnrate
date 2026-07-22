@@ -8,14 +8,17 @@ EXECUTABLE_NAME="Tokens"
 BUILD_DIR="$ROOT/.build"
 DIST_DIR="$ROOT/dist"
 
-# Version can be overridden: VERSION=0.0.7 bash scripts/package.sh --release
-# Leading "v" is stripped so VERSION=v0.0.7 and VERSION=0.0.7 are equivalent.
-VERSION="${VERSION:-0.0.7}"
+# Version can be overridden: VERSION=0.0.10 bash scripts/package.sh --release
+# Default: latest git tag (v0.0.10 → 0.0.10). Leading "v" is stripped.
+if [[ -z "${VERSION:-}" ]]; then
+  VERSION="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+fi
+VERSION="${VERSION:-0.0.0}"
 VERSION="${VERSION#v}"
 VERSION="${VERSION#V}"
 BUNDLE_VERSION="${BUNDLE_VERSION:-$(echo "$VERSION" | tr -cd '0-9')}"
 if [[ -z "$BUNDLE_VERSION" ]]; then
-  BUNDLE_VERSION=7
+  BUNDLE_VERSION=0
 fi
 
 INSTALL=0

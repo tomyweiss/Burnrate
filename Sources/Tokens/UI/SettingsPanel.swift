@@ -180,6 +180,13 @@ struct SettingsPanel: View {
                     Text("Extra row under each session: workspace, or repo · branch for cloud agents.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    Toggle("Hide archived sessions", isOn: $settings.hideArchivedSessions)
+                        .onChange(of: settings.hideArchivedSessions) { _, _ in
+                            MenuBarPanelKeeper.keepOpen()
+                        }
+                    Text("Hide sessions Cursor has archived. Spend totals are unchanged.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("About") {
@@ -198,13 +205,11 @@ struct SettingsPanel: View {
     }
 
     private var appVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.7"
+        AppIdentity.versionLabel
     }
 
     private var appDisplayName: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
-            ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
-            ?? "Burnrate"
+        AppIdentity.displayName
     }
 
     private var filteredTimeZones: [(id: String, label: String)] {

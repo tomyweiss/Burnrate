@@ -44,7 +44,10 @@ final class UsageStore {
     }
 
     var menuBarIcon: NSImage {
-        burnLevel.menuBarImage()
+        if AppIdentity.isDevBuild {
+            return burnLevel.menuBarImageWithDevDot()
+        }
+        return burnLevel.menuBarImage()
     }
 
     var menuAmountText: String? {

@@ -56,6 +56,7 @@ struct SessionUsage: Identifiable, Sendable, Hashable {
     let name: String?
     let workspaceName: String?
     let isCloud: Bool
+    let isArchived: Bool
     let repoName: String?
     let branchName: String?
     let costCents: Double
@@ -102,6 +103,7 @@ struct SessionUsage: Identifiable, Sendable, Hashable {
             name: meta.name ?? name,
             workspaceName: meta.workspaceName ?? workspaceName,
             isCloud: meta.isCloud || isCloud || conversationId.hasPrefix("bc-"),
+            isArchived: meta.isArchived || isArchived,
             repoName: meta.repoName ?? repoName,
             branchName: meta.branchName ?? branchName,
             costCents: costCents,

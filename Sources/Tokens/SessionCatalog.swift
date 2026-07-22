@@ -6,6 +6,7 @@ struct SessionMeta: Sendable, Hashable {
     let name: String?
     let workspaceName: String?
     let isCloud: Bool
+    let isArchived: Bool
     let repoName: String?
     let branchName: String?
 
@@ -14,6 +15,7 @@ struct SessionMeta: Sendable, Hashable {
         name: String? = nil,
         workspaceName: String? = nil,
         isCloud: Bool = false,
+        isArchived: Bool = false,
         repoName: String? = nil,
         branchName: String? = nil
     ) {
@@ -21,6 +23,7 @@ struct SessionMeta: Sendable, Hashable {
         self.name = name
         self.workspaceName = workspaceName
         self.isCloud = isCloud || conversationId.hasPrefix("bc-")
+        self.isArchived = isArchived
         self.repoName = repoName
         self.branchName = branchName
     }
@@ -110,6 +113,7 @@ enum SessionCatalog {
                     name: cloudMeta.name ?? existing.name,
                     workspaceName: existing.workspaceName,
                     isCloud: true,
+                    isArchived: cloudMeta.isArchived || existing.isArchived,
                     repoName: cloudMeta.repoName ?? existing.repoName,
                     branchName: cloudMeta.branchName ?? existing.branchName
                 )
@@ -130,6 +134,7 @@ enum SessionCatalog {
                     name: existing.name,
                     workspaceName: existing.workspaceName,
                     isCloud: true,
+                    isArchived: existing.isArchived,
                     repoName: existing.repoName,
                     branchName: existing.branchName
                 )
@@ -169,7 +174,8 @@ enum SessionCatalog {
                     conversationId: id,
                     name: stringValue(composer["name"]),
                     workspaceName: workspaceName(from: composer["workspaceIdentifier"]),
-                    isCloud: id.hasPrefix("bc-")
+                    isCloud: id.hasPrefix("bc-"),
+                    isArchived: boolValue(composer["isArchived"])
                 )
             }
         }
@@ -187,7 +193,8 @@ enum SessionCatalog {
                 conversationId: id,
                 name: stringValue(root["name"]),
                 workspaceName: workspaceName(from: root["workspaceIdentifier"]),
-                isCloud: id.hasPrefix("bc-")
+                isCloud: id.hasPrefix("bc-"),
+                isArchived: boolValue(root["isArchived"])
             )
         }
 
@@ -234,6 +241,7 @@ enum SessionCatalog {
                     name: stringValue(agent["name"]),
                     workspaceName: nil,
                     isCloud: true,
+                    isArchived: boolValue(agent["isArchived"]),
                     repoName: SessionMeta.shortRepoName(from: stringValue(agent["repoUrl"])),
                     branchName: stringValue(agent["branchName"])
                 )
@@ -335,6 +343,12 @@ enum SessionCatalog {
         guard let text = value as? String else { return nil }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func boolValue(_ value: Any?) -> Bool {
+        if let flag = value as? Bool { return flag }
+        if let number = value as? NSNumber { return number.boolValue }
+        return false
     }
 
     private static func workspaceName(from value: Any?) -> String? {

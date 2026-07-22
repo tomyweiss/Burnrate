@@ -18,6 +18,12 @@ struct SessionRowView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    if session.isArchived {
+                        Image(systemName: "archivebox")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("Archived")
+                    }
                     if session.isCloud {
                         Image(systemName: "cloud")
                             .font(.caption.weight(.semibold))
@@ -26,6 +32,7 @@ struct SessionRowView: View {
                     }
                     Text(session.displayName)
                         .font(.callout.weight(.medium))
+                        .foregroundStyle(session.isArchived ? Color.secondary : Color.primary)
                         .lineLimit(2)
                 }
                 Spacer(minLength: 8)

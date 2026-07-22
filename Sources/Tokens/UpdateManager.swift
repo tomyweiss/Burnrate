@@ -25,9 +25,7 @@ final class UpdateManager {
     }
 
     /// Side-by-side contributor builds use bundle id `….burnrate.dev`.
-    var isDevBuild: Bool {
-        Bundle.main.bundleIdentifier?.hasSuffix(".dev") == true
-    }
+    var isDevBuild: Bool { AppIdentity.isDevBuild }
 
     var hasUpdate: Bool { availableUpdate != nil }
 
