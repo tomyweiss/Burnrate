@@ -4,6 +4,9 @@ import AppKit
 @MainActor
 @Observable
 final class UpdateManager {
+    private static let autoCheckInterval: TimeInterval = 60 * 60 // 1 hour
+    private static let lastCheckKey = "lastUpdateCheckAt"
+
     private(set) var availableUpdate: AvailableUpdate?
     private(set) var isChecking = false
     private(set) var isInstalling = false
@@ -11,7 +14,7 @@ final class UpdateManager {
     private(set) var lastError: String?
 
     private let settings: SettingsStore
-    private var didAutoCheck = false
+    private var autoCheckTask: Task<Void, Never>?
 
     init(settings: SettingsStore) {
         self.settings = settings
@@ -24,9 +27,30 @@ final class UpdateManager {
     var hasUpdate: Bool { availableUpdate != nil }
 
     func autoCheckIfNeeded() {
-        guard settings.autoCheckForUpdates, !didAutoCheck else { return }
-        didAutoCheck = true
-        Task { await checkForUpdates(userInitiated: false) }
+        guard settings.autoCheckForUpdates else {
+            autoCheckTask?.cancel()
+            autoCheckTask = nil
+            return
+        }
+        guard autoCheckTask == nil else { return }
+
+        autoCheckTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                guard self.settings.autoCheckForUpdates else { return }
+
+                let elapsed = Date().timeIntervalSince(self.lastCheckDate())
+                if elapsed >= Self.autoCheckInterval {
+                    await self.checkForUpdates(userInitiated: false)
+                }
+
+                let remaining = max(
+                    60,
+                    Self.autoCheckInterval - Date().timeIntervalSince(self.lastCheckDate())
+                )
+                try? await Task.sleep(for: .seconds(remaining))
+            }
+        }
     }
 
     func checkForUpdates(userInitiated: Bool) async {
@@ -55,6 +79,8 @@ final class UpdateManager {
                 statusMessage = error.localizedDescription
             }
         }
+        // Rate-limit auto checks even when the request fails.
+        markChecked()
     }
 
     func installAvailableUpdate() async {
@@ -75,5 +101,13 @@ final class UpdateManager {
             lastError = error.localizedDescription
             statusMessage = error.localizedDescription
         }
+    }
+
+    private func lastCheckDate() -> Date {
+        Date(timeIntervalSince1970: UserDefaults.standard.double(forKey: Self.lastCheckKey))
+    }
+
+    private func markChecked() {
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.lastCheckKey)
     }
 }

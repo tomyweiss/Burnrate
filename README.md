@@ -76,14 +76,14 @@ Use **⋯ → Check for Updates…** or Settings → Updates. You confirm before
 Requires [minisign](https://jedisct1.github.io/minisign/) and the release signing secret key at `~/.config/burnrate/burnrate.key` (or set `MINISIGN_SECRET_KEY`). The matching public key is committed as [`burnrate.pub`](burnrate.pub) and embedded in the app.
 
 ```bash
-VERSION=0.0.6 bash scripts/package.sh --release
+VERSION=0.0.7 bash scripts/package.sh --release
 # uploads:
-#   dist/Burnrate-0.0.6.zip
-#   dist/Burnrate-0.0.6.sha256
-#   dist/Burnrate-0.0.6.zip.minisig
+#   dist/Burnrate-0.0.7.zip
+#   dist/Burnrate-0.0.7.sha256
+#   dist/Burnrate-0.0.7.zip.minisig
 ```
 
-Create a GitHub Release tagged `0.0.6` or `v0.0.6` and attach **all three** files. The zip must contain `Burnrate.app` at the top level (as produced by the script). Updates without a valid `.minisig` are rejected.
+Create a GitHub Release tagged `0.0.7` or `v0.0.7` and attach **all three** files. The zip must contain `Burnrate.app` at the top level (as produced by the script). Updates without a valid `.minisig` are rejected.
 
 ## Privacy & security
 
