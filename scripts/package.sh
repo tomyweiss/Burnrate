@@ -4,13 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-APP_NAME="Burnrate"
 EXECUTABLE_NAME="Tokens"
 BUILD_DIR="$ROOT/.build"
-APP_DIR="$BUILD_DIR/App/${APP_NAME}.app"
-CONTENTS="$APP_DIR/Contents"
-MACOS_DIR="$CONTENTS/MacOS"
-RESOURCES_DIR="$CONTENTS/Resources"
 DIST_DIR="$ROOT/dist"
 
 # Version can be overridden: VERSION=0.0.7 bash scripts/package.sh --release
@@ -26,13 +21,35 @@ fi
 INSTALL=0
 OPEN=0
 RELEASE=0
+DEV=0
 for arg in "$@"; do
   case "$arg" in
     --install) INSTALL=1 ;;
     --open) OPEN=1 ;;
     --release) RELEASE=1 ;;
+    --dev) DEV=1 ;;
   esac
 done
+
+if [[ "$DEV" -eq 1 && "$RELEASE" -eq 1 ]]; then
+  echo "Cannot combine --dev and --release" >&2
+  exit 1
+fi
+
+if [[ "$DEV" -eq 1 ]]; then
+  APP_NAME="Burnrate-dev"
+  BUNDLE_ID="com.tomyweiss.burnrate.dev"
+  DISPLAY_NAME="Burnrate-dev"
+else
+  APP_NAME="Burnrate"
+  BUNDLE_ID="com.tomyweiss.burnrate"
+  DISPLAY_NAME="Burnrate"
+fi
+
+APP_DIR="$BUILD_DIR/App/${APP_NAME}.app"
+CONTENTS="$APP_DIR/Contents"
+MACOS_DIR="$CONTENTS/MacOS"
+RESOURCES_DIR="$CONTENTS/Resources"
 
 echo "Building ${APP_NAME} ${VERSION} (release)…"
 swift build -c release
@@ -65,13 +82,13 @@ cat > "$CONTENTS/Info.plist" <<PLIST
   <key>CFBundleExecutable</key>
   <string>Tokens</string>
   <key>CFBundleIdentifier</key>
-  <string>com.tomyweiss.burnrate</string>
+  <string>${BUNDLE_ID}</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>Burnrate</string>
+  <string>${APP_NAME}</string>
   <key>CFBundleDisplayName</key>
-  <string>Burnrate</string>
+  <string>${DISPLAY_NAME}</string>
   <key>CFBundleIconFile</key>
   <string>AppIcon</string>
   <key>CFBundlePackageType</key>

@@ -7,6 +7,9 @@ DerivedData/
 .DS_Store
 dist/
 
+# Local agent design/plan notes (not shared via repo)
+docs/superpowers/
+
 # Local maintainer release helper (not shared via repo)
 scripts/release.sh
 

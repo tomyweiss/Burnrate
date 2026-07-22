@@ -5,6 +5,7 @@ struct SessionRowView: View {
     let windowCostCents: Double
     var showModelChips: Bool = true
     var showShareBar: Bool = true
+    var showLocationSubtitle: Bool = false
 
     @State private var hovering = false
 
@@ -16,9 +17,17 @@ struct SessionRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(session.displayName)
-                    .font(.callout.weight(.medium))
-                    .lineLimit(2)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    if session.isCloud {
+                        Image(systemName: "cloud")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("Cloud agent")
+                    }
+                    Text(session.displayName)
+                        .font(.callout.weight(.medium))
+                        .lineLimit(2)
+                }
                 Spacer(minLength: 8)
                 Text(MoneyFormat.dollars(session.costDollars))
                     .font(.callout.monospacedDigit().weight(.semibold))
@@ -33,6 +42,14 @@ struct SessionRowView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+
+            if showLocationSubtitle, let location = session.locationSubtitle {
+                Text(location)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 8)
@@ -46,9 +63,6 @@ struct SessionRowView: View {
 
     private var subtitle: String {
         var parts: [String] = []
-        if let workspace = session.workspaceName, !workspace.isEmpty {
-            parts.append(workspace)
-        }
         if showModelChips, let top = session.models.first {
             if session.models.count > 1 {
                 parts.append("\(top) +\(session.models.count - 1)")

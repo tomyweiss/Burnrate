@@ -5,6 +5,25 @@ struct SessionMeta: Sendable, Hashable {
     let conversationId: String
     let name: String?
     let workspaceName: String?
+    let isCloud: Bool
+    let repoName: String?
+    let branchName: String?
+
+    init(
+        conversationId: String,
+        name: String? = nil,
+        workspaceName: String? = nil,
+        isCloud: Bool = false,
+        repoName: String? = nil,
+        branchName: String? = nil
+    ) {
+        self.conversationId = conversationId
+        self.name = name
+        self.workspaceName = workspaceName
+        self.isCloud = isCloud || conversationId.hasPrefix("bc-")
+        self.repoName = repoName
+        self.branchName = branchName
+    }
 
     var displayName: String {
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -13,6 +32,43 @@ struct SessionMeta: Sendable, Hashable {
             ? String(conversationId.prefix(8))
             : conversationId
         return "Session \(short)"
+    }
+
+    /// Extra subtitle: workspace for local, or `repo · branch` for cloud.
+    var locationSubtitle: String? {
+        if isCloud {
+            var parts: [String] = []
+            if let repoName, !repoName.isEmpty { parts.append(repoName) }
+            if let branchName, !branchName.isEmpty { parts.append(branchName) }
+            return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        }
+        let workspace = workspaceName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return workspace.isEmpty ? nil : workspace
+    }
+
+    static func shortRepoName(from repoURL: String?) -> String? {
+        guard var text = repoURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty
+        else { return nil }
+        for prefix in ["https://", "http://", "ssh://"] {
+            if text.lowercased().hasPrefix(prefix) {
+                text = String(text.dropFirst(prefix.count))
+            }
+        }
+        if text.lowercased().hasPrefix("git@") {
+            // git@github.com:org/repo.git
+            if let colon = text.firstIndex(of: ":") {
+                text = String(text[text.index(after: colon)...])
+            }
+        }
+        if text.lowercased().hasPrefix("github.com/") {
+            text = String(text.dropFirst("github.com/".count))
+        }
+        if text.hasSuffix(".git") {
+            text = String(text.dropLast(4))
+        }
+        text = text.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return text.isEmpty ? nil : text
     }
 }
 
@@ -30,7 +86,7 @@ enum SessionCatalog {
     }
 
     /// Resolve titles/workspaces for the given conversation IDs from local Cursor state.
-    /// Checks the desktop IDE database first, then falls back to CLI per-session store.db files.
+    /// Checks the desktop IDE database, CLI store.db files, then cloud agent repository cache.
     static func lookup(conversationIds: Set<String>) -> [String: SessionMeta] {
         guard !conversationIds.isEmpty else { return [:] }
 
@@ -46,8 +102,38 @@ enum SessionCatalog {
             }
         }
 
+        let cloud = lookupCloudAgents(conversationIds: conversationIds)
+        for (id, cloudMeta) in cloud {
+            if let existing = result[id] {
+                result[id] = SessionMeta(
+                    conversationId: id,
+                    name: cloudMeta.name ?? existing.name,
+                    workspaceName: existing.workspaceName,
+                    isCloud: true,
+                    repoName: cloudMeta.repoName ?? existing.repoName,
+                    branchName: cloudMeta.branchName ?? existing.branchName
+                )
+            } else {
+                result[id] = cloudMeta
+            }
+        }
+
         for id in conversationIds where result[id] == nil {
-            result[id] = SessionMeta(conversationId: id, name: nil, workspaceName: nil)
+            result[id] = SessionMeta(conversationId: id)
+        }
+
+        // Ensure bc-* ids are marked cloud even when Cursor has not cached metadata yet.
+        for id in conversationIds where id.hasPrefix("bc-") {
+            if let existing = result[id], !existing.isCloud {
+                result[id] = SessionMeta(
+                    conversationId: id,
+                    name: existing.name,
+                    workspaceName: existing.workspaceName,
+                    isCloud: true,
+                    repoName: existing.repoName,
+                    branchName: existing.branchName
+                )
+            }
         }
 
         return result
@@ -82,7 +168,8 @@ enum SessionCatalog {
                 result[id] = SessionMeta(
                     conversationId: id,
                     name: stringValue(composer["name"]),
-                    workspaceName: workspaceName(from: composer["workspaceIdentifier"])
+                    workspaceName: workspaceName(from: composer["workspaceIdentifier"]),
+                    isCloud: id.hasPrefix("bc-")
                 )
             }
         }
@@ -99,10 +186,59 @@ enum SessionCatalog {
             result[id] = SessionMeta(
                 conversationId: id,
                 name: stringValue(root["name"]),
-                workspaceName: workspaceName(from: root["workspaceIdentifier"])
+                workspaceName: workspaceName(from: root["workspaceIdentifier"]),
+                isCloud: id.hasPrefix("bc-")
             )
         }
 
+        return result
+    }
+
+    // MARK: - Cloud agent repository
+
+    private static func lookupCloudAgents(conversationIds: Set<String>) -> [String: SessionMeta] {
+        guard FileManager.default.fileExists(atPath: ideDatabasePath.path) else { return [:] }
+
+        var database: OpaquePointer?
+        guard sqlite3_open_v2(
+            ideDatabasePath.path,
+            &database,
+            SQLITE_OPEN_READONLY,
+            nil
+        ) == SQLITE_OK else {
+            return [:]
+        }
+        defer { sqlite3_close(database) }
+
+        let query = "SELECT value FROM ItemTable WHERE key LIKE 'cloudAgentRepository.agents.%'"
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, query, -1, &statement, nil) == SQLITE_OK else {
+            return [:]
+        }
+        defer { sqlite3_finalize(statement) }
+
+        var result: [String: SessionMeta] = [:]
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let cString = sqlite3_column_text(statement, 0) else { continue }
+            let json = String(cString: cString)
+            guard let data = json.data(using: .utf8),
+                  let agents = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+            else { continue }
+
+            for agent in agents {
+                guard let bcId = stringValue(agent["bcId"]),
+                      conversationIds.contains(bcId)
+                else { continue }
+                result[bcId] = SessionMeta(
+                    conversationId: bcId,
+                    name: stringValue(agent["name"]),
+                    workspaceName: nil,
+                    isCloud: true,
+                    repoName: SessionMeta.shortRepoName(from: stringValue(agent["repoUrl"])),
+                    branchName: stringValue(agent["branchName"])
+                )
+            }
+        }
         return result
     }
 
@@ -179,7 +315,8 @@ enum SessionCatalog {
         return SessionMeta(
             conversationId: conversationId,
             name: stringValue(json["name"]),
-            workspaceName: nil
+            workspaceName: nil,
+            isCloud: conversationId.hasPrefix("bc-")
         )
     }
 

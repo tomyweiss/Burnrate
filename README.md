@@ -100,7 +100,7 @@ VERSION=0.0.7 bash scripts/package.sh --release
 
 - Reads `cursorAuth/accessToken` from Cursor’s local SQLite DB on each refresh — **never written** to Burnrate’s own storage or Keychain
 - Fetches usage over HTTPS from Cursor’s dashboard endpoints using that session
-- Session names and workspace folders come from **local** Cursor composer metadata
+- Session names and workspace folders come from **local** Cursor composer metadata (and cloud agent cache for `bc-*` sessions)
 - No analytics, no third-party servers, no model/API calls that consume Cursor usage
 - Self-updates require a minisign signature matching the embedded public key (not only a SHA-256 checksum from the same release)
 
@@ -129,6 +129,15 @@ Costs are Cursor-reported charges from usage events, not a hand-rolled price est
 swift build
 bash scripts/package.sh --open
 ```
+
+Side-by-side contributor build (does not overwrite `/Applications/Burnrate.app`):
+
+```bash
+bash scripts/package.sh --dev --install --open
+# or: make install-dev
+```
+
+This installs `Burnrate-dev.app` with bundle id `com.tomyweiss.burnrate.dev`. Self-updates are disabled in -dev builds.
 
 Package layout: Swift package target `Tokens` (internal name), shipped as **Burnrate.app**.
 

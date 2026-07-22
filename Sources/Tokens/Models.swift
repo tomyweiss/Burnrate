@@ -55,6 +55,9 @@ struct SessionUsage: Identifiable, Sendable, Hashable {
     let conversationId: String
     let name: String?
     let workspaceName: String?
+    let isCloud: Bool
+    let repoName: String?
+    let branchName: String?
     let costCents: Double
     let inputTokens: Int
     let outputTokens: Int
@@ -80,12 +83,27 @@ struct SessionUsage: Identifiable, Sendable, Hashable {
         return "Session \(short)"
     }
 
+    /// Extra subtitle: workspace for local, or `repo · branch` for cloud.
+    var locationSubtitle: String? {
+        if isCloud {
+            var parts: [String] = []
+            if let repoName, !repoName.isEmpty { parts.append(repoName) }
+            if let branchName, !branchName.isEmpty { parts.append(branchName) }
+            return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        }
+        let workspace = workspaceName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return workspace.isEmpty ? nil : workspace
+    }
+
     func enriched(with meta: SessionMeta?) -> SessionUsage {
         guard let meta else { return self }
         return SessionUsage(
             conversationId: conversationId,
             name: meta.name ?? name,
             workspaceName: meta.workspaceName ?? workspaceName,
+            isCloud: meta.isCloud || isCloud || conversationId.hasPrefix("bc-"),
+            repoName: meta.repoName ?? repoName,
+            branchName: meta.branchName ?? branchName,
             costCents: costCents,
             inputTokens: inputTokens,
             outputTokens: outputTokens,

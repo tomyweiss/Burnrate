@@ -125,37 +125,43 @@ struct SettingsPanel: View {
                 }
 
                 Section("Updates") {
-                    Toggle("Check for updates automatically", isOn: $settings.autoCheckForUpdates)
-                        .onChange(of: settings.autoCheckForUpdates) { _, _ in
-                            updates.autoCheckIfNeeded()
+                    if updates.isDevBuild {
+                        Text("Self-updates are disabled in Burnrate-dev. Reinstall with scripts/package.sh --dev.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Toggle("Check for updates automatically", isOn: $settings.autoCheckForUpdates)
+                            .onChange(of: settings.autoCheckForUpdates) { _, _ in
+                                updates.autoCheckIfNeeded()
+                                MenuBarPanelKeeper.keepOpen()
+                            }
+
+                        Button(updates.isChecking ? "Checking…" : "Check for Updates…") {
+                            Task { await updates.checkForUpdates(userInitiated: true) }
                             MenuBarPanelKeeper.keepOpen()
                         }
+                        .disabled(updates.isChecking || updates.isInstalling)
 
-                    Button(updates.isChecking ? "Checking…" : "Check for Updates…") {
-                        Task { await updates.checkForUpdates(userInitiated: true) }
-                        MenuBarPanelKeeper.keepOpen()
-                    }
-                    .disabled(updates.isChecking || updates.isInstalling)
-
-                    if let update = updates.availableUpdate {
-                        Text("Version \(update.version) is available.")
-                            .font(.caption)
-                        Button(updates.isInstalling ? "Installing…" : "Download & Install") {
-                            Task { await updates.installAvailableUpdate() }
-                            MenuBarPanelKeeper.keepOpen()
+                        if let update = updates.availableUpdate {
+                            Text("Version \(update.version) is available.")
+                                .font(.caption)
+                            Button(updates.isInstalling ? "Installing…" : "Download & Install") {
+                                Task { await updates.installAvailableUpdate() }
+                                MenuBarPanelKeeper.keepOpen()
+                            }
+                            .disabled(updates.isInstalling)
                         }
-                        .disabled(updates.isInstalling)
-                    }
 
-                    if let status = updates.statusMessage {
-                        Text(status)
-                            .font(.caption)
-                            .foregroundStyle(updates.lastError == nil ? Color.secondary : Color.red)
-                    }
+                        if let status = updates.statusMessage {
+                            Text(status)
+                                .font(.caption)
+                                .foregroundStyle(updates.lastError == nil ? Color.secondary : Color.red)
+                        }
 
-                    Text("Automatic checks run about once an hour. Updates download from GitHub Releases, verify a minisign signature, then replace this app. Builds are not Apple-notarized.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        Text("Automatic checks run about once an hour. Updates download from GitHub Releases, verify a minisign signature, then replace this app. Builds are not Apple-notarized.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Section("General") {
@@ -167,10 +173,17 @@ struct SettingsPanel: View {
                         .onChange(of: settings.hideAmountInMenuBar) { _, _ in
                             MenuBarPanelKeeper.keepOpen()
                         }
+                    Toggle("Show location subtitle", isOn: $settings.showLocationSubtitle)
+                        .onChange(of: settings.showLocationSubtitle) { _, _ in
+                            MenuBarPanelKeeper.keepOpen()
+                        }
+                    Text("Extra row under each session: workspace, or repo · branch for cloud agents.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("About") {
-                    LabeledContent("App", value: "Burnrate")
+                    LabeledContent("App", value: appDisplayName)
                     LabeledContent("Version", value: appVersion)
                     Text("Uses your local Cursor sign-in. Data may differ slightly from the official dashboard.")
                         .font(.caption)
@@ -186,6 +199,12 @@ struct SettingsPanel: View {
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.7"
+    }
+
+    private var appDisplayName: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+            ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
+            ?? "Burnrate"
     }
 
     private var filteredTimeZones: [(id: String, label: String)] {
