@@ -4,34 +4,38 @@ enum Aggregator {
     static func snapshot(
         events: [UsageEvent],
         now: Date = Date(),
+        window: UsageTimeWindow,
         recentWindowMinutes: Int
     ) -> UsageSnapshot {
-        let calendar = Calendar.current
-        let midnight = calendar.startOfDay(for: now)
-        let midnightMs = midnight.timeIntervalSince1970 * 1000
+        let range = window.dateRange(now: now)
+        let startMs = range.start.timeIntervalSince1970 * 1000
+        let endMs = range.end.timeIntervalSince1970 * 1000
         let recentStartMs = now.addingTimeInterval(TimeInterval(-recentWindowMinutes * 60))
             .timeIntervalSince1970 * 1000
 
-        var todayCost: Double = 0
+        let bucketCount = window.bucketCount(now: now)
+        var windowCost: Double = 0
         var recentCost: Double = 0
-        var hourly = Array(repeating: 0.0, count: 24)
+        var buckets = Array(repeating: 0.0, count: bucketCount)
         var byModel: [String: ModelAccumulator] = [:]
         var bySession: [String: CrossSessionAccumulator] = [:]
+        var filteredEventCount = 0
 
         for event in events {
             let ts = event.timestampMs
-            guard ts >= midnightMs else { continue }
+            guard ts >= startMs, ts <= endMs else { continue }
 
+            filteredEventCount += 1
             let cost = event.costCents
-            todayCost += cost
+            windowCost += cost
             if ts >= recentStartMs {
                 recentCost += cost
             }
 
             let eventDate = Date(timeIntervalSince1970: ts / 1000)
-            let hour = calendar.component(.hour, from: eventDate)
-            if (0..<24).contains(hour) {
-                hourly[hour] += cost
+            if let bucketIndex = window.bucketIndex(for: eventDate, now: now),
+               bucketIndex < buckets.count {
+                buckets[bucketIndex] += cost
             }
 
             let modelName = event.model?.isEmpty == false ? event.model! : "unknown"
@@ -131,12 +135,13 @@ enum Aggregator {
         let enrichedCross = crossSessions.map { $0.enriched(with: catalog[$0.conversationId]) }
 
         return UsageSnapshot(
-            todayCostCents: todayCost,
+            windowCostCents: windowCost,
             recentCostCents: recentCost,
             models: enrichedModels,
             sessionsAcrossModels: enrichedCross,
-            hourlyCostCents: hourly,
-            eventCount: events.filter { $0.timestampMs >= midnightMs }.count,
+            sparklineCostCents: buckets,
+            window: window,
+            eventCount: filteredEventCount,
             fetchedAt: now
         )
     }

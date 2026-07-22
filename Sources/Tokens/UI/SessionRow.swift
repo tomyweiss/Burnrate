@@ -2,15 +2,15 @@ import SwiftUI
 
 struct SessionRowView: View {
     let session: SessionUsage
-    let todayCostCents: Double
+    let windowCostCents: Double
     var showModelChips: Bool = true
     var showShareBar: Bool = true
 
     @State private var hovering = false
 
     private var share: Double {
-        guard todayCostCents > 0 else { return 0 }
-        return session.costCents / todayCostCents
+        guard windowCostCents > 0 else { return 0 }
+        return session.costCents / windowCostCents
     }
 
     var body: some View {

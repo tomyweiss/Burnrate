@@ -10,6 +10,9 @@ final class SettingsStore {
         static let anomalyCooldownMinutes = "anomalyCooldownMinutes"
         static let hideAmountInMenuBar = "hideAmountInMenuBar"
         static let autoCheckForUpdates = "autoCheckForUpdates"
+        static let usageTimelinePreset = "usageTimelinePreset"
+        static let billingDayOfMonth = "billingDayOfMonth"
+        static let usageTimezoneIdentifier = "usageTimezoneIdentifier"
     }
 
     static let refreshIntervalOptions: [Double] = [15, 30, 60, 120, 300, 600]
@@ -66,6 +69,55 @@ final class SettingsStore {
         didSet { defaults.set(autoCheckForUpdates, forKey: Keys.autoCheckForUpdates) }
     }
 
+    var usageTimelinePreset: UsageTimelinePreset {
+        didSet {
+            defaults.set(usageTimelinePreset.rawValue, forKey: Keys.usageTimelinePreset)
+        }
+    }
+
+    var billingDayOfMonth: Int {
+        didSet {
+            let clamped = min(max(billingDayOfMonth, 1), 31)
+            if clamped != billingDayOfMonth {
+                billingDayOfMonth = clamped
+                return
+            }
+            defaults.set(billingDayOfMonth, forKey: Keys.billingDayOfMonth)
+        }
+    }
+
+    /// `nil` means use the system timezone.
+    var usageTimezoneIdentifier: String? {
+        didSet {
+            if let usageTimezoneIdentifier,
+               TimeZone(identifier: usageTimezoneIdentifier) == nil {
+                self.usageTimezoneIdentifier = nil
+                return
+            }
+            if let usageTimezoneIdentifier {
+                defaults.set(usageTimezoneIdentifier, forKey: Keys.usageTimezoneIdentifier)
+            } else {
+                defaults.removeObject(forKey: Keys.usageTimezoneIdentifier)
+            }
+        }
+    }
+
+    var resolvedTimeZone: TimeZone {
+        if let usageTimezoneIdentifier,
+           let timeZone = TimeZone(identifier: usageTimezoneIdentifier) {
+            return timeZone
+        }
+        return .current
+    }
+
+    var usageWindow: UsageTimeWindow {
+        UsageTimeWindow(
+            preset: usageTimelinePreset,
+            timeZone: resolvedTimeZone,
+            billingDayOfMonth: billingDayOfMonth
+        )
+    }
+
     var launchAtLogin: Bool {
         didSet { applyLaunchAtLogin() }
     }
@@ -95,6 +147,18 @@ final class SettingsStore {
             autoCheckForUpdates = defaults.bool(forKey: Keys.autoCheckForUpdates)
         }
 
+        if let presetRaw = defaults.string(forKey: Keys.usageTimelinePreset),
+           let preset = UsageTimelinePreset(rawValue: presetRaw) {
+            usageTimelinePreset = preset
+        } else {
+            usageTimelinePreset = .today
+        }
+
+        let billingDay = defaults.object(forKey: Keys.billingDayOfMonth) as? Int
+        billingDayOfMonth = billingDay ?? 1
+
+        usageTimezoneIdentifier = defaults.string(forKey: Keys.usageTimezoneIdentifier)
+
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 
@@ -107,6 +171,16 @@ final class SettingsStore {
         let minutes = Int(seconds / 60)
         return "\(minutes)m"
     }
+
+    static let knownTimeZones: [(id: String, label: String)] = {
+        TimeZone.knownTimeZoneIdentifiers
+            .sorted()
+            .map { id in
+                let timeZone = TimeZone(identifier: id)!
+                let abbreviation = timeZone.abbreviation() ?? timeZone.identifier
+                return (id, "\(id) (\(abbreviation))")
+            }
+    }()
 
     private func applyLaunchAtLogin() {
         let enabled = SMAppService.mainApp.status == .enabled

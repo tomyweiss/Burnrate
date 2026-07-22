@@ -14,7 +14,10 @@ RESOURCES_DIR="$CONTENTS/Resources"
 DIST_DIR="$ROOT/dist"
 
 # Version can be overridden: VERSION=0.0.7 bash scripts/package.sh --release
+# Leading "v" is stripped so VERSION=v0.0.7 and VERSION=0.0.7 are equivalent.
 VERSION="${VERSION:-0.0.7}"
+VERSION="${VERSION#v}"
+VERSION="${VERSION#V}"
 BUNDLE_VERSION="${BUNDLE_VERSION:-$(echo "$VERSION" | tr -cd '0-9')}"
 if [[ -z "$BUNDLE_VERSION" ]]; then
   BUNDLE_VERSION=7
@@ -135,7 +138,24 @@ if [[ "$RELEASE" -eq 1 ]]; then
   echo "  $ZIP_PATH"
   echo "  $SHA_PATH"
   echo "  $SIG_PATH"
-  echo "Upload all three to a GitHub Release tagged v${VERSION} (or ${VERSION})."
+
+  TAG="v${VERSION}"
+  if ! command -v gh &>/dev/null; then
+    echo "gh is required to upload (brew install gh). Artifacts are ready in dist/." >&2
+    echo "Upload manually to a GitHub Release tagged ${TAG}." >&2
+    exit 1
+  fi
+
+  if gh release view "$TAG" >/dev/null 2>&1; then
+    echo "Uploading assets to existing release ${TAG}…"
+    gh release upload "$TAG" "$ZIP_PATH" "$SHA_PATH" "$SIG_PATH" --clobber
+  else
+    echo "Creating GitHub release ${TAG} and uploading assets…"
+    gh release create "$TAG" "$ZIP_PATH" "$SHA_PATH" "$SIG_PATH" \
+      --title "$TAG" \
+      --generate-notes
+  fi
+  echo "Published: $(gh release view "$TAG" --json url --jq .url)"
 fi
 
 if [[ "$INSTALL" -eq 1 ]]; then

@@ -52,7 +52,7 @@ final class UsageStore {
         if !hasCompletedFetch, lastError == nil {
             return "$—.——"
         }
-        return MoneyFormat.dollars(snapshot.todayDollars)
+        return MoneyFormat.dollars(snapshot.windowDollars)
     }
 
     func start() {
@@ -79,9 +79,10 @@ final class UsageStore {
         do {
             let credentials = try TokenProvider.loadSessionCredentials()
             let now = Date()
-            let midnight = Calendar.current.startOfDay(for: now)
-            let startMs = Int64(midnight.timeIntervalSince1970 * 1000)
-            let endMs = Int64(now.timeIntervalSince1970 * 1000)
+            let window = settings.usageWindow
+            let range = window.dateRange(now: now)
+            let startMs = Int64(range.start.timeIntervalSince1970 * 1000)
+            let endMs = Int64(range.end.timeIntervalSince1970 * 1000)
 
             let events = try await api.fetchUsageEvents(
                 credentials: credentials,
@@ -92,6 +93,7 @@ final class UsageStore {
             let next = Aggregator.snapshot(
                 events: events,
                 now: now,
+                window: window,
                 recentWindowMinutes: settings.anomalyWindowMinutes
             )
             snapshot = next

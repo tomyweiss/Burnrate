@@ -19,7 +19,7 @@ struct ShareBar: View {
 
 struct ModelRowView: View {
     let model: ModelUsage
-    let todayCostCents: Double
+    let windowCostCents: Double
     let isExpanded: Bool
     let reduceMotion: Bool
     let onToggle: () -> Void
@@ -27,8 +27,8 @@ struct ModelRowView: View {
     @State private var hovering = false
 
     private var share: Double {
-        guard todayCostCents > 0 else { return 0 }
-        return model.costCents / todayCostCents
+        guard windowCostCents > 0 else { return 0 }
+        return model.costCents / windowCostCents
     }
 
     var body: some View {
@@ -79,7 +79,7 @@ struct ModelRowView: View {
                     ForEach(model.sessions) { session in
                         SessionRowView(
                             session: session,
-                            todayCostCents: todayCostCents,
+                            windowCostCents: windowCostCents,
                             showModelChips: false,
                             showShareBar: false
                         )

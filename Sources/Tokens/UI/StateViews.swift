@@ -1,12 +1,14 @@
 import SwiftUI
 
 struct EmptySpendView: View {
+    let message: String
+
     var body: some View {
         VStack(spacing: 10) {
             Image(systemName: "flame")
                 .font(.system(size: 28, weight: .light))
                 .foregroundStyle(.secondary)
-            Text("No spend since midnight")
+            Text(message)
                 .font(.callout.weight(.medium))
             Text("Usage appears here as you work in Cursor.")
                 .font(.caption)

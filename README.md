@@ -8,9 +8,10 @@ Burnrate is a lightweight macOS menu bar app that shows today’s Cursor usage s
 
 ## Features
 
-- **Menu bar total** — today’s cost at a glance (flame icon; fills when you’re in a spike)
+- **Menu bar total** — spend for your selected timeline at a glance (flame icon; fills when you’re in a spike)
 - **Burn pill** — spend in your rolling alert window (e.g. last 10 minutes)
-- **Hourly sparkline** — shape of the day from midnight to now
+- **Timeline windows** — Today, Last 24h, Last 7d, or This billing (configurable billing day)
+- **Hourly/daily sparkline** — shape of spend across the active window
 - **Models tab** — cost share bars, expand for tokens and per-session rows
 - **Sessions tab** — chats across models, with titles and workspace names from local Cursor data
 - **Spike alerts** — macOS notification when spend crosses your threshold (default $10 / 10 min)
@@ -57,9 +58,9 @@ Example: `OK $12.40 today (67 events)`
 | Filled flame | Recent-window spend ≥ your spike threshold |
 | Warning triangle | Auth or API problem (last known amount still shown when possible) |
 
-**Panel:** today total, burn pill, sparkline, **Models** / **Sessions** tabs, Settings, Refresh, and overflow (open Cursor dashboard / Quit).
+**Panel:** timeline picker, window total, burn pill, sparkline, **Models** / **Sessions** tabs, Settings, Refresh, and overflow (open Cursor dashboard / Quit).
 
-**Settings:** poll interval, spike threshold / window / cooldown, launch at login, hide amount in the menu bar, test notification, updates.
+**Settings:** timeline window (Today / 24h / 7d / This billing), billing day, timezone, poll interval, spike threshold / window / cooldown, launch at login, hide amount in the menu bar, test notification, updates.
 
 ## Updates (messy OTA)
 
@@ -76,14 +77,24 @@ Use **⋯ → Check for Updates…** or Settings → Updates. You confirm before
 Requires [minisign](https://jedisct1.github.io/minisign/) and the release signing secret key at `~/.config/burnrate/burnrate.key` (or set `MINISIGN_SECRET_KEY`). The matching public key is committed as [`burnrate.pub`](burnrate.pub) and embedded in the app.
 
 ```bash
-VERSION=0.0.7 bash scripts/package.sh --release
-# uploads:
-#   dist/Burnrate-0.0.7.zip
-#   dist/Burnrate-0.0.7.sha256
-#   dist/Burnrate-0.0.7.zip.minisig
+bash scripts/release.sh
 ```
 
-Create a GitHub Release tagged `0.0.7` or `v0.0.7` and attach **all three** files. The zip must contain `Burnrate.app` at the top level (as produced by the script). Updates without a valid `.minisig` are rejected.
+This checks out latest `main`, patch-bumps from the newest `v*` tag, creates and pushes the tag, then builds, signs, and uploads:
+
+- `Burnrate-x.y.z.zip`
+- `Burnrate-x.y.z.sha256`
+- `Burnrate-x.y.z.zip.minisig`
+
+Use `--dry-run` to preview the next version without tagging or uploading. Use `--yes` to skip the confirmation prompt.
+
+**Manual override** (hotfix or re-release to an existing version):
+
+```bash
+VERSION=0.0.7 bash scripts/package.sh --release
+```
+
+`VERSION=v0.0.7` works the same (leading `v` is stripped). Requires `gh` auth and the minisign secret key. The zip must contain `Burnrate.app` at the top level. Updates without a valid `.minisig` are rejected.
 
 ## Privacy & security
 
@@ -97,7 +108,7 @@ Create a GitHub Release tagged `0.0.7` or `v0.0.7` and attach **all three** file
 
 1. Load the local Cursor session from  
    `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`
-2. Poll `POST https://cursor.com/api/dashboard/get-filtered-usage-events` for events since midnight
+2. Poll `POST https://cursor.com/api/dashboard/get-filtered-usage-events` for events in the selected timeline window
 3. Sum Cursor’s `chargedCents` for totals, hourly bars, models, and sessions
 4. Resolve chat titles / workspaces from local composer data when available
 
@@ -107,7 +118,8 @@ Costs are Cursor-reported charges from usage events, not a hand-rolled price est
 
 - Relies on Cursor’s **undocumented** dashboard API — it can change or break without notice
 - Individual / personal session only (the account signed into Cursor on this Mac)
-- “Today” means **local midnight**, not UTC or billing-cycle start
+- Default timeline is **Today** (local midnight in your chosen timezone). Also supports Last 24h, Last 7d, and **This billing** (user-set day of month)
+- Longer windows (7d, billing cycle) may hit the API pagination cap (~4000 events) for heavy users
 - Not an official Cursor product; totals may differ slightly from the website
 - Not notarized for distribution outside building from source
 

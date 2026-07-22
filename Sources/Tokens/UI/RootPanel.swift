@@ -47,5 +47,11 @@ struct RootPanel: View {
         .onChange(of: route) { _, _ in
             MenuBarPanelKeeper.keepOpen()
         }
+        .onChange(of: settings.billingDayOfMonth) { _, _ in
+            Task { await store.refresh() }
+        }
+        .onChange(of: settings.usageTimezoneIdentifier) { _, _ in
+            Task { await store.refresh() }
+        }
     }
 }

@@ -7,6 +7,8 @@ struct SettingsPanel: View {
     var glassNamespace: Namespace.ID
     var onBack: () -> Void
 
+    @State private var timezoneSearch = ""
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -35,6 +37,34 @@ struct SettingsPanel: View {
             Divider()
 
             Form {
+                Section("Timeline") {
+                    Picker("Window", selection: $settings.usageTimelinePreset) {
+                        ForEach(UsageTimelinePreset.allCases) { preset in
+                            Text(preset.displayName).tag(preset)
+                        }
+                    }
+                    .onChange(of: settings.usageTimelinePreset) { _, _ in
+                        Task { await store.refresh() }
+                        MenuBarPanelKeeper.keepOpen()
+                    }
+
+                    if settings.usageTimelinePreset == .thisBilling {
+                        Stepper(value: $settings.billingDayOfMonth, in: 1...31) {
+                            Text("Billing day \(settings.billingDayOfMonth)")
+                        }
+                        .onChange(of: settings.billingDayOfMonth) { _, _ in
+                            Task { await store.refresh() }
+                            MenuBarPanelKeeper.keepOpen()
+                        }
+
+                        Text("Spend is counted from this day of each month.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    timezonePicker
+                }
+
                 Section("Refresh") {
                     Picker("Poll every", selection: $settings.refreshIntervalSeconds) {
                         ForEach(SettingsStore.refreshIntervalOptions, id: \.self) { seconds in
@@ -156,5 +186,40 @@ struct SettingsPanel: View {
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.7"
+    }
+
+    private var filteredTimeZones: [(id: String, label: String)] {
+        let query = timezoneSearch.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return SettingsStore.knownTimeZones }
+        return SettingsStore.knownTimeZones.filter {
+            $0.id.lowercased().contains(query) || $0.label.lowercased().contains(query)
+        }
+    }
+
+    private var timezonePicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextField("Search timezones", text: $timezoneSearch)
+                .textFieldStyle(.roundedBorder)
+
+            Picker("Timezone", selection: timezoneSelection) {
+                Text("System (Local)").tag("")
+                ForEach(filteredTimeZones, id: \.id) { zone in
+                    Text(zone.label).tag(zone.id)
+                }
+            }
+            .onChange(of: settings.usageTimezoneIdentifier) { _, _ in
+                Task { await store.refresh() }
+                MenuBarPanelKeeper.keepOpen()
+            }
+        }
+    }
+
+    private var timezoneSelection: Binding<String> {
+        Binding(
+            get: { settings.usageTimezoneIdentifier ?? "" },
+            set: { newValue in
+                settings.usageTimezoneIdentifier = newValue.isEmpty ? nil : newValue
+            }
+        )
     }
 }
