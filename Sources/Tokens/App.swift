@@ -26,6 +26,7 @@ struct TokensApp: App {
         let box = Box()
         let group = DispatchGroup()
         group.enter()
+        let settings = SettingsStore()
 
         Task.detached {
             defer { group.leave() }
@@ -33,9 +34,10 @@ struct TokensApp: App {
                 let credentials = try TokenProvider.loadSessionCredentials()
                 let api = CursorAPI()
                 let now = Date()
-                let midnight = Calendar.current.startOfDay(for: now)
-                let startMs = Int64(midnight.timeIntervalSince1970 * 1000)
-                let endMs = Int64(now.timeIntervalSince1970 * 1000)
+                let window = settings.usageWindow
+                let range = window.dateRange(now: now)
+                let startMs = Int64(range.start.timeIntervalSince1970 * 1000)
+                let endMs = Int64(range.end.timeIntervalSince1970 * 1000)
                 let events = try await api.fetchUsageEvents(
                     credentials: credentials,
                     startMs: startMs,
@@ -44,11 +46,13 @@ struct TokensApp: App {
                 let snapshot = Aggregator.snapshot(
                     events: events,
                     now: now,
-                    recentWindowMinutes: 10
+                    window: window,
+                    recentWindowMinutes: settings.anomalyWindowMinutes
                 )
                 box.message = String(
-                    format: "OK %@ today (%d events)",
-                    MoneyFormat.dollars(snapshot.todayDollars),
+                    format: "OK %@ %@ (%d events)",
+                    MoneyFormat.dollars(snapshot.windowDollars),
+                    window.displayName.lowercased(),
                     snapshot.eventCount
                 )
                 box.code = 0

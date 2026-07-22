@@ -130,25 +130,27 @@ struct ModelUsage: Identifiable, Sendable, Hashable {
 }
 
 struct UsageSnapshot: Sendable {
-    let todayCostCents: Double
+    let windowCostCents: Double
     let recentCostCents: Double
     let models: [ModelUsage]
     /// Sessions aggregated across all models, sorted by cost desc.
     let sessionsAcrossModels: [SessionUsage]
-    /// 24 entries, index = hour of local day (0…23).
-    let hourlyCostCents: [Double]
+    /// Variable-length buckets for the active timeline window.
+    let sparklineCostCents: [Double]
+    let window: UsageTimeWindow
     let eventCount: Int
     let fetchedAt: Date
 
-    var todayDollars: Double { todayCostCents / 100.0 }
+    var windowDollars: Double { windowCostCents / 100.0 }
     var recentDollars: Double { recentCostCents / 100.0 }
 
     static let empty = UsageSnapshot(
-        todayCostCents: 0,
+        windowCostCents: 0,
         recentCostCents: 0,
         models: [],
         sessionsAcrossModels: [],
-        hourlyCostCents: Array(repeating: 0, count: 24),
+        sparklineCostCents: Array(repeating: 0, count: 24),
+        window: UsageTimeWindow(preset: .today, timeZone: .current),
         eventCount: 0,
         fetchedAt: .distantPast
     )
@@ -178,7 +180,7 @@ enum TokensError: Error, LocalizedError, Sendable {
         case .decodingFailed:
             "Could not decode usage response."
         case .tooManyPages:
-            "Too many usage events to load for today."
+            "Too many usage events to load for the selected timeline."
         }
     }
 }

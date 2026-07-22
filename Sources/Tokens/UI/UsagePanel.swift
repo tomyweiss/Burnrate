@@ -61,17 +61,27 @@ struct UsagePanel: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(MoneyFormat.dollars(store.snapshot.todayDollars))
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(MoneyFormat.dollars(store.snapshot.windowDollars))
                     .font(.system(size: 34, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .contentTransition(reduceMotion ? .identity : .numericText())
-                    .animation(reduceMotion ? nil : .snappy, value: store.snapshot.todayCostCents)
-                Spacer()
+                    .animation(reduceMotion ? nil : .snappy, value: store.snapshot.windowCostCents)
+
+                Spacer(minLength: 8)
+
+                timelinePicker
+
                 if store.isLoading {
                     ProgressView()
                         .controlSize(.small)
                 }
+            }
+
+            if settings.usageTimelinePreset == .thisBilling {
+                Text("Since \(store.snapshot.window.sparklineStartLabel())")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             if store.snapshot.recentDollars > 0 {
@@ -79,13 +89,31 @@ struct UsagePanel: View {
             }
 
             SparklineView(
-                hourlyCostCents: store.snapshot.hourlyCostCents,
+                sparklineCostCents: store.snapshot.sparklineCostCents,
+                window: store.snapshot.window,
                 now: Date()
             )
 
             Text(updatedCaption)
                 .font(.caption)
                 .foregroundStyle(store.isStale ? Color.orange : Color.secondary)
+        }
+    }
+
+    private var timelinePicker: some View {
+        Picker("Timeline", selection: $settings.usageTimelinePreset) {
+            ForEach(UsageTimelinePreset.allCases) { preset in
+                Text(preset.displayName).tag(preset)
+            }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .font(.subheadline.weight(.medium))
+        .foregroundStyle(.secondary)
+        .fixedSize()
+        .onChange(of: settings.usageTimelinePreset) { _, _ in
+            Task { await store.refresh() }
+            MenuBarPanelKeeper.keepOpen()
         }
     }
 
@@ -127,10 +155,10 @@ struct UsagePanel: View {
             }
 
             if store.hasCompletedFetch,
-               store.snapshot.todayCostCents == 0,
+               store.snapshot.windowCostCents == 0,
                store.snapshot.models.isEmpty,
                store.lastError == nil {
-                EmptySpendView()
+                EmptySpendView(message: store.snapshot.window.emptyStateMessage)
             } else {
                 Picker("Scope", selection: panelTab) {
                     ForEach(UsageTab.allCases) { tab in
@@ -152,7 +180,7 @@ struct UsagePanel: View {
                             ForEach(store.snapshot.models) { model in
                                 ModelRowView(
                                     model: model,
-                                    todayCostCents: store.snapshot.todayCostCents,
+                                    windowCostCents: store.snapshot.windowCostCents,
                                     isExpanded: expandedModels.contains(model.id),
                                     reduceMotion: reduceMotion,
                                     onToggle: { toggleExpanded(model.id) }
@@ -163,7 +191,7 @@ struct UsagePanel: View {
                             ForEach(store.snapshot.sessionsAcrossModels) { session in
                                 SessionRowView(
                                     session: session,
-                                    todayCostCents: store.snapshot.todayCostCents,
+                                    windowCostCents: store.snapshot.windowCostCents,
                                     showModelChips: true,
                                     showShareBar: true
                                 )

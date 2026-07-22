@@ -4,7 +4,7 @@
 
 **Burnrate** is a lightweight macOS menu bar app that answers: *how fast am I burning money in Cursor right now?*
 
-It shows **today’s spend since local midnight**, a **burn pill** for the rolling spike window, an **hourly sparkline** of the day, and breakdowns by **model** and **session**. It notifies when spend spikes (default: **$10 in 10 minutes**).
+It shows **spend for your selected timeline** (Today, Last 24h, Last 7d, or This billing), a **burn pill** for the rolling spike window, a **sparkline** across the active window, and breakdowns by **model** and **session**. It notifies when spend spikes (default: **$10 in 10 minutes**).
 
 No Dock icon. Auth comes from the local Cursor IDE login.
 
@@ -14,23 +14,24 @@ No Dock icon. Auth comes from the local Cursor IDE login.
 
 ### Menu bar
 
-- Flame SF Symbol + today’s amount (optional: hide amount)
+- Flame SF Symbol + window total (optional: hide amount)
 - `flame.fill` when recent-window spend ≥ spike threshold
 - Warning triangle on error while keeping the last known amount
 - Polls on a timer (default 60s; 15s–10m presets)
 
 ### Usage panel (380×520)
 
-- **Hero** today total with numeric transitions
+- **Hero** window total with numeric transitions
+- **Timeline picker** — Today, Last 24h, Last 7d, This billing
 - **Burn pill** (glass) for rolling-window spend, tinted by severity
-- **24-hour sparkline** (midnight → now)
+- **Sparkline** for the active window (hourly or daily buckets)
 - Caption: updated time · event count (orange when stale)
 - Tabs: **Models** | **Sessions**
 - Footer: Settings (glass), Refresh, overflow menu (Dashboard / Quit)
 
 ### Models tab
 
-- Share bar (fraction of today’s cost)
+- Share bar (fraction of window total)
 - Sessions · events · total tokens summary
 - Expand for in/out/cache detail and per-session rows
 
@@ -38,7 +39,7 @@ No Dock icon. Auth comes from the local Cursor IDE login.
 
 - Cross-model sessions sorted by cost
 - Name (from local Cursor chat metadata), workspace, model chips, relative activity
-- Share bar vs today’s total
+- Share bar vs window total
 
 ### Anomaly alerts
 
@@ -48,6 +49,9 @@ No Dock icon. Auth comes from the local Cursor IDE login.
 
 ### Settings
 
+- Timeline window picker (Today / 24h / 7d / This billing)
+- Billing day stepper (1–31, when This billing is selected)
+- Timezone picker (System or searchable IANA list)
 - Poll interval picker
 - Native steppers for spike rules
 - Launch at login, hide menu-bar amount
@@ -77,13 +81,17 @@ No Dock icon. Auth comes from the local Cursor IDE login.
 
 - Undocumented Cursor API
 - Requires Cursor signed in on this Mac
-- “Today” = local midnight
+- Default timeline is Today (local midnight in chosen timezone)
+- Longer windows may hit API pagination limits (~4000 events)
 - Costs are Cursor-reported charges, not a formal invoice
 
 ## Defaults
 
 | Setting | Default |
 |--------|---------|
+| Timeline | Today |
+| Billing day | 1 |
+| Timezone | System (local) |
 | Refresh | 60 seconds |
 | Anomaly threshold | $10 |
 | Anomaly window | 10 minutes |
