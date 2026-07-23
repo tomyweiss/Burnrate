@@ -29,6 +29,7 @@ struct UsagePanel: View {
     @AppStorage("panelTab") private var panelTabRaw = UsageTab.models.rawValue
     @State private var expandedModels: Set<String> = []
     @State private var selectedSession: SessionUsage?
+    @State private var selectedSkill: SkillUsage?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var panelTab: Binding<UsageTab> {
@@ -64,6 +65,7 @@ struct UsagePanel: View {
         }
         .onDisappear {
             selectedSession = nil
+            selectedSkill = nil
         }
     }
 
@@ -177,6 +179,18 @@ struct UsagePanel: View {
                store.snapshot.models.isEmpty,
                store.lastError == nil {
                 EmptySpendView(message: store.snapshot.window.emptyStateMessage)
+            } else if let skill = selectedSkill {
+                SkillDetailView(
+                    // Prefer the freshest snapshot copy; fall back to the tapped one.
+                    skill: store.snapshot.skills
+                        .first { $0.skill == skill.skill } ?? skill,
+                    prompts: store.snapshot.prompts
+                        .filter { $0.skills.contains(skill.skill) },
+                    onBack: {
+                        selectedSkill = nil
+                        MenuBarPanelKeeper.keepOpen()
+                    }
+                )
             } else if let selected = selectedSession {
                 SessionDetailView(
                     // Prefer the freshest snapshot copy; fall back to the tapped one.
@@ -241,7 +255,11 @@ struct UsagePanel: View {
                                 ForEach(store.snapshot.skills) { skill in
                                     SkillRowView(
                                         skill: skill,
-                                        windowCostCents: store.snapshot.windowCostCents
+                                        windowCostCents: store.snapshot.windowCostCents,
+                                        onOpen: {
+                                            selectedSkill = skill
+                                            MenuBarPanelKeeper.keepOpen()
+                                        }
                                     )
                                     Divider().opacity(0.35)
                                 }

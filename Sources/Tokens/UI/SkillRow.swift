@@ -3,6 +3,8 @@ import SwiftUI
 struct SkillRowView: View {
     let skill: SkillUsage
     let windowCostCents: Double
+    /// When set, the row is tappable and opens the skill detail view.
+    var onOpen: (() -> Void)? = nil
 
     @State private var hovering = false
 
@@ -12,6 +14,17 @@ struct SkillRowView: View {
     }
 
     var body: some View {
+        if let onOpen {
+            Button(action: onOpen) {
+                rowContent
+            }
+            .buttonStyle(.plain)
+        } else {
+            rowContent
+        }
+    }
+
+    private var rowContent: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("/\(skill.skill)")
@@ -22,6 +35,11 @@ struct SkillRowView: View {
                 Text(MoneyFormat.dollars(skill.costDollars))
                     .font(.callout.monospacedDigit().weight(.semibold))
                     .contentTransition(.numericText())
+                if onOpen != nil {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
             }
 
             ShareBar(fraction: share)
@@ -38,6 +56,7 @@ struct SkillRowView: View {
                 .fill(hovering ? Color.primary.opacity(0.06) : Color.clear)
         )
         .onHover { hovering = $0 }
+        .contentShape(Rectangle())
     }
 
     private var subtitle: String {
