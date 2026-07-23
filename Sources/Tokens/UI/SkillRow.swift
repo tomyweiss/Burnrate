@@ -3,14 +3,27 @@ import SwiftUI
 struct SkillRowView: View {
     let skill: SkillUsage
     let windowCostCents: Double
+    var metric: CostMetric = .total
+    /// Highest average among the listed skills; scales the bar in avg mode.
+    var maxAverageDollars: Double = 0
     /// When set, the row is tappable and opens the skill detail view.
     var onOpen: (() -> Void)? = nil
 
     @State private var hovering = false
 
     private var share: Double {
-        guard windowCostCents > 0 else { return 0 }
-        return skill.costCents / windowCostCents
+        switch metric {
+        case .total:
+            guard windowCostCents > 0 else { return 0 }
+            return skill.costCents / windowCostCents
+        case .average:
+            guard maxAverageDollars > 0 else { return 0 }
+            return skill.averageCostDollars / maxAverageDollars
+        }
+    }
+
+    private var displayDollars: Double {
+        metric == .total ? skill.costDollars : skill.averageCostDollars
     }
 
     var body: some View {
@@ -32,7 +45,7 @@ struct SkillRowView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 8)
-                Text(MoneyFormat.dollars(skill.costDollars))
+                Text(MoneyFormat.dollars(displayDollars))
                     .font(.callout.monospacedDigit().weight(.semibold))
                     .contentTransition(.numericText())
                 if onOpen != nil {
@@ -62,7 +75,12 @@ struct SkillRowView: View {
     private var subtitle: String {
         var parts: [String] = []
         parts.append(skill.invocationCount == 1 ? "1 use" : "\(skill.invocationCount) uses")
-        parts.append("avg \(MoneyFormat.dollars(skill.averageCostDollars))")
+        switch metric {
+        case .total:
+            parts.append("avg \(MoneyFormat.dollars(skill.averageCostDollars))")
+        case .average:
+            parts.append("total \(MoneyFormat.dollars(skill.costDollars))")
+        }
         if skill.lastUsedMs > 0 {
             parts.append(RelativeTimeFormat.string(fromTimestampMs: skill.lastUsedMs))
         }

@@ -24,13 +24,26 @@ struct ModelRowView: View {
     let reduceMotion: Bool
     var showLocationSubtitle: Bool = false
     var hideArchivedSessions: Bool = false
+    var metric: CostMetric = .total
+    /// Highest average among the listed models; scales the bar in avg mode.
+    var maxAverageDollars: Double = 0
     let onToggle: () -> Void
 
     @State private var hovering = false
 
     private var share: Double {
-        guard windowCostCents > 0 else { return 0 }
-        return model.costCents / windowCostCents
+        switch metric {
+        case .total:
+            guard windowCostCents > 0 else { return 0 }
+            return model.costCents / windowCostCents
+        case .average:
+            guard maxAverageDollars > 0 else { return 0 }
+            return model.averageCostDollars / maxAverageDollars
+        }
+    }
+
+    private var displayDollars: Double {
+        metric == .total ? model.costDollars : model.averageCostDollars
     }
 
     private var visibleSessions: [SessionUsage] {
@@ -49,7 +62,7 @@ struct ModelRowView: View {
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                             Spacer(minLength: 8)
-                            Text(MoneyFormat.dollars(model.costDollars))
+                            Text(MoneyFormat.dollars(displayDollars))
                                 .font(.callout.monospacedDigit().weight(.semibold))
                                 .contentTransition(.numericText())
                         }
@@ -110,8 +123,13 @@ struct ModelRowView: View {
             "\(model.eventCount) events",
             "\(TokenFormat.compact(model.totalTokens)) tok"
         ]
-        if model.eventCount > 0 {
-            parts.append("avg \(MoneyFormat.dollars(model.averageCostDollars))/req")
+        switch metric {
+        case .total:
+            if model.eventCount > 0 {
+                parts.append("avg \(MoneyFormat.dollars(model.averageCostDollars))/req")
+            }
+        case .average:
+            parts.append("total \(MoneyFormat.dollars(model.costDollars))")
         }
         return parts.joined(separator: " · ")
     }

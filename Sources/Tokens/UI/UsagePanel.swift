@@ -19,6 +19,21 @@ enum UsageTab: String, CaseIterable, Identifiable {
     }
 }
 
+/// Which cost figure drives sorting and the row preview on Models/Skills tabs.
+enum CostMetric: String, CaseIterable, Identifiable {
+    case total
+    case average
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .total: "Total $"
+        case .average: "Avg $"
+        }
+    }
+}
+
 struct UsagePanel: View {
     @Bindable var store: UsageStore
     @Bindable var settings: SettingsStore
@@ -30,6 +45,8 @@ struct UsagePanel: View {
     @State private var expandedModels: Set<String> = []
     @State private var selectedSession: SessionUsage?
     @State private var selectedSkill: SkillUsage?
+    @AppStorage("modelsCostMetric") private var modelsMetricRaw = CostMetric.total.rawValue
+    @AppStorage("skillsCostMetric") private var skillsMetricRaw = CostMetric.total.rawValue
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var panelTab: Binding<UsageTab> {
@@ -217,11 +234,17 @@ struct UsagePanel: View {
                     MenuBarPanelKeeper.keepOpen()
                 }
 
+                if panelTab.wrappedValue == .models {
+                    metricPicker($modelsMetricRaw)
+                } else if panelTab.wrappedValue == .skills, !store.snapshot.skills.isEmpty {
+                    metricPicker($skillsMetricRaw)
+                }
+
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
                         switch panelTab.wrappedValue {
                         case .models:
-                            ForEach(store.snapshot.models) { model in
+                            ForEach(displayedModels) { model in
                                 ModelRowView(
                                     model: model,
                                     windowCostCents: store.snapshot.windowCostCents,
@@ -229,6 +252,8 @@ struct UsagePanel: View {
                                     reduceMotion: reduceMotion,
                                     showLocationSubtitle: settings.showLocationSubtitle,
                                     hideArchivedSessions: settings.hideArchivedSessions,
+                                    metric: modelsMetric,
+                                    maxAverageDollars: maxModelAverageDollars,
                                     onToggle: { toggleExpanded(model.id) }
                                 )
                                 Divider().opacity(0.35)
@@ -252,10 +277,12 @@ struct UsagePanel: View {
                             if store.snapshot.skills.isEmpty {
                                 tabEmptyText("No skill invocations in this window")
                             } else {
-                                ForEach(store.snapshot.skills) { skill in
+                                ForEach(displayedSkills) { skill in
                                     SkillRowView(
                                         skill: skill,
                                         windowCostCents: store.snapshot.windowCostCents,
+                                        metric: skillsMetric,
+                                        maxAverageDollars: maxSkillAverageDollars,
                                         onOpen: {
                                             selectedSkill = skill
                                             MenuBarPanelKeeper.keepOpen()
@@ -280,6 +307,60 @@ struct UsagePanel: View {
                 }
             }
         }
+    }
+
+    // MARK: - Cost metric (Total vs Avg)
+
+    private var modelsMetric: CostMetric {
+        CostMetric(rawValue: modelsMetricRaw) ?? .total
+    }
+
+    private var skillsMetric: CostMetric {
+        CostMetric(rawValue: skillsMetricRaw) ?? .total
+    }
+
+    private var displayedModels: [ModelUsage] {
+        let models = store.snapshot.models
+        guard modelsMetric == .average else { return models }
+        return models.sorted { $0.averageCostDollars > $1.averageCostDollars }
+    }
+
+    private var displayedSkills: [SkillUsage] {
+        let skills = store.snapshot.skills
+        guard skillsMetric == .average else { return skills }
+        return skills.sorted {
+            $0.averageCostDollars == $1.averageCostDollars
+                ? $0.lastUsedMs > $1.lastUsedMs
+                : $0.averageCostDollars > $1.averageCostDollars
+        }
+    }
+
+    private var maxModelAverageDollars: Double {
+        store.snapshot.models.map(\.averageCostDollars).max() ?? 0
+    }
+
+    private var maxSkillAverageDollars: Double {
+        store.snapshot.skills.map(\.averageCostDollars).max() ?? 0
+    }
+
+    private func metricPicker(_ selection: Binding<String>) -> some View {
+        HStack {
+            Spacer()
+            Picker("Cost metric", selection: selection) {
+                ForEach(CostMetric.allCases) { metric in
+                    Text(metric.title).tag(metric.rawValue)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
+            .fixedSize()
+            .onChange(of: selection.wrappedValue) { _, _ in
+                MenuBarPanelKeeper.keepOpen()
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
     }
 
     private func tabEmptyText(_ message: String) -> some View {
