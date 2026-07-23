@@ -51,6 +51,7 @@ struct UsagePanel: View {
     @State private var selectedSkill: SkillUsage?
     @AppStorage("modelsCostMetric") private var modelsMetricRaw = CostMetric.total.rawValue
     @AppStorage("skillsCostMetric") private var skillsMetricRaw = CostMetric.total.rawValue
+    @AppStorage("sessionsSort") private var sessionsSortRaw = SessionPromptSort.newest.rawValue
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var panelTab: Binding<UsageTab> {
@@ -242,6 +243,8 @@ struct UsagePanel: View {
                     metricPicker($modelsMetricRaw)
                 } else if panelTab.wrappedValue == .skills, !store.snapshot.skills.isEmpty {
                     metricPicker($skillsMetricRaw)
+                } else if panelTab.wrappedValue == .sessions {
+                    sessionsSortPicker
                 }
 
                 if panelTab.wrappedValue == .bench {
@@ -407,9 +410,40 @@ struct UsagePanel: View {
     }
 
     private var visibleSessions: [SessionUsage] {
-        let sessions = store.snapshot.sessionsAcrossModels
-        guard settings.hideArchivedSessions else { return sessions }
-        return sessions.filter { !$0.isArchived }
+        var sessions = store.snapshot.sessionsAcrossModels
+        if settings.hideArchivedSessions {
+            sessions = sessions.filter { !$0.isArchived }
+        }
+        switch SessionPromptSort(rawValue: sessionsSortRaw) ?? .newest {
+        case .newest:
+            return sessions.sorted {
+                $0.lastTimestampMs == $1.lastTimestampMs
+                    ? $0.costCents > $1.costCents
+                    : $0.lastTimestampMs > $1.lastTimestampMs
+            }
+        case .cost:
+            return sessions // Snapshot order is already cost-descending.
+        }
+    }
+
+    private var sessionsSortPicker: some View {
+        HStack {
+            Spacer()
+            Picker("Sort sessions", selection: $sessionsSortRaw) {
+                ForEach(SessionPromptSort.allCases) { option in
+                    Text(option.title).tag(option.rawValue)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
+            .fixedSize()
+            .onChange(of: sessionsSortRaw) { _, _ in
+                MenuBarPanelKeeper.keepOpen()
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
     }
 
     private func toggleExpanded(_ modelID: String) {
