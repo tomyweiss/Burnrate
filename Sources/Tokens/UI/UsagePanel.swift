@@ -28,6 +28,7 @@ struct UsagePanel: View {
 
     @AppStorage("panelTab") private var panelTabRaw = UsageTab.models.rawValue
     @State private var expandedModels: Set<String> = []
+    @State private var selectedSession: SessionUsage?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var panelTab: Binding<UsageTab> {
@@ -60,6 +61,9 @@ struct UsagePanel: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
             }
+        }
+        .onDisappear {
+            selectedSession = nil
         }
     }
 
@@ -173,6 +177,18 @@ struct UsagePanel: View {
                store.snapshot.models.isEmpty,
                store.lastError == nil {
                 EmptySpendView(message: store.snapshot.window.emptyStateMessage)
+            } else if let selected = selectedSession {
+                SessionDetailView(
+                    // Prefer the freshest snapshot copy; fall back to the tapped one.
+                    session: store.snapshot.sessionsAcrossModels
+                        .first { $0.conversationId == selected.conversationId } ?? selected,
+                    prompts: store.snapshot.prompts
+                        .filter { $0.conversationId == selected.conversationId },
+                    onBack: {
+                        selectedSession = nil
+                        MenuBarPanelKeeper.keepOpen()
+                    }
+                )
             } else {
                 Picker("Scope", selection: panelTab) {
                     ForEach(UsageTab.allCases) { tab in
@@ -210,7 +226,11 @@ struct UsagePanel: View {
                                     windowCostCents: store.snapshot.windowCostCents,
                                     showModelChips: true,
                                     showShareBar: true,
-                                    showLocationSubtitle: settings.showLocationSubtitle
+                                    showLocationSubtitle: settings.showLocationSubtitle,
+                                    onOpen: {
+                                        selectedSession = session
+                                        MenuBarPanelKeeper.keepOpen()
+                                    }
                                 )
                                 Divider().opacity(0.35)
                             }
@@ -293,6 +313,10 @@ struct UsagePanel: View {
 
                 Spacer()
 
+                signature
+
+                Spacer()
+
                 HStack(spacing: 8) {
                     Button {
                         Task { await store.refresh() }
@@ -338,6 +362,21 @@ struct UsagePanel: View {
             }
         }
         .foregroundStyle(.primary.opacity(0.9))
+    }
+
+    private var signature: some View {
+        HStack(spacing: 3) {
+            Text("Powered by")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+            Link(destination: URL(string: "https://getdrift.ai")!) {
+                Text("Drift Security")
+                    .font(.caption2.weight(.medium))
+                    .underline()
+                    .foregroundStyle(.secondary)
+            }
+            .help("getdrift.ai")
+        }
     }
 
     private func updateBanner(_ update: AvailableUpdate) -> some View {
