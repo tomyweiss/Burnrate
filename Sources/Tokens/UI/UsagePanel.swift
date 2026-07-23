@@ -6,6 +6,7 @@ enum UsageTab: String, CaseIterable, Identifiable {
     case sessions
     case skills
     case feed
+    case bench
 
     var id: String { rawValue }
 
@@ -15,6 +16,7 @@ enum UsageTab: String, CaseIterable, Identifiable {
         case .sessions: "Sessions"
         case .skills: "Skills"
         case .feed: "Feed"
+        case .bench: "Bench"
         }
     }
 }
@@ -240,6 +242,9 @@ struct UsagePanel: View {
                     metricPicker($skillsMetricRaw)
                 }
 
+                if panelTab.wrappedValue == .bench {
+                    BenchView(snapshot: store.snapshot)
+                } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
                         switch panelTab.wrappedValue {
@@ -300,10 +305,13 @@ struct UsagePanel: View {
                                     Divider().opacity(0.35)
                                 }
                             }
+                        case .bench:
+                            EmptyView() // Rendered outside the scroll view.
                         }
                     }
                     .padding(.horizontal, 8)
                     .padding(.bottom, 8)
+                }
                 }
             }
         }

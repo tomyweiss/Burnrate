@@ -166,12 +166,22 @@ struct PromptUsage: Identifiable, Sendable, Hashable {
     let sessionName: String?
     let costCents: Double
     let eventCount: Int
+    /// Total tokens (in + out + cache) across the prompt's events.
+    let totalTokens: Int
+    /// Timestamp of the last usage event attributed to this prompt.
+    let lastEventMs: Double
     /// Models used to answer this prompt, sorted by cost desc.
     let models: [String]
     /// Skills (slash commands) mentioned in the prompt.
     let skills: [String]
 
     var costDollars: Double { costCents / 100.0 }
+
+    /// Approximate response duration: first prompt keystroke to last billed event.
+    var durationSeconds: Double {
+        guard eventCount > 0, lastEventMs > createdAtMs else { return 0 }
+        return (lastEventMs - createdAtMs) / 1000
+    }
 
     /// First line of the prompt, for compact display.
     var headline: String {

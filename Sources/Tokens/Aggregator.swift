@@ -230,6 +230,9 @@ enum Aggregator {
             var acc = accumulators[key] ?? PromptAccumulator(prompt: prompt)
             acc.costCents += event.costCents
             acc.eventCount += 1
+            acc.totalTokens += event.inputTokens + event.outputTokens
+                + event.cacheReadTokens + event.cacheWriteTokens
+            acc.lastEventMs = max(acc.lastEventMs, ts)
             if let model = event.model, !model.isEmpty {
                 acc.modelCosts[model, default: 0] += event.costCents
             }
@@ -257,6 +260,8 @@ enum Aggregator {
                     sessionName: catalog[acc.prompt.conversationId]?.name,
                     costCents: acc.costCents,
                     eventCount: acc.eventCount,
+                    totalTokens: acc.totalTokens,
+                    lastEventMs: acc.lastEventMs,
                     models: acc.modelCosts.sorted { $0.value > $1.value }.map(\.key),
                     skills: acc.prompt.skills
                 )
@@ -298,6 +303,8 @@ enum Aggregator {
         let prompt: PromptRecord
         var costCents: Double = 0
         var eventCount: Int = 0
+        var totalTokens: Int = 0
+        var lastEventMs: Double = 0
         var modelCosts: [String: Double] = [:]
     }
 
