@@ -93,12 +93,17 @@ final class UsageStore {
                 endMs: endMs
             )
 
-            let next = Aggregator.snapshot(
-                events: events,
-                now: now,
-                window: window,
-                recentWindowMinutes: settings.anomalyWindowMinutes
-            )
+            // Aggregation scans local Cursor SQLite data (session + prompt
+            // catalogs); keep it off the main thread.
+            let recentWindowMinutes = settings.anomalyWindowMinutes
+            let next = await Task.detached(priority: .userInitiated) {
+                Aggregator.snapshot(
+                    events: events,
+                    now: now,
+                    window: window,
+                    recentWindowMinutes: recentWindowMinutes
+                )
+            }.value
             snapshot = next
             lastError = nil
             hasCompletedFetch = true

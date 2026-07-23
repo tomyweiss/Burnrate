@@ -131,6 +131,12 @@ struct ModelUsage: Identifiable, Sendable, Hashable {
 
     var costDollars: Double { costCents / 100.0 }
 
+    /// Average cost per usage event (request) for this model.
+    var averageCostDollars: Double {
+        guard eventCount > 0 else { return 0 }
+        return costDollars / Double(eventCount)
+    }
+
     var totalTokens: Int {
         inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens
     }
@@ -149,12 +155,61 @@ struct ModelUsage: Identifiable, Sendable, Hashable {
     }
 }
 
+/// A user prompt with the cost attributed to it: every usage event in the same
+/// conversation from the prompt's timestamp until the next prompt.
+struct PromptUsage: Identifiable, Sendable, Hashable {
+    var id: String { "\(conversationId):\(bubbleId)" }
+    let conversationId: String
+    let bubbleId: String
+    let text: String
+    let createdAtMs: Double
+    let sessionName: String?
+    let costCents: Double
+    let eventCount: Int
+    /// Models used to answer this prompt, sorted by cost desc.
+    let models: [String]
+    /// Skills (slash commands) mentioned in the prompt.
+    let skills: [String]
+
+    var costDollars: Double { costCents / 100.0 }
+
+    /// First line of the prompt, for compact display.
+    var headline: String {
+        let firstLine = text
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .first
+            .map(String.init) ?? text
+        return firstLine.trimmingCharacters(in: .whitespaces)
+    }
+}
+
+/// Aggregated cost for one skill (slash command) across the window.
+struct SkillUsage: Identifiable, Sendable, Hashable {
+    var id: String { skill }
+    let skill: String
+    let costCents: Double
+    let invocationCount: Int
+    let eventCount: Int
+    let lastUsedMs: Double
+
+    var costDollars: Double { costCents / 100.0 }
+
+    var averageCostDollars: Double {
+        guard invocationCount > 0 else { return 0 }
+        return costDollars / Double(invocationCount)
+    }
+}
+
 struct UsageSnapshot: Sendable {
     let windowCostCents: Double
     let recentCostCents: Double
     let models: [ModelUsage]
     /// Sessions aggregated across all models, sorted by cost desc.
     let sessionsAcrossModels: [SessionUsage]
+    /// User prompts in the window with attributed costs, newest first.
+    let prompts: [PromptUsage]
+    /// Per-skill cost breakdown, sorted by cost desc.
+    let skills: [SkillUsage]
     /// Variable-length buckets for the active timeline window.
     let sparklineCostCents: [Double]
     let window: UsageTimeWindow
@@ -169,6 +224,8 @@ struct UsageSnapshot: Sendable {
         recentCostCents: 0,
         models: [],
         sessionsAcrossModels: [],
+        prompts: [],
+        skills: [],
         sparklineCostCents: Array(repeating: 0, count: 24),
         window: UsageTimeWindow(preset: .today, timeZone: .current),
         eventCount: 0,

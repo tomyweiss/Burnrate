@@ -4,6 +4,8 @@ import AppKit
 enum UsageTab: String, CaseIterable, Identifiable {
     case models
     case sessions
+    case skills
+    case feed
 
     var id: String { rawValue }
 
@@ -11,6 +13,8 @@ enum UsageTab: String, CaseIterable, Identifiable {
         switch self {
         case .models: "Models"
         case .sessions: "Sessions"
+        case .skills: "Skills"
+        case .feed: "Feed"
         }
     }
 }
@@ -210,6 +214,27 @@ struct UsagePanel: View {
                                 )
                                 Divider().opacity(0.35)
                             }
+                        case .skills:
+                            if store.snapshot.skills.isEmpty {
+                                tabEmptyText("No skill invocations in this window")
+                            } else {
+                                ForEach(store.snapshot.skills) { skill in
+                                    SkillRowView(
+                                        skill: skill,
+                                        windowCostCents: store.snapshot.windowCostCents
+                                    )
+                                    Divider().opacity(0.35)
+                                }
+                            }
+                        case .feed:
+                            if store.snapshot.prompts.isEmpty {
+                                tabEmptyText("No prompts found for this window")
+                            } else {
+                                ForEach(store.snapshot.prompts) { prompt in
+                                    PromptRowView(prompt: prompt)
+                                    Divider().opacity(0.35)
+                                }
+                            }
                         }
                     }
                     .padding(.horizontal, 8)
@@ -217,6 +242,14 @@ struct UsagePanel: View {
                 }
             }
         }
+    }
+
+    private func tabEmptyText(_ message: String) -> some View {
+        Text(message)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, 24)
     }
 
     private var visibleSessions: [SessionUsage] {
