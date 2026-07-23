@@ -6,6 +6,8 @@ struct SessionRowView: View {
     var showModelChips: Bool = true
     var showShareBar: Bool = true
     var showLocationSubtitle: Bool = false
+    /// When set, the row is tappable and opens the session detail view.
+    var onOpen: (() -> Void)? = nil
 
     @State private var hovering = false
 
@@ -15,6 +17,17 @@ struct SessionRowView: View {
     }
 
     var body: some View {
+        if let onOpen {
+            Button(action: onOpen) {
+                rowContent
+            }
+            .buttonStyle(.plain)
+        } else {
+            rowContent
+        }
+    }
+
+    private var rowContent: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -39,6 +52,11 @@ struct SessionRowView: View {
                 Text(MoneyFormat.dollars(session.costDollars))
                     .font(.callout.monospacedDigit().weight(.semibold))
                     .contentTransition(.numericText())
+                if onOpen != nil {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
             }
 
             if showShareBar {
@@ -65,6 +83,7 @@ struct SessionRowView: View {
                 .fill(hovering ? Color.primary.opacity(0.06) : Color.clear)
         )
         .onHover { hovering = $0 }
+        .contentShape(Rectangle())
         .help("Conversation \(session.conversationId)")
     }
 

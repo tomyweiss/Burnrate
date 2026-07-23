@@ -177,7 +177,25 @@ enum Aggregator {
         startMs: Double,
         endMs: Double
     ) -> (prompts: [PromptUsage], skills: [SkillUsage]) {
-        let promptsByConversation = PromptCatalog.lookup(conversationIds: conversationIds)
+        // Subagent conversations bill under their own conversation id; fold their
+        // events into the parent conversation's prompt timeline so a prompt's cost
+        // includes the subagents spawned while answering it.
+        let parentByChild = PromptCatalog.subagentParents(conversationIds: conversationIds)
+        let promptConversationIds = conversationIds
+            .subtracting(parentByChild.keys)
+            .union(parentByChild.values)
+
+        func effectiveConversationId(_ id: String) -> String {
+            var current = id
+            var hops = 0
+            while let parent = parentByChild[current], hops < 4 {
+                current = parent
+                hops += 1
+            }
+            return current
+        }
+
+        let promptsByConversation = PromptCatalog.lookup(conversationIds: promptConversationIds)
         guard !promptsByConversation.isEmpty else { return ([], []) }
 
         // Allow small clock skew between local bubble timestamps and server event
@@ -189,7 +207,8 @@ enum Aggregator {
         for event in events {
             let ts = event.timestampMs
             guard ts >= startMs, ts <= endMs else { continue }
-            guard let prompts = promptsByConversation[event.sessionKey], !prompts.isEmpty
+            let conversationId = effectiveConversationId(event.sessionKey)
+            guard let prompts = promptsByConversation[conversationId], !prompts.isEmpty
             else { continue }
 
             // Latest prompt with createdAtMs <= ts (prompts are sorted ascending).

@@ -49,6 +49,53 @@ enum PromptCatalog {
         return result
     }
 
+    /// Maps subagent (child) conversation ids to their parent conversation id,
+    /// based on `subComposerIds` recorded in each parent's composer data. Only
+    /// parents present in `conversationIds` are inspected.
+    static func subagentParents(conversationIds: Set<String>) -> [String: String] {
+        guard !conversationIds.isEmpty,
+              FileManager.default.fileExists(atPath: ideDatabasePath.path)
+        else { return [:] }
+
+        var database: OpaquePointer?
+        guard sqlite3_open_v2(
+            ideDatabasePath.path,
+            &database,
+            SQLITE_OPEN_READONLY,
+            nil
+        ) == SQLITE_OK else {
+            return [:]
+        }
+        defer { sqlite3_close(database) }
+
+        let query = """
+        SELECT json_extract(value, '$.subComposerIds')
+        FROM cursorDiskKV
+        WHERE key = ?
+        """
+        var result: [String: String] = [:]
+        for parentId in conversationIds {
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(database, query, -1, &statement, nil) == SQLITE_OK else {
+                continue
+            }
+            defer { sqlite3_finalize(statement) }
+
+            let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            sqlite3_bind_text(statement, 1, "composerData:\(parentId)", -1, transient)
+            guard sqlite3_step(statement) == SQLITE_ROW,
+                  let cString = sqlite3_column_text(statement, 0),
+                  let data = String(cString: cString).data(using: .utf8),
+                  let children = try? JSONSerialization.jsonObject(with: data) as? [String]
+            else { continue }
+
+            for child in children where !child.isEmpty && child != parentId {
+                result[child] = parentId
+            }
+        }
+        return result
+    }
+
     // MARK: - Bubble scan
 
     /// Bubble keys are `bubbleId:<composerId>:<bubbleId>`; the unique index on `key`

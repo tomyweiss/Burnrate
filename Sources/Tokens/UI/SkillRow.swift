@@ -53,6 +53,7 @@ struct SkillRowView: View {
 
 struct PromptRowView: View {
     let prompt: PromptUsage
+    var showSessionName: Bool = true
 
     @State private var hovering = false
 
@@ -105,7 +106,7 @@ struct PromptRowView: View {
         if prompt.createdAtMs > 0 {
             parts.append(RelativeTimeFormat.string(fromTimestampMs: prompt.createdAtMs))
         }
-        if let name = prompt.sessionName, !name.isEmpty {
+        if showSessionName, let name = prompt.sessionName, !name.isEmpty {
             parts.append(name)
         }
         if let model = prompt.models.first {
