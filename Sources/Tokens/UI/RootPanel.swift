@@ -38,10 +38,11 @@ struct RootPanel: View {
         }
         .frame(width: panelWidth, height: panelHeight)
         .onAppear {
-            MenuBarPanelKeeper.keepOpen()
+            MenuBarPanelKeeper.panelDidShow()
             updates.autoCheckIfNeeded()
         }
         .onDisappear {
+            MenuBarPanelKeeper.panelDidHide()
             route = .usage
         }
         .onChange(of: route) { _, _ in
