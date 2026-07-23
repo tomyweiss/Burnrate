@@ -6,6 +6,7 @@ enum UsageTab: String, CaseIterable, Identifiable {
     case sessions
     case skills
     case feed
+    case bench
 
     var id: String { rawValue }
 
@@ -15,6 +16,24 @@ enum UsageTab: String, CaseIterable, Identifiable {
         case .sessions: "Sessions"
         case .skills: "Skills"
         case .feed: "Feed"
+        case .bench: "Bench"
+        }
+    }
+}
+
+/// Which cost figure drives sorting and the row preview on Models/Skills tabs.
+enum CostMetric: String, CaseIterable, Identifiable {
+    case total
+    case average
+    case median
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .total: "Total $"
+        case .average: "Avg $"
+        case .median: "Med $"
         }
     }
 }
@@ -29,6 +48,9 @@ struct UsagePanel: View {
     @AppStorage("panelTab") private var panelTabRaw = UsageTab.models.rawValue
     @State private var expandedModels: Set<String> = []
     @State private var selectedSession: SessionUsage?
+    @State private var selectedSkill: SkillUsage?
+    @AppStorage("modelsCostMetric") private var modelsMetricRaw = CostMetric.total.rawValue
+    @AppStorage("skillsCostMetric") private var skillsMetricRaw = CostMetric.total.rawValue
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var panelTab: Binding<UsageTab> {
@@ -64,6 +86,7 @@ struct UsagePanel: View {
         }
         .onDisappear {
             selectedSession = nil
+            selectedSkill = nil
         }
     }
 
@@ -177,6 +200,18 @@ struct UsagePanel: View {
                store.snapshot.models.isEmpty,
                store.lastError == nil {
                 EmptySpendView(message: store.snapshot.window.emptyStateMessage)
+            } else if let skill = selectedSkill {
+                SkillDetailView(
+                    // Prefer the freshest snapshot copy; fall back to the tapped one.
+                    skill: store.snapshot.skills
+                        .first { $0.skill == skill.skill } ?? skill,
+                    prompts: store.snapshot.prompts
+                        .filter { $0.skills.contains(skill.skill) },
+                    onBack: {
+                        selectedSkill = nil
+                        MenuBarPanelKeeper.keepOpen()
+                    }
+                )
             } else if let selected = selectedSession {
                 SessionDetailView(
                     // Prefer the freshest snapshot copy; fall back to the tapped one.
@@ -203,11 +238,20 @@ struct UsagePanel: View {
                     MenuBarPanelKeeper.keepOpen()
                 }
 
+                if panelTab.wrappedValue == .models {
+                    metricPicker($modelsMetricRaw)
+                } else if panelTab.wrappedValue == .skills, !store.snapshot.skills.isEmpty {
+                    metricPicker($skillsMetricRaw)
+                }
+
+                if panelTab.wrappedValue == .bench {
+                    BenchView(snapshot: store.snapshot)
+                } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
                         switch panelTab.wrappedValue {
                         case .models:
-                            ForEach(store.snapshot.models) { model in
+                            ForEach(displayedModels) { model in
                                 ModelRowView(
                                     model: model,
                                     windowCostCents: store.snapshot.windowCostCents,
@@ -215,6 +259,8 @@ struct UsagePanel: View {
                                     reduceMotion: reduceMotion,
                                     showLocationSubtitle: settings.showLocationSubtitle,
                                     hideArchivedSessions: settings.hideArchivedSessions,
+                                    metric: modelsMetric,
+                                    metricMaxDollars: maxModelMetricDollars,
                                     onToggle: { toggleExpanded(model.id) }
                                 )
                                 Divider().opacity(0.35)
@@ -238,10 +284,16 @@ struct UsagePanel: View {
                             if store.snapshot.skills.isEmpty {
                                 tabEmptyText("No skill invocations in this window")
                             } else {
-                                ForEach(store.snapshot.skills) { skill in
+                                ForEach(displayedSkills) { skill in
                                     SkillRowView(
                                         skill: skill,
-                                        windowCostCents: store.snapshot.windowCostCents
+                                        windowCostCents: store.snapshot.windowCostCents,
+                                        metric: skillsMetric,
+                                        metricMaxDollars: maxSkillMetricDollars,
+                                        onOpen: {
+                                            selectedSkill = skill
+                                            MenuBarPanelKeeper.keepOpen()
+                                        }
                                     )
                                     Divider().opacity(0.35)
                                 }
@@ -255,13 +307,95 @@ struct UsagePanel: View {
                                     Divider().opacity(0.35)
                                 }
                             }
+                        case .bench:
+                            EmptyView() // Rendered outside the scroll view.
                         }
                     }
                     .padding(.horizontal, 8)
                     .padding(.bottom, 8)
                 }
+                }
             }
         }
+    }
+
+    // MARK: - Cost metric (Total vs Avg)
+
+    private var modelsMetric: CostMetric {
+        CostMetric(rawValue: modelsMetricRaw) ?? .total
+    }
+
+    private var skillsMetric: CostMetric {
+        CostMetric(rawValue: skillsMetricRaw) ?? .total
+    }
+
+    private var displayedModels: [ModelUsage] {
+        let models = store.snapshot.models
+        switch modelsMetric {
+        case .total:
+            return models
+        case .average:
+            return models.sorted { $0.averageCostDollars > $1.averageCostDollars }
+        case .median:
+            return models.sorted { $0.medianCostDollars > $1.medianCostDollars }
+        }
+    }
+
+    private var displayedSkills: [SkillUsage] {
+        let skills = store.snapshot.skills
+        let value: (SkillUsage) -> Double
+        switch skillsMetric {
+        case .total:
+            return skills
+        case .average:
+            value = \.averageCostDollars
+        case .median:
+            value = \.medianCostDollars
+        }
+        return skills.sorted {
+            value($0) == value($1)
+                ? $0.lastUsedMs > $1.lastUsedMs
+                : value($0) > value($1)
+        }
+    }
+
+    /// Highest value of the selected per-unit metric; scales the share bars.
+    private var maxModelMetricDollars: Double {
+        let models = store.snapshot.models
+        switch modelsMetric {
+        case .total: return 0
+        case .average: return models.map(\.averageCostDollars).max() ?? 0
+        case .median: return models.map(\.medianCostDollars).max() ?? 0
+        }
+    }
+
+    private var maxSkillMetricDollars: Double {
+        let skills = store.snapshot.skills
+        switch skillsMetric {
+        case .total: return 0
+        case .average: return skills.map(\.averageCostDollars).max() ?? 0
+        case .median: return skills.map(\.medianCostDollars).max() ?? 0
+        }
+    }
+
+    private func metricPicker(_ selection: Binding<String>) -> some View {
+        HStack {
+            Spacer()
+            Picker("Cost metric", selection: selection) {
+                ForEach(CostMetric.allCases) { metric in
+                    Text(metric.title).tag(metric.rawValue)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
+            .fixedSize()
+            .onChange(of: selection.wrappedValue) { _, _ in
+                MenuBarPanelKeeper.keepOpen()
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
     }
 
     private func tabEmptyText(_ message: String) -> some View {

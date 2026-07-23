@@ -41,6 +41,7 @@ enum Aggregator {
             let modelName = event.model?.isEmpty == false ? event.model! : "unknown"
             var modelAcc = byModel[modelName] ?? ModelAccumulator()
             modelAcc.costCents += cost
+            modelAcc.eventCosts.append(cost)
             modelAcc.inputTokens += event.inputTokens
             modelAcc.outputTokens += event.outputTokens
             modelAcc.cacheReadTokens += event.cacheReadTokens
@@ -97,6 +98,7 @@ enum Aggregator {
                 return ModelUsage(
                     model: key,
                     costCents: value.costCents,
+                    medianCostCents: Stats.median(value.eventCosts),
                     inputTokens: value.inputTokens,
                     outputTokens: value.outputTokens,
                     cacheReadTokens: value.cacheReadTokens,
@@ -230,6 +232,9 @@ enum Aggregator {
             var acc = accumulators[key] ?? PromptAccumulator(prompt: prompt)
             acc.costCents += event.costCents
             acc.eventCount += 1
+            acc.totalTokens += event.inputTokens + event.outputTokens
+                + event.cacheReadTokens + event.cacheWriteTokens
+            acc.lastEventMs = max(acc.lastEventMs, ts)
             if let model = event.model, !model.isEmpty {
                 acc.modelCosts[model, default: 0] += event.costCents
             }
@@ -257,6 +262,8 @@ enum Aggregator {
                     sessionName: catalog[acc.prompt.conversationId]?.name,
                     costCents: acc.costCents,
                     eventCount: acc.eventCount,
+                    totalTokens: acc.totalTokens,
+                    lastEventMs: acc.lastEventMs,
                     models: acc.modelCosts.sorted { $0.value > $1.value }.map(\.key),
                     skills: acc.prompt.skills
                 )
@@ -268,6 +275,7 @@ enum Aggregator {
             for skill in prompt.skills {
                 var acc = bySkill[skill] ?? SkillAccumulator()
                 acc.costCents += prompt.costCents
+                acc.promptCosts.append(prompt.costCents)
                 acc.invocationCount += 1
                 acc.eventCount += prompt.eventCount
                 acc.lastUsedMs = max(acc.lastUsedMs, prompt.createdAtMs)
@@ -280,6 +288,7 @@ enum Aggregator {
                 SkillUsage(
                     skill: skill,
                     costCents: acc.costCents,
+                    medianCostCents: Stats.median(acc.promptCosts),
                     invocationCount: acc.invocationCount,
                     eventCount: acc.eventCount,
                     lastUsedMs: acc.lastUsedMs
@@ -298,11 +307,14 @@ enum Aggregator {
         let prompt: PromptRecord
         var costCents: Double = 0
         var eventCount: Int = 0
+        var totalTokens: Int = 0
+        var lastEventMs: Double = 0
         var modelCosts: [String: Double] = [:]
     }
 
     private struct SkillAccumulator {
         var costCents: Double = 0
+        var promptCosts: [Double] = []
         var invocationCount: Int = 0
         var eventCount: Int = 0
         var lastUsedMs: Double = 0
@@ -338,6 +350,7 @@ enum Aggregator {
 
     private struct ModelAccumulator {
         var costCents: Double = 0
+        var eventCosts: [Double] = []
         var inputTokens: Int = 0
         var outputTokens: Int = 0
         var cacheReadTokens: Int = 0

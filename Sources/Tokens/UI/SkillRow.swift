@@ -3,15 +3,46 @@ import SwiftUI
 struct SkillRowView: View {
     let skill: SkillUsage
     let windowCostCents: Double
+    var metric: CostMetric = .total
+    /// Highest value of the selected per-unit metric; scales the bar in
+    /// avg/median modes.
+    var metricMaxDollars: Double = 0
+    /// When set, the row is tappable and opens the skill detail view.
+    var onOpen: (() -> Void)? = nil
 
     @State private var hovering = false
 
     private var share: Double {
-        guard windowCostCents > 0 else { return 0 }
-        return skill.costCents / windowCostCents
+        switch metric {
+        case .total:
+            guard windowCostCents > 0 else { return 0 }
+            return skill.costCents / windowCostCents
+        case .average, .median:
+            guard metricMaxDollars > 0 else { return 0 }
+            return displayDollars / metricMaxDollars
+        }
+    }
+
+    private var displayDollars: Double {
+        switch metric {
+        case .total: skill.costDollars
+        case .average: skill.averageCostDollars
+        case .median: skill.medianCostDollars
+        }
     }
 
     var body: some View {
+        if let onOpen {
+            Button(action: onOpen) {
+                rowContent
+            }
+            .buttonStyle(.plain)
+        } else {
+            rowContent
+        }
+    }
+
+    private var rowContent: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("/\(skill.skill)")
@@ -19,9 +50,14 @@ struct SkillRowView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 8)
-                Text(MoneyFormat.dollars(skill.costDollars))
+                Text(MoneyFormat.dollars(displayDollars))
                     .font(.callout.monospacedDigit().weight(.semibold))
                     .contentTransition(.numericText())
+                if onOpen != nil {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
             }
 
             ShareBar(fraction: share)
@@ -38,12 +74,23 @@ struct SkillRowView: View {
                 .fill(hovering ? Color.primary.opacity(0.06) : Color.clear)
         )
         .onHover { hovering = $0 }
+        .contentShape(Rectangle())
     }
 
     private var subtitle: String {
         var parts: [String] = []
         parts.append(skill.invocationCount == 1 ? "1 use" : "\(skill.invocationCount) uses")
-        parts.append("avg \(MoneyFormat.dollars(skill.averageCostDollars))")
+        switch metric {
+        case .total:
+            parts.append("avg \(MoneyFormat.dollars(skill.averageCostDollars))")
+            parts.append("med \(MoneyFormat.dollars(skill.medianCostDollars))")
+        case .average:
+            parts.append("total \(MoneyFormat.dollars(skill.costDollars))")
+            parts.append("med \(MoneyFormat.dollars(skill.medianCostDollars))")
+        case .median:
+            parts.append("total \(MoneyFormat.dollars(skill.costDollars))")
+            parts.append("avg \(MoneyFormat.dollars(skill.averageCostDollars))")
+        }
         if skill.lastUsedMs > 0 {
             parts.append(RelativeTimeFormat.string(fromTimestampMs: skill.lastUsedMs))
         }
