@@ -10,6 +10,7 @@ enum MenuBarPanelKeeper {
     private static var anchors: [Int: CGPoint] = [:]
     private static var anchorTask: Task<Void, Never>?
     private static var moveObserver: NSObjectProtocol?
+    private static var resizeObserver: NSObjectProtocol?
 
     /// Call when the panel content appears: drop stale anchors, keep the panel
     /// open, and record a fresh anchor once initial placement settles.
@@ -85,14 +86,12 @@ enum MenuBarPanelKeeper {
     }
 
     /// The system moves the panel while re-activating; snap it back as soon as
-    /// that happens instead of letting it drift click after click.
+    /// that happens instead of letting it drift click after click. Re-pin on
+    /// resize too, so content growth extends the panel downward from its
+    /// anchored top edge (e.g. the taller Bench tab).
     private static func installMoveObserverIfNeeded() {
         guard moveObserver == nil else { return }
-        moveObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.didMoveNotification,
-            object: nil,
-            queue: .main
-        ) { notification in
+        let handler: @Sendable (Notification) -> Void = { notification in
             guard let window = notification.object as? NSWindow else { return }
             MainActor.assumeIsolated {
                 guard window.isVisible,
@@ -102,6 +101,18 @@ enum MenuBarPanelKeeper {
                 pin(window)
             }
         }
+        moveObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didMoveNotification,
+            object: nil,
+            queue: .main,
+            using: handler
+        )
+        resizeObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didResizeNotification,
+            object: nil,
+            queue: .main,
+            using: handler
+        )
     }
 
     private static func isMenuBarPanel(_ window: NSWindow) -> Bool {

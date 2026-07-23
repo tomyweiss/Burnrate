@@ -11,9 +11,14 @@ struct RootPanel: View {
     @Bindable var updates: UpdateManager
     @State private var route: PanelRoute = .usage
     @Namespace private var glassNamespace
+    @AppStorage("panelTab") private var panelTabRaw = UsageTab.models.rawValue
 
     private let panelWidth: CGFloat = 380
-    private let panelHeight: CGFloat = 520
+
+    /// The Bench scatter needs more vertical room than the list tabs.
+    private var panelHeight: CGFloat {
+        route == .usage && panelTabRaw == UsageTab.bench.rawValue ? 680 : 520
+    }
 
     var body: some View {
         Group {
@@ -37,6 +42,8 @@ struct RootPanel: View {
             }
         }
         .frame(width: panelWidth, height: panelHeight)
+        .animation(.snappy, value: panelTabRaw)
+        .animation(.snappy, value: route)
         .onAppear {
             MenuBarPanelKeeper.panelDidShow()
             updates.autoCheckIfNeeded()

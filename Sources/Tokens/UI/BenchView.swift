@@ -114,6 +114,9 @@ struct BenchView: View {
     @AppStorage("benchXMetric") private var xMetricRaw = BenchMetric.avgPromptCost.rawValue
     @AppStorage("benchYMetric") private var yMetricRaw = BenchMetric.avgTime.rawValue
 
+    @State private var hoveredID: String?
+    @State private var hoverLocation: CGPoint = .zero
+
     /// Cap the dots so labels stay readable; keeps the biggest spenders.
     private static let maxPoints = 12
 
@@ -208,16 +211,20 @@ struct BenchView: View {
                 x: .value("X", score(point, metric: xMetric)),
                 y: .value("Y", score(point, metric: yMetric))
             )
-            .symbolSize(symbolSize(point))
+            .symbolSize(hoveredID == point.id ? symbolSize(point) * 1.5 : symbolSize(point))
             .foregroundStyle(by: .value("Name", point.name))
-            .opacity(0.85)
-            .annotation(position: .top, spacing: 1) {
+            .opacity(hoveredID == nil || hoveredID == point.id ? 0.9 : 0.3)
+            .annotation(
+                position: .top,
+                spacing: 1,
+                overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))
+            ) {
                 Text(point.name)
                     .font(.system(size: 9, weight: .medium))
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .frame(maxWidth: 92)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(hoveredID == point.id ? .primary : .secondary)
             }
         }
         .chartXScale(domain: -0.08 ... 1.12)
@@ -233,6 +240,31 @@ struct BenchView: View {
             }
         }
         .chartLegend(.hidden)
+        .chartOverlay { proxy in
+            GeometryReader { geo in
+                ZStack(alignment: .topLeading) {
+                    Rectangle()
+                        .fill(Color.clear)
+                        .contentShape(Rectangle())
+                        .onContinuousHover { phase in
+                            switch phase {
+                            case .active(let location):
+                                hoverLocation = location
+                                hoveredID = hitTest(location, proxy: proxy, geo: geo)?.id
+                            case .ended:
+                                hoveredID = nil
+                            }
+                        }
+
+                    if let point = points.first(where: { $0.id == hoveredID }) {
+                        tooltip(point)
+                            .offset(tooltipOffset(in: geo.size))
+                            .allowsHitTesting(false)
+                            .transition(.opacity)
+                    }
+                }
+            }
+        }
         .chartPlotStyle { plot in
             plot.background(
                 LinearGradient(
@@ -267,6 +299,68 @@ struct BenchView: View {
                 .padding(.leading, 6)
                 .padding(.top, 2)
         }
+    }
+
+    // MARK: - Hover & tooltip
+
+    /// Nearest dot within grab distance of the cursor, in chart coordinates.
+    private func hitTest(
+        _ location: CGPoint,
+        proxy: ChartProxy,
+        geo: GeometryProxy
+    ) -> BenchPoint? {
+        guard let plotFrame = proxy.plotFrame else { return nil }
+        let origin = geo[plotFrame].origin
+        var best: (point: BenchPoint, distance: CGFloat)?
+        for point in points {
+            guard let px = proxy.position(forX: score(point, metric: xMetric)),
+                  let py = proxy.position(forY: score(point, metric: yMetric))
+            else { continue }
+            let dx = origin.x + px - location.x
+            let dy = origin.y + py - location.y
+            let distance = (dx * dx + dy * dy).squareRoot()
+            if distance < 28, distance < (best?.distance ?? .infinity) {
+                best = (point, distance)
+            }
+        }
+        return best?.point
+    }
+
+    private func tooltip(_ point: BenchPoint) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(point.name)
+                .font(.caption.weight(.semibold))
+                .lineLimit(2)
+            Text("\(xMetric.title): \(point.rawLabel(for: xMetric))")
+            Text("\(yMetric.title): \(point.rawLabel(for: yMetric))")
+            Text(
+                "\(point.promptCount) prompts · \(MoneyFormat.dollarsFromCents(point.totalCostCents)) total · \(TokenFormat.compact(point.totalTokens)) tok"
+            )
+            .foregroundStyle(.secondary)
+        }
+        .font(.caption2)
+        .padding(8)
+        .frame(maxWidth: 220, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(.quaternary)
+        )
+        .fixedSize()
+    }
+
+    /// Keep the tooltip near the cursor but inside the chart bounds.
+    private func tooltipOffset(in size: CGSize) -> CGSize {
+        let estimated = CGSize(width: 190, height: 84)
+        var x = hoverLocation.x + 14
+        var y = hoverLocation.y + 14
+        if x + estimated.width > size.width {
+            x = hoverLocation.x - estimated.width - 10
+        }
+        if y + estimated.height > size.height {
+            y = hoverLocation.y - estimated.height - 10
+        }
+        return CGSize(width: max(0, x), height: max(0, y))
     }
 
     private func axisTag(_ text: String) -> some View {
