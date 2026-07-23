@@ -313,6 +313,10 @@ struct UsagePanel: View {
 
                 Spacer()
 
+                signature
+
+                Spacer()
+
                 HStack(spacing: 8) {
                     Button {
                         Task { await store.refresh() }
@@ -358,6 +362,21 @@ struct UsagePanel: View {
             }
         }
         .foregroundStyle(.primary.opacity(0.9))
+    }
+
+    private var signature: some View {
+        HStack(spacing: 3) {
+            Text("Powered by")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+            Link(destination: URL(string: "https://getdrift.ai")!) {
+                Text("Drift Security")
+                    .font(.caption2.weight(.medium))
+                    .underline()
+                    .foregroundStyle(.secondary)
+            }
+            .help("getdrift.ai")
+        }
     }
 
     private func updateBanner(_ update: AvailableUpdate) -> some View {
