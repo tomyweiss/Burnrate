@@ -9,6 +9,8 @@ struct SessionMeta: Sendable, Hashable {
     let isArchived: Bool
     let repoName: String?
     let branchName: String?
+    let subagentTypeName: String?
+    let isSubagent: Bool
 
     init(
         conversationId: String,
@@ -17,7 +19,9 @@ struct SessionMeta: Sendable, Hashable {
         isCloud: Bool = false,
         isArchived: Bool = false,
         repoName: String? = nil,
-        branchName: String? = nil
+        branchName: String? = nil,
+        subagentTypeName: String? = nil,
+        isSubagent: Bool = false
     ) {
         self.conversationId = conversationId
         self.name = name
@@ -26,6 +30,8 @@ struct SessionMeta: Sendable, Hashable {
         self.isArchived = isArchived
         self.repoName = repoName
         self.branchName = branchName
+        self.subagentTypeName = subagentTypeName
+        self.isSubagent = isSubagent
     }
 
     var displayName: String {
@@ -75,6 +81,23 @@ struct SessionMeta: Sendable, Hashable {
     }
 }
 
+struct SessionGraph: Sendable {
+    let meta: [String: SessionMeta]
+    /// Subagent conversationId → root parent conversationId.
+    let rootIdByChild: [String: String]
+    let childrenByRoot: [String: [String]]
+
+    static let empty = SessionGraph(meta: [:], rootIdByChild: [:], childrenByRoot: [:])
+
+    func rootId(for conversationId: String) -> String {
+        rootIdByChild[conversationId] ?? conversationId
+    }
+
+    func children(of rootId: String) -> [String] {
+        childrenByRoot[rootId] ?? []
+    }
+}
+
 enum SessionCatalog {
     private static var ideDatabasePath: URL {
         FileManager.default.homeDirectoryForCurrentUser
@@ -91,34 +114,37 @@ enum SessionCatalog {
     /// Resolve titles/workspaces for the given conversation IDs from local Cursor state.
     /// Checks the desktop IDE database, CLI store.db files, then cloud agent repository cache.
     static func lookup(conversationIds: Set<String>) -> [String: SessionMeta] {
-        guard !conversationIds.isEmpty else { return [:] }
+        graph(for: conversationIds).meta
+    }
 
-        var result = lookupIDE(conversationIds: conversationIds)
+    /// Titles/workspaces plus subagent → root parent links from composer headers.
+    static func graph(for conversationIds: Set<String>) -> SessionGraph {
+        guard !conversationIds.isEmpty else { return .empty }
+
+        let ide = lookupIDEGraph(neededIds: conversationIds)
+        var result = ide.meta
+        let rootIdByChild = ide.rootIdByChild
+        var childrenByRoot = ide.childrenByRoot
 
         let needsCLI = conversationIds.filter { result[$0]?.name == nil }
         if !needsCLI.isEmpty {
             let cliResults = lookupCLI(conversationIds: Set(needsCLI))
             for (id, meta) in cliResults {
                 if meta.name != nil {
-                    result[id] = meta
+                    result[id] = mergeMeta(existing: result[id], overlay: meta)
                 }
             }
         }
 
         let cloud = lookupCloudAgents(conversationIds: conversationIds)
         for (id, cloudMeta) in cloud {
-            if let existing = result[id] {
-                result[id] = SessionMeta(
-                    conversationId: id,
-                    name: cloudMeta.name ?? existing.name,
-                    workspaceName: existing.workspaceName,
-                    isCloud: true,
-                    isArchived: cloudMeta.isArchived || existing.isArchived,
-                    repoName: cloudMeta.repoName ?? existing.repoName,
-                    branchName: cloudMeta.branchName ?? existing.branchName
-                )
-            } else {
-                result[id] = cloudMeta
+            result[id] = mergeMeta(existing: result[id], overlay: cloudMeta)
+        }
+
+        // Ensure roots referenced by subagents are present even with no usage events.
+        for rootId in Set(rootIdByChild.values) {
+            if result[rootId] == nil {
+                result[rootId] = SessionMeta(conversationId: rootId)
             }
         }
 
@@ -136,18 +162,50 @@ enum SessionCatalog {
                     isCloud: true,
                     isArchived: existing.isArchived,
                     repoName: existing.repoName,
-                    branchName: existing.branchName
+                    branchName: existing.branchName,
+                    subagentTypeName: existing.subagentTypeName,
+                    isSubagent: existing.isSubagent
                 )
             }
         }
 
-        return result
+        // Restrict children maps to roots that appear in the requested set (or as parents of them).
+        let relevantRoots = Set(conversationIds.map { rootIdByChild[$0] ?? $0 })
+            .union(Set(rootIdByChild.values))
+        childrenByRoot = childrenByRoot.filter { relevantRoots.contains($0.key) }
+
+        return SessionGraph(
+            meta: result,
+            rootIdByChild: rootIdByChild,
+            childrenByRoot: childrenByRoot
+        )
+    }
+
+    private static func mergeMeta(existing: SessionMeta?, overlay: SessionMeta) -> SessionMeta {
+        guard let existing else { return overlay }
+        return SessionMeta(
+            conversationId: overlay.conversationId,
+            name: overlay.name ?? existing.name,
+            workspaceName: overlay.workspaceName ?? existing.workspaceName,
+            isCloud: overlay.isCloud || existing.isCloud,
+            isArchived: overlay.isArchived || existing.isArchived,
+            repoName: overlay.repoName ?? existing.repoName,
+            branchName: overlay.branchName ?? existing.branchName,
+            subagentTypeName: overlay.subagentTypeName ?? existing.subagentTypeName,
+            isSubagent: overlay.isSubagent || existing.isSubagent
+        )
     }
 
     // MARK: - IDE (desktop) lookup
 
-    private static func lookupIDE(conversationIds: Set<String>) -> [String: SessionMeta] {
-        guard FileManager.default.fileExists(atPath: ideDatabasePath.path) else { return [:] }
+    private static func lookupIDEGraph(neededIds: Set<String>) -> (
+        meta: [String: SessionMeta],
+        rootIdByChild: [String: String],
+        childrenByRoot: [String: [String]]
+    ) {
+        guard FileManager.default.fileExists(atPath: ideDatabasePath.path) else {
+            return ([:], [:], [:])
+        }
 
         var database: OpaquePointer?
         guard sqlite3_open_v2(
@@ -156,49 +214,97 @@ enum SessionCatalog {
             SQLITE_OPEN_READONLY,
             nil
         ) == SQLITE_OK else {
-            return [:]
+            return ([:], [:], [:])
         }
         defer { sqlite3_close(database) }
 
-        var result: [String: SessionMeta] = [:]
+        var allMeta: [String: SessionMeta] = [:]
+        var rootIdByChild: [String: String] = [:]
+        var childrenByRoot: [String: [String]] = [:]
 
         if let headersJSON = readItemValue(database: database, key: "composer.composerHeaders"),
            let data = headersJSON.data(using: .utf8),
            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let composers = root["allComposers"] as? [[String: Any]] {
             for composer in composers {
-                guard let id = composer["composerId"] as? String,
-                      conversationIds.contains(id)
-                else { continue }
-                result[id] = SessionMeta(
+                guard let id = composer["composerId"] as? String else { continue }
+
+                let subInfo = composer["subagentInfo"] as? [String: Any]
+                let subType = stringValue(subInfo?["subagentTypeName"])
+                let parentRoot = stringValue(subInfo?["rootParentConversationId"])
+                    ?? stringValue(subInfo?["parentComposerId"])
+                let isSub = parentRoot != nil
+
+                if let parentRoot {
+                    rootIdByChild[id] = parentRoot
+                    childrenByRoot[parentRoot, default: []].append(id)
+                }
+
+                allMeta[id] = SessionMeta(
                     conversationId: id,
                     name: stringValue(composer["name"]),
                     workspaceName: workspaceName(from: composer["workspaceIdentifier"]),
                     isCloud: id.hasPrefix("bc-"),
-                    isArchived: boolValue(composer["isArchived"])
+                    isArchived: boolValue(composer["isArchived"]),
+                    subagentTypeName: subType,
+                    isSubagent: isSub
                 )
             }
         }
 
-        let missing = conversationIds.subtracting(result.keys)
+        // Roots of any needed leaf (after full parent index).
+        var keepIds = neededIds
+        for id in neededIds {
+            if let root = rootIdByChild[id] {
+                keepIds.insert(root)
+            }
+        }
+        // Children of needed roots (for detail enrichment even if child has no usage yet).
+        for id in neededIds {
+            let root = rootIdByChild[id] ?? id
+            for child in childrenByRoot[root] ?? [] {
+                keepIds.insert(child)
+            }
+            keepIds.insert(root)
+        }
+
+        var result: [String: SessionMeta] = [:]
+        for id in keepIds {
+            if let meta = allMeta[id] {
+                result[id] = meta
+            }
+        }
+
+        let missing = neededIds.subtracting(result.keys)
         for id in missing {
             let key = "composerData:\(id)"
             guard let json = readDiskKVValue(database: database, key: key),
                   let data = json.data(using: .utf8),
-                  let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                  let diskRoot = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
             else {
                 continue
             }
+            let subInfo = diskRoot["subagentInfo"] as? [String: Any]
+            let parentRoot = stringValue(subInfo?["rootParentConversationId"])
+                ?? stringValue(subInfo?["parentComposerId"])
+            if let parentRoot {
+                rootIdByChild[id] = parentRoot
+                if !(childrenByRoot[parentRoot] ?? []).contains(id) {
+                    childrenByRoot[parentRoot, default: []].append(id)
+                }
+            }
             result[id] = SessionMeta(
                 conversationId: id,
-                name: stringValue(root["name"]),
-                workspaceName: workspaceName(from: root["workspaceIdentifier"]),
+                name: stringValue(diskRoot["name"]),
+                workspaceName: workspaceName(from: diskRoot["workspaceIdentifier"]),
                 isCloud: id.hasPrefix("bc-"),
-                isArchived: boolValue(root["isArchived"])
+                isArchived: boolValue(diskRoot["isArchived"]),
+                subagentTypeName: stringValue(subInfo?["subagentTypeName"]),
+                isSubagent: parentRoot != nil
             )
         }
 
-        return result
+        return (result, rootIdByChild, childrenByRoot)
     }
 
     // MARK: - Cloud agent repository

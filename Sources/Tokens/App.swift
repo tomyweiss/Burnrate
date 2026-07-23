@@ -11,6 +11,10 @@ struct TokensApp: App {
         if CommandLine.arguments.contains("--status") {
             Self.runStatusAndExit()
         }
+        if CommandLine.arguments.contains("--check-rollup") {
+            SessionRollupCheck.run()
+            exit(0)
+        }
 
         let settings = SettingsStore()
         _settings = State(initialValue: settings)

@@ -68,6 +68,8 @@ struct SessionUsage: Identifiable, Sendable, Hashable {
     let lastTimestampMs: Double
     /// Models used in this session, sorted by that session's per-model cost desc.
     let models: [String]
+    /// Subagents rolled into this root conversation (Sessions list only).
+    let subagentCount: Int
 
     var costDollars: Double { costCents / 100.0 }
 
@@ -113,7 +115,111 @@ struct SessionUsage: Identifiable, Sendable, Hashable {
             cacheWriteTokens: cacheWriteTokens,
             eventCount: eventCount,
             lastTimestampMs: lastTimestampMs,
-            models: models
+            models: models,
+            subagentCount: subagentCount
+        )
+    }
+}
+
+struct AgentUsage: Identifiable, Sendable, Hashable {
+    var id: String { conversationId }
+    let conversationId: String
+    let name: String?
+    let subagentTypeName: String?
+    let isMain: Bool
+    let costCents: Double
+    let inputTokens: Int
+    let outputTokens: Int
+    let cacheReadTokens: Int
+    let cacheWriteTokens: Int
+    let eventCount: Int
+    let lastTimestampMs: Double
+    let models: [String]
+
+    var costDollars: Double { costCents / 100.0 }
+
+    var totalTokens: Int {
+        inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens
+    }
+
+    var displayName: String {
+        if isMain { return "Main" }
+        let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmed.isEmpty { return trimmed }
+        if let type = subagentTypeName, !type.isEmpty { return type }
+        let short = conversationId.count > 8
+            ? String(conversationId.prefix(8))
+            : conversationId
+        return "Agent \(short)"
+    }
+}
+
+struct ConversationUsage: Identifiable, Sendable, Hashable {
+    var id: String { conversationId }
+    let conversationId: String
+    let name: String?
+    let workspaceName: String?
+    let isCloud: Bool
+    let isArchived: Bool
+    let repoName: String?
+    let branchName: String?
+    let costCents: Double
+    let inputTokens: Int
+    let outputTokens: Int
+    let cacheReadTokens: Int
+    let cacheWriteTokens: Int
+    let eventCount: Int
+    let lastTimestampMs: Double
+    let models: [String]
+    let main: AgentUsage
+    let subagents: [AgentUsage]
+
+    var costDollars: Double { costCents / 100.0 }
+
+    var totalTokens: Int {
+        inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens
+    }
+
+    var subagentCount: Int { subagents.count }
+
+    var displayName: String {
+        let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmed.isEmpty { return trimmed }
+        let short = conversationId.count > 8
+            ? String(conversationId.prefix(8))
+            : conversationId
+        return "Session \(short)"
+    }
+
+    var locationSubtitle: String? {
+        if isCloud {
+            var parts: [String] = []
+            if let repoName, !repoName.isEmpty { parts.append(repoName) }
+            if let branchName, !branchName.isEmpty { parts.append(branchName) }
+            return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        }
+        let workspace = workspaceName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return workspace.isEmpty ? nil : workspace
+    }
+
+    var asSessionUsage: SessionUsage {
+        SessionUsage(
+            conversationId: conversationId,
+            name: name,
+            workspaceName: workspaceName,
+            isCloud: isCloud,
+            isArchived: isArchived,
+            repoName: repoName,
+            branchName: branchName,
+            costCents: costCents,
+            inputTokens: inputTokens,
+            outputTokens: outputTokens,
+            cacheReadTokens: cacheReadTokens,
+            cacheWriteTokens: cacheWriteTokens,
+            eventCount: eventCount,
+            lastTimestampMs: lastTimestampMs,
+            models: models,
+            subagentCount: subagentCount
         )
     }
 }
@@ -153,8 +259,12 @@ struct UsageSnapshot: Sendable {
     let windowCostCents: Double
     let recentCostCents: Double
     let models: [ModelUsage]
-    /// Sessions aggregated across all models, sorted by cost desc.
+    /// Root conversations (subagents rolled in), sorted by cost desc.
     let sessionsAcrossModels: [SessionUsage]
+    /// Same roots with main vs subagent breakdown for detail screen.
+    let conversations: [ConversationUsage]
+    /// Leaf conversationId → root conversationId (identity when not a subagent).
+    let rootIdByConversation: [String: String]
     /// Variable-length buckets for the active timeline window.
     let sparklineCostCents: [Double]
     let window: UsageTimeWindow
@@ -164,11 +274,21 @@ struct UsageSnapshot: Sendable {
     var windowDollars: Double { windowCostCents / 100.0 }
     var recentDollars: Double { recentCostCents / 100.0 }
 
+    func conversation(id: String) -> ConversationUsage? {
+        conversations.first { $0.conversationId == id }
+    }
+
+    func rootId(for conversationId: String) -> String {
+        rootIdByConversation[conversationId] ?? conversationId
+    }
+
     static let empty = UsageSnapshot(
         windowCostCents: 0,
         recentCostCents: 0,
         models: [],
         sessionsAcrossModels: [],
+        conversations: [],
+        rootIdByConversation: [:],
         sparklineCostCents: Array(repeating: 0, count: 24),
         window: UsageTimeWindow(preset: .today, timeZone: .current),
         eventCount: 0,

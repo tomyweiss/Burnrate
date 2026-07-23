@@ -6,6 +6,7 @@ struct SessionRowView: View {
     var showModelChips: Bool = true
     var showShareBar: Bool = true
     var showLocationSubtitle: Bool = false
+    var onSelect: (() -> Void)? = nil
 
     @State private var hovering = false
 
@@ -15,6 +16,22 @@ struct SessionRowView: View {
     }
 
     var body: some View {
+        Group {
+            if let onSelect {
+                Button(action: {
+                    onSelect()
+                    MenuBarPanelKeeper.keepOpen()
+                }) {
+                    rowContent
+                }
+                .buttonStyle(.plain)
+            } else {
+                rowContent
+            }
+        }
+    }
+
+    private var rowContent: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -64,6 +81,7 @@ struct SessionRowView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(hovering ? Color.primary.opacity(0.06) : Color.clear)
         )
+        .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .help("Conversation \(session.conversationId)")
     }
@@ -76,6 +94,11 @@ struct SessionRowView: View {
             } else {
                 parts.append(top)
             }
+        }
+        if session.subagentCount > 0 {
+            parts.append(
+                "\(session.subagentCount) agent\(session.subagentCount == 1 ? "" : "s")"
+            )
         }
         if session.lastTimestampMs > 0 {
             parts.append(RelativeTimeFormat.string(fromTimestampMs: session.lastTimestampMs))

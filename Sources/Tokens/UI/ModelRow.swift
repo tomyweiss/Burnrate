@@ -25,6 +25,7 @@ struct ModelRowView: View {
     var showLocationSubtitle: Bool = false
     var hideArchivedSessions: Bool = false
     let onToggle: () -> Void
+    var onOpenSession: ((String) -> Void)? = nil
 
     @State private var hovering = false
 
@@ -89,7 +90,10 @@ struct ModelRowView: View {
                             windowCostCents: windowCostCents,
                             showModelChips: false,
                             showShareBar: false,
-                            showLocationSubtitle: showLocationSubtitle
+                            showLocationSubtitle: showLocationSubtitle,
+                            onSelect: onOpenSession.map { open in
+                                { open(session.conversationId) }
+                            }
                         )
                     }
                 }

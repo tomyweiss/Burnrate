@@ -3,6 +3,7 @@ import SwiftUI
 enum PanelRoute: Hashable {
     case usage
     case settings
+    case session(String)
 }
 
 struct RootPanel: View {
@@ -24,7 +25,10 @@ struct RootPanel: View {
                     settings: settings,
                     updates: updates,
                     glassNamespace: glassNamespace,
-                    onOpenSettings: { route = .settings }
+                    onOpenSettings: { route = .settings },
+                    onOpenSession: { id in
+                        route = .session(store.snapshot.rootId(for: id))
+                    }
                 )
             case .settings:
                 SettingsPanel(
@@ -34,6 +38,31 @@ struct RootPanel: View {
                     glassNamespace: glassNamespace,
                     onBack: { route = .usage }
                 )
+            case .session(let id):
+                if let conversation = store.snapshot.conversation(id: id) {
+                    SessionDetailPanel(
+                        conversation: conversation,
+                        glassNamespace: glassNamespace,
+                        onBack: { route = .usage }
+                    )
+                } else {
+                    VStack(spacing: 12) {
+                        HStack {
+                            Button {
+                                route = .usage
+                                MenuBarPanelKeeper.keepOpen()
+                            } label: {
+                                Label("Sessions", systemImage: "chevron.left")
+                            }
+                            .buttonStyle(.borderless)
+                            Spacer()
+                        }
+                        .padding()
+                        Text("Session not found in this window.")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                }
             }
         }
         .frame(width: panelWidth, height: panelHeight)

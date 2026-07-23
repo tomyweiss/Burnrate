@@ -21,6 +21,7 @@ struct UsagePanel: View {
     @Bindable var updates: UpdateManager
     var glassNamespace: Namespace.ID
     var onOpenSettings: () -> Void
+    var onOpenSession: (String) -> Void
 
     @AppStorage("panelTab") private var panelTabRaw = UsageTab.models.rawValue
     @State private var expandedModels: Set<String> = []
@@ -195,7 +196,8 @@ struct UsagePanel: View {
                                     reduceMotion: reduceMotion,
                                     showLocationSubtitle: settings.showLocationSubtitle,
                                     hideArchivedSessions: settings.hideArchivedSessions,
-                                    onToggle: { toggleExpanded(model.id) }
+                                    onToggle: { toggleExpanded(model.id) },
+                                    onOpenSession: onOpenSession
                                 )
                                 Divider().opacity(0.35)
                             }
@@ -206,7 +208,8 @@ struct UsagePanel: View {
                                     windowCostCents: store.snapshot.windowCostCents,
                                     showModelChips: true,
                                     showShareBar: true,
-                                    showLocationSubtitle: settings.showLocationSubtitle
+                                    showLocationSubtitle: settings.showLocationSubtitle,
+                                    onSelect: { onOpenSession(session.conversationId) }
                                 )
                                 Divider().opacity(0.35)
                             }
