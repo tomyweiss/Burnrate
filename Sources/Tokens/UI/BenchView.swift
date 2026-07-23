@@ -266,28 +266,27 @@ struct BenchView: View {
             }
         }
         .chartPlotStyle { plot in
+            // The "Best" badge lives in the plot background so it never covers
+            // dots or labels — marks always render above it.
             plot.background(
-                LinearGradient(
-                    stops: [
-                        .init(color: .clear, location: 0),
-                        .init(color: .green.opacity(0.05), location: 0.6),
-                        .init(color: .green.opacity(0.18), location: 1)
-                    ],
-                    startPoint: .bottomLeading,
-                    endPoint: .topTrailing
-                )
+                ZStack(alignment: .topTrailing) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .green.opacity(0.05), location: 0.6),
+                            .init(color: .green.opacity(0.18), location: 1)
+                        ],
+                        startPoint: .bottomLeading,
+                        endPoint: .topTrailing
+                    )
+                    Label("Best", systemImage: "trophy.fill")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.green.opacity(0.55))
+                        .padding(.top, 5)
+                        .padding(.trailing, 7)
+                }
             )
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        }
-        .overlay(alignment: .topTrailing) {
-            Label("Best", systemImage: "trophy.fill")
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(.green)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .glassEffect(.regular.tint(.green.opacity(0.25)))
-                .clipShape(Capsule())
-                .padding(6)
         }
         .overlay(alignment: .bottomTrailing) {
             axisTag("\(xMetric.title) →")
