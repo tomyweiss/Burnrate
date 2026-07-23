@@ -56,12 +56,10 @@ struct ModelRowView: View {
 
                         ShareBar(fraction: share)
 
-                        Text(
-                            "\(model.sessions.count) sessions · \(model.eventCount) events · \(TokenFormat.compact(model.totalTokens)) tok"
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
 
                     Image(systemName: "chevron.right")
@@ -104,6 +102,18 @@ struct ModelRowView: View {
         )
         .onHover { hovering = $0 }
         .animation(reduceMotion ? nil : .snappy, value: isExpanded)
+    }
+
+    private var subtitle: String {
+        var parts = [
+            "\(model.sessions.count) sessions",
+            "\(model.eventCount) events",
+            "\(TokenFormat.compact(model.totalTokens)) tok"
+        ]
+        if model.eventCount > 0 {
+            parts.append("avg \(MoneyFormat.dollars(model.averageCostDollars))/req")
+        }
+        return parts.joined(separator: " · ")
     }
 
     private var tokenDetail: String {
