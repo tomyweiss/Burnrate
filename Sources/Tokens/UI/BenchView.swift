@@ -5,6 +5,7 @@ import Charts
 /// normalized so that "better" scores higher — top-right is always the best.
 enum BenchMetric: String, CaseIterable, Identifiable {
     case avgPromptCost
+    case medPromptCost
     case avgTime
     case promptCount
     case totalCost
@@ -15,6 +16,7 @@ enum BenchMetric: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .avgPromptCost: "Avg $/prompt"
+        case .medPromptCost: "Med $/prompt"
         case .avgTime: "Avg time"
         case .promptCount: "Prompts"
         case .totalCost: "Total $"
@@ -25,7 +27,7 @@ enum BenchMetric: String, CaseIterable, Identifiable {
     /// What earns a high score for this metric.
     var betterHint: String {
         switch self {
-        case .avgPromptCost: "cheaper is better"
+        case .avgPromptCost, .medPromptCost: "cheaper is better"
         case .avgTime: "faster is better"
         case .promptCount: "more is better"
         case .totalCost: "cheaper is better"
@@ -60,6 +62,7 @@ struct BenchPoint: Identifiable {
     let name: String
     let promptCount: Int
     let totalCostCents: Double
+    let medianCostCents: Double
     let totalTokens: Int
     let totalDurationSeconds: Double
 
@@ -74,6 +77,7 @@ struct BenchPoint: Identifiable {
     func rawValue(for metric: BenchMetric) -> Double {
         switch metric {
         case .avgPromptCost: avgCostCents
+        case .medPromptCost: medianCostCents
         case .avgTime: avgDurationSeconds
         case .promptCount: Double(promptCount)
         case .totalCost: totalCostCents
@@ -84,6 +88,7 @@ struct BenchPoint: Identifiable {
     func rawLabel(for metric: BenchMetric) -> String {
         switch metric {
         case .avgPromptCost: MoneyFormat.dollarsFromCents(avgCostCents)
+        case .medPromptCost: MoneyFormat.dollarsFromCents(medianCostCents)
         case .avgTime: DurationFormat.compact(avgDurationSeconds)
         case .promptCount: "\(promptCount)"
         case .totalCost: MoneyFormat.dollarsFromCents(totalCostCents)
@@ -420,6 +425,7 @@ struct BenchView: View {
                     name: entry.name,
                     promptCount: entry.prompts.count,
                     totalCostCents: entry.prompts.reduce(0) { $0 + $1.costCents },
+                    medianCostCents: Stats.median(entry.prompts.map(\.costCents)),
                     totalTokens: entry.prompts.reduce(0) { $0 + $1.totalTokens },
                     totalDurationSeconds: entry.prompts.reduce(0) { $0 + $1.durationSeconds }
                 )

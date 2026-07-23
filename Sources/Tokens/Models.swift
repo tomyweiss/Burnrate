@@ -122,6 +122,8 @@ struct ModelUsage: Identifiable, Sendable, Hashable {
     var id: String { model }
     let model: String
     let costCents: Double
+    /// Median cost per usage event (request), in cents.
+    let medianCostCents: Double
     let inputTokens: Int
     let outputTokens: Int
     let cacheReadTokens: Int
@@ -137,6 +139,8 @@ struct ModelUsage: Identifiable, Sendable, Hashable {
         return costDollars / Double(eventCount)
     }
 
+    var medianCostDollars: Double { medianCostCents / 100.0 }
+
     var totalTokens: Int {
         inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens
     }
@@ -145,6 +149,7 @@ struct ModelUsage: Identifiable, Sendable, Hashable {
         ModelUsage(
             model: model,
             costCents: costCents,
+            medianCostCents: medianCostCents,
             inputTokens: inputTokens,
             outputTokens: outputTokens,
             cacheReadTokens: cacheReadTokens,
@@ -198,6 +203,8 @@ struct SkillUsage: Identifiable, Sendable, Hashable {
     var id: String { skill }
     let skill: String
     let costCents: Double
+    /// Median cost per use, in cents.
+    let medianCostCents: Double
     let invocationCount: Int
     let eventCount: Int
     let lastUsedMs: Double
@@ -207,6 +214,19 @@ struct SkillUsage: Identifiable, Sendable, Hashable {
     var averageCostDollars: Double {
         guard invocationCount > 0 else { return 0 }
         return costDollars / Double(invocationCount)
+    }
+
+    var medianCostDollars: Double { medianCostCents / 100.0 }
+}
+
+enum Stats {
+    static func median(_ values: [Double]) -> Double {
+        guard !values.isEmpty else { return 0 }
+        let sorted = values.sorted()
+        let mid = sorted.count / 2
+        return sorted.count.isMultiple(of: 2)
+            ? (sorted[mid - 1] + sorted[mid]) / 2
+            : sorted[mid]
     }
 }
 

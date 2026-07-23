@@ -25,6 +25,7 @@ enum UsageTab: String, CaseIterable, Identifiable {
 enum CostMetric: String, CaseIterable, Identifiable {
     case total
     case average
+    case median
 
     var id: String { rawValue }
 
@@ -32,6 +33,7 @@ enum CostMetric: String, CaseIterable, Identifiable {
         switch self {
         case .total: "Total $"
         case .average: "Avg $"
+        case .median: "Med $"
         }
     }
 }
@@ -258,7 +260,7 @@ struct UsagePanel: View {
                                     showLocationSubtitle: settings.showLocationSubtitle,
                                     hideArchivedSessions: settings.hideArchivedSessions,
                                     metric: modelsMetric,
-                                    maxAverageDollars: maxModelAverageDollars,
+                                    metricMaxDollars: maxModelMetricDollars,
                                     onToggle: { toggleExpanded(model.id) }
                                 )
                                 Divider().opacity(0.35)
@@ -287,7 +289,7 @@ struct UsagePanel: View {
                                         skill: skill,
                                         windowCostCents: store.snapshot.windowCostCents,
                                         metric: skillsMetric,
-                                        maxAverageDollars: maxSkillAverageDollars,
+                                        metricMaxDollars: maxSkillMetricDollars,
                                         onOpen: {
                                             selectedSkill = skill
                                             MenuBarPanelKeeper.keepOpen()
@@ -329,26 +331,51 @@ struct UsagePanel: View {
 
     private var displayedModels: [ModelUsage] {
         let models = store.snapshot.models
-        guard modelsMetric == .average else { return models }
-        return models.sorted { $0.averageCostDollars > $1.averageCostDollars }
+        switch modelsMetric {
+        case .total:
+            return models
+        case .average:
+            return models.sorted { $0.averageCostDollars > $1.averageCostDollars }
+        case .median:
+            return models.sorted { $0.medianCostDollars > $1.medianCostDollars }
+        }
     }
 
     private var displayedSkills: [SkillUsage] {
         let skills = store.snapshot.skills
-        guard skillsMetric == .average else { return skills }
+        let value: (SkillUsage) -> Double
+        switch skillsMetric {
+        case .total:
+            return skills
+        case .average:
+            value = \.averageCostDollars
+        case .median:
+            value = \.medianCostDollars
+        }
         return skills.sorted {
-            $0.averageCostDollars == $1.averageCostDollars
+            value($0) == value($1)
                 ? $0.lastUsedMs > $1.lastUsedMs
-                : $0.averageCostDollars > $1.averageCostDollars
+                : value($0) > value($1)
         }
     }
 
-    private var maxModelAverageDollars: Double {
-        store.snapshot.models.map(\.averageCostDollars).max() ?? 0
+    /// Highest value of the selected per-unit metric; scales the share bars.
+    private var maxModelMetricDollars: Double {
+        let models = store.snapshot.models
+        switch modelsMetric {
+        case .total: return 0
+        case .average: return models.map(\.averageCostDollars).max() ?? 0
+        case .median: return models.map(\.medianCostDollars).max() ?? 0
+        }
     }
 
-    private var maxSkillAverageDollars: Double {
-        store.snapshot.skills.map(\.averageCostDollars).max() ?? 0
+    private var maxSkillMetricDollars: Double {
+        let skills = store.snapshot.skills
+        switch skillsMetric {
+        case .total: return 0
+        case .average: return skills.map(\.averageCostDollars).max() ?? 0
+        case .median: return skills.map(\.medianCostDollars).max() ?? 0
+        }
     }
 
     private func metricPicker(_ selection: Binding<String>) -> some View {

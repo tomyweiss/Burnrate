@@ -4,8 +4,9 @@ struct SkillRowView: View {
     let skill: SkillUsage
     let windowCostCents: Double
     var metric: CostMetric = .total
-    /// Highest average among the listed skills; scales the bar in avg mode.
-    var maxAverageDollars: Double = 0
+    /// Highest value of the selected per-unit metric; scales the bar in
+    /// avg/median modes.
+    var metricMaxDollars: Double = 0
     /// When set, the row is tappable and opens the skill detail view.
     var onOpen: (() -> Void)? = nil
 
@@ -16,14 +17,18 @@ struct SkillRowView: View {
         case .total:
             guard windowCostCents > 0 else { return 0 }
             return skill.costCents / windowCostCents
-        case .average:
-            guard maxAverageDollars > 0 else { return 0 }
-            return skill.averageCostDollars / maxAverageDollars
+        case .average, .median:
+            guard metricMaxDollars > 0 else { return 0 }
+            return displayDollars / metricMaxDollars
         }
     }
 
     private var displayDollars: Double {
-        metric == .total ? skill.costDollars : skill.averageCostDollars
+        switch metric {
+        case .total: skill.costDollars
+        case .average: skill.averageCostDollars
+        case .median: skill.medianCostDollars
+        }
     }
 
     var body: some View {
@@ -78,8 +83,13 @@ struct SkillRowView: View {
         switch metric {
         case .total:
             parts.append("avg \(MoneyFormat.dollars(skill.averageCostDollars))")
+            parts.append("med \(MoneyFormat.dollars(skill.medianCostDollars))")
         case .average:
             parts.append("total \(MoneyFormat.dollars(skill.costDollars))")
+            parts.append("med \(MoneyFormat.dollars(skill.medianCostDollars))")
+        case .median:
+            parts.append("total \(MoneyFormat.dollars(skill.costDollars))")
+            parts.append("avg \(MoneyFormat.dollars(skill.averageCostDollars))")
         }
         if skill.lastUsedMs > 0 {
             parts.append(RelativeTimeFormat.string(fromTimestampMs: skill.lastUsedMs))

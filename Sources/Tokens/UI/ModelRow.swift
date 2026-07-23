@@ -25,8 +25,9 @@ struct ModelRowView: View {
     var showLocationSubtitle: Bool = false
     var hideArchivedSessions: Bool = false
     var metric: CostMetric = .total
-    /// Highest average among the listed models; scales the bar in avg mode.
-    var maxAverageDollars: Double = 0
+    /// Highest value of the selected per-unit metric; scales the bar in
+    /// avg/median modes.
+    var metricMaxDollars: Double = 0
     let onToggle: () -> Void
 
     @State private var hovering = false
@@ -36,14 +37,18 @@ struct ModelRowView: View {
         case .total:
             guard windowCostCents > 0 else { return 0 }
             return model.costCents / windowCostCents
-        case .average:
-            guard maxAverageDollars > 0 else { return 0 }
-            return model.averageCostDollars / maxAverageDollars
+        case .average, .median:
+            guard metricMaxDollars > 0 else { return 0 }
+            return displayDollars / metricMaxDollars
         }
     }
 
     private var displayDollars: Double {
-        metric == .total ? model.costDollars : model.averageCostDollars
+        switch metric {
+        case .total: model.costDollars
+        case .average: model.averageCostDollars
+        case .median: model.medianCostDollars
+        }
     }
 
     private var visibleSessions: [SessionUsage] {
@@ -126,10 +131,15 @@ struct ModelRowView: View {
         switch metric {
         case .total:
             if model.eventCount > 0 {
-                parts.append("avg \(MoneyFormat.dollars(model.averageCostDollars))/req")
+                parts.append("avg \(MoneyFormat.dollars(model.averageCostDollars))")
+                parts.append("med \(MoneyFormat.dollars(model.medianCostDollars))")
             }
         case .average:
             parts.append("total \(MoneyFormat.dollars(model.costDollars))")
+            parts.append("med \(MoneyFormat.dollars(model.medianCostDollars))")
+        case .median:
+            parts.append("total \(MoneyFormat.dollars(model.costDollars))")
+            parts.append("avg \(MoneyFormat.dollars(model.averageCostDollars))")
         }
         return parts.joined(separator: " · ")
     }

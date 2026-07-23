@@ -102,6 +102,7 @@ struct SkillDetailView: View {
         var parts: [String] = []
         parts.append(skill.invocationCount == 1 ? "1 use" : "\(skill.invocationCount) uses")
         parts.append("avg \(MoneyFormat.dollars(skill.averageCostDollars))")
+        parts.append("med \(MoneyFormat.dollars(skill.medianCostDollars))")
         return parts.joined(separator: " · ")
     }
 }
