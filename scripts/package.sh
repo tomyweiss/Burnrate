@@ -4,6 +4,41 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+generate_release_notes() {
+  local version="$1"
+  local notes_file="$2"
+  local tag="v${version}"
+  local prev_tag range commits
+
+  prev_tag="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | awk -v t="$tag" '$0==t {getline; print; exit}')"
+
+  {
+    echo "## What's new in ${version}"
+    echo
+    if [[ -n "$prev_tag" ]]; then
+      if git rev-parse "$tag" >/dev/null 2>&1; then
+        range="${prev_tag}..${tag}"
+      else
+        range="${prev_tag}..HEAD"
+      fi
+      commits="$(git log "$range" --pretty=format:'- %s (%h)' --no-merges --reverse 2>/dev/null || true)"
+      if [[ -n "$commits" ]]; then
+        echo "$commits"
+      else
+        echo "- Maintenance and improvements"
+      fi
+    else
+      commits="$(git log --pretty=format:'- %s (%h)' --no-merges --reverse -50 2>/dev/null || true)"
+      if [[ -n "$commits" ]]; then
+        echo "$commits"
+      else
+        echo "- Initial release"
+      fi
+    fi
+    echo
+  } > "$notes_file"
+}
+
 EXECUTABLE_NAME="Tokens"
 BUILD_DIR="$ROOT/.build"
 DIST_DIR="$ROOT/dist"
@@ -173,6 +208,14 @@ if [[ "$RELEASE" -eq 1 ]]; then
   echo "  $SIG_PATH"
 
   TAG="v${VERSION}"
+  NOTES_PATH="$DIST_DIR/release-notes-${VERSION}.md"
+  if [[ -n "${RELEASE_NOTES_FILE:-}" && -f "$RELEASE_NOTES_FILE" && -s "$RELEASE_NOTES_FILE" ]]; then
+    NOTES_PATH="$RELEASE_NOTES_FILE"
+    echo "Using release notes from ${NOTES_PATH}"
+  else
+    generate_release_notes "$VERSION" "$NOTES_PATH"
+    echo "Generated release notes from commits → ${NOTES_PATH}"
+  fi
   if ! command -v gh &>/dev/null; then
     echo "gh is required to upload (brew install gh). Artifacts are ready in dist/." >&2
     echo "Upload manually to a GitHub Release tagged ${TAG}." >&2
@@ -186,11 +229,13 @@ if [[ "$RELEASE" -eq 1 ]]; then
   if gh release view "$TAG" >/dev/null 2>&1; then
     echo "Uploading assets to existing release ${TAG}…"
     gh release upload "$TAG" "$ZIP_PATH" "$SHA_PATH" "$SIG_PATH" --clobber
+    echo "Updating release notes…"
+    gh release edit "$TAG" --notes-file "$NOTES_PATH"
   else
     echo "Creating GitHub release ${TAG} and uploading assets…"
     gh release create "$TAG" "$ZIP_PATH" "$SHA_PATH" "$SIG_PATH" \
       --title "$TAG" \
-      --generate-notes
+      --notes-file "$NOTES_PATH"
   fi
   echo "Published: $(gh release view "$TAG" --json url --jq .url)"
 fi
