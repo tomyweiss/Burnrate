@@ -7,6 +7,13 @@ enum PillPickerSize {
     case controlBar
 }
 
+enum PillPickerStyle {
+  /// Glass capsule track with sliding accent selection.
+    case capsule
+  /// Flat secondary control: no track, faint accent fill on selection.
+    case flat
+}
+
 /// Capsule segmented control with a sliding glass selection indicator.
 struct PillPicker<Value: Hashable>: View {
     struct Option: Identifiable {
@@ -28,6 +35,7 @@ struct PillPicker<Value: Hashable>: View {
     @Binding var selection: Value
     let options: [Option]
     var size: PillPickerSize = .regular
+    var style: PillPickerStyle = .capsule
     var fillsWidth: Bool = false
     var iconOnly: Bool = false
 
@@ -36,19 +44,21 @@ struct PillPicker<Value: Hashable>: View {
     @State private var hoveredValue: Value?
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: segmentSpacing) {
             ForEach(options) { option in
                 segment(option)
             }
         }
-        .padding(trackPadding)
+        .padding(style == .capsule ? trackPadding : 0)
         .background {
-            Capsule()
-                .fill(.ultraThinMaterial)
-                .overlay {
-                    Capsule()
-                        .strokeBorder(.quaternary.opacity(0.8), lineWidth: 0.5)
-                }
+            if style == .capsule {
+                Capsule()
+                    .fill(.ultraThinMaterial)
+                    .overlay {
+                        Capsule()
+                            .strokeBorder(.quaternary.opacity(0.8), lineWidth: 0.5)
+                    }
+            }
         }
         .frame(maxWidth: fillsWidth ? .infinity : nil)
         .animation(reduceMotion ? nil : .snappy, value: hoveredValue)
@@ -88,10 +98,17 @@ struct PillPicker<Value: Hashable>: View {
             .padding(.vertical, verticalPadding)
             .background {
                 if isSelected {
-                    Capsule()
-                        .fill(.clear)
-                        .glassEffect(.regular.tint(.accentColor))
-                        .matchedGeometryEffect(id: "pillSelection", in: selectionNamespace)
+                    switch style {
+                    case .capsule:
+                        Capsule()
+                            .fill(.clear)
+                            .glassEffect(.regular.tint(.accentColor))
+                            .matchedGeometryEffect(id: "pillSelection", in: selectionNamespace)
+                    case .flat:
+                        Capsule()
+                            .fill(Color.accentColor.opacity(0.12))
+                            .matchedGeometryEffect(id: "pillSelection", in: selectionNamespace)
+                    }
                 }
             }
             .contentShape(Capsule())
@@ -105,7 +122,7 @@ struct PillPicker<Value: Hashable>: View {
             }
         }
         .overlay(alignment: .top) {
-            if iconOnly, isPointerOver {
+            if style == .capsule, iconOnly, isPointerOver {
                 segmentTooltip(option)
                     .offset(y: -30)
                     .transition(.opacity)
@@ -133,36 +150,53 @@ struct PillPicker<Value: Hashable>: View {
     }
 
     private func labelColor(isSelected: Bool, isHovered: Bool) -> Color {
-        if isSelected { return .white }
-        if isHovered { return .primary }
-        return .secondary
+        switch style {
+        case .capsule:
+            if isSelected { return .white }
+            if isHovered { return .primary }
+            return .secondary
+        case .flat:
+            if isSelected { return .accentColor }
+            if isHovered { return .primary }
+            return Color.secondary.opacity(0.65)
+        }
     }
 
     private func labelFont(isSelected: Bool) -> Font {
+        if style == .flat {
+            return isSelected ? .caption.weight(.semibold) : .caption.weight(.medium)
+        }
         switch size {
         case .regular:
-            isSelected ? .subheadline.weight(.semibold) : .subheadline.weight(.medium)
+            return isSelected ? .subheadline.weight(.semibold) : .subheadline.weight(.medium)
         case .compact:
-            isSelected ? .caption.weight(.semibold) : .caption.weight(.medium)
+            return isSelected ? .caption.weight(.semibold) : .caption.weight(.medium)
         case .controlBar:
-            isSelected ? .callout.weight(.semibold) : .callout.weight(.medium)
+            return isSelected ? .callout.weight(.semibold) : .callout.weight(.medium)
         }
     }
 
     private var iconFont: Font {
+        if style == .flat {
+            return .caption2.weight(.semibold)
+        }
         if iconOnly {
             switch size {
-            case .regular: .subheadline.weight(.semibold)
-            case .compact: .caption.weight(.semibold)
-            case .controlBar: .subheadline.weight(.semibold)
+            case .regular: return .subheadline.weight(.semibold)
+            case .compact: return .caption.weight(.semibold)
+            case .controlBar: return .subheadline.weight(.semibold)
             }
         } else {
             switch size {
-            case .regular: .caption.weight(.semibold)
-            case .compact: .caption2.weight(.semibold)
-            case .controlBar: .caption2.weight(.semibold)
+            case .regular: return .caption.weight(.semibold)
+            case .compact: return .caption2.weight(.semibold)
+            case .controlBar: return .caption2.weight(.semibold)
             }
         }
+    }
+
+    private var segmentSpacing: CGFloat {
+        style == .flat ? 4 : 2
     }
 
     private var trackPadding: CGFloat {
@@ -173,26 +207,30 @@ struct PillPicker<Value: Hashable>: View {
     }
 
     private var horizontalPadding: CGFloat {
+        if style == .flat {
+            return iconOnly ? 6 : 8
+        }
         if iconOnly {
             switch size {
-            case .regular: 9
-            case .compact: 7
-            case .controlBar: 7
+            case .regular: return 9
+            case .compact: return 7
+            case .controlBar: return 7
             }
         } else {
             switch size {
-            case .regular: 10
-            case .compact: 8
-            case .controlBar: 6
+            case .regular: return 10
+            case .compact: return 8
+            case .controlBar: return 6
             }
         }
     }
 
     private var verticalPadding: CGFloat {
+        if style == .flat { return 3 }
         switch size {
-        case .regular: 5
-        case .compact: 4
-        case .controlBar: 5
+        case .regular: return 5
+        case .compact: return 4
+        case .controlBar: return 5
         }
     }
 
