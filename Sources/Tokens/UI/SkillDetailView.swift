@@ -34,13 +34,17 @@ struct SkillDetailView: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
 
-            Picker("Sort", selection: sort) {
-                ForEach(SessionPromptSort.allCases) { option in
-                    Text(option.title).tag(option)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            PillPicker(
+                selection: sort,
+                options: SessionPromptSort.allCases.map { option in
+                    PillPicker.Option(
+                        value: option,
+                        title: option.title,
+                        icon: option == .newest ? "clock" : "dollarsign"
+                    )
+                },
+                fillsWidth: true
+            )
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
             .onChange(of: sortRaw) { _, _ in
