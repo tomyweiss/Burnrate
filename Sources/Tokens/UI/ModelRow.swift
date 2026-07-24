@@ -124,7 +124,7 @@ struct ModelRowView: View {
 
     private var subtitle: String {
         var parts = [
-            "\(model.sessions.count) sessions",
+            "\(visibleSessions.count) sessions",
             "\(model.eventCount) events",
             "\(TokenFormat.compact(model.totalTokens)) tok"
         ]

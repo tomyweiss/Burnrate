@@ -102,6 +102,7 @@ struct PromptRowView: View {
     let prompt: PromptUsage
     var showSessionName: Bool = true
 
+    @Environment(\.blurSensitiveContent) private var blurSensitiveContent
     @State private var hovering = false
 
     var body: some View {
@@ -111,6 +112,7 @@ struct PromptRowView: View {
                     .font(.callout)
                     .lineLimit(2)
                     .truncationMode(.tail)
+                    .privacyBlurred(blurSensitiveContent)
                 Spacer(minLength: 8)
                 Text(MoneyFormat.dollars(prompt.costDollars))
                     .font(.callout.monospacedDigit().weight(.semibold))
@@ -132,11 +134,7 @@ struct PromptRowView: View {
                 }
             }
 
-            Text(subtitle)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
+            subtitleRow
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 8)
@@ -145,22 +143,36 @@ struct PromptRowView: View {
                 .fill(hovering ? Color.primary.opacity(0.06) : Color.clear)
         )
         .onHover { hovering = $0 }
-        .help(prompt.text)
+        .help(blurSensitiveContent ? "Prompt hidden" : prompt.text)
     }
 
-    private var subtitle: String {
-        var parts: [String] = []
-        if prompt.createdAtMs > 0 {
-            parts.append(RelativeTimeFormat.string(fromTimestampMs: prompt.createdAtMs))
+    @ViewBuilder
+    private var subtitleRow: some View {
+        HStack(spacing: 0) {
+            if prompt.createdAtMs > 0 {
+                Text(RelativeTimeFormat.string(fromTimestampMs: prompt.createdAtMs))
+            }
+            if showSessionName, let name = prompt.sessionName, !name.isEmpty {
+                if prompt.createdAtMs > 0 {
+                    Text(" · ")
+                }
+                Text(name)
+                    .privacyBlurred(blurSensitiveContent)
+            }
+            if let model = prompt.models.first {
+                let modelLabel = prompt.models.count > 1
+                    ? "\(model) +\(prompt.models.count - 1)"
+                    : model
+                if prompt.createdAtMs > 0
+                    || (showSessionName && !(prompt.sessionName ?? "").isEmpty) {
+                    Text(" · ")
+                }
+                Text(modelLabel)
+            }
         }
-        if showSessionName, let name = prompt.sessionName, !name.isEmpty {
-            parts.append(name)
-        }
-        if let model = prompt.models.first {
-            parts.append(
-                prompt.models.count > 1 ? "\(model) +\(prompt.models.count - 1)" : model
-            )
-        }
-        return parts.joined(separator: " · ")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .truncationMode(.middle)
     }
 }

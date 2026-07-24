@@ -59,6 +59,9 @@ struct SessionUsage: Identifiable, Sendable, Hashable {
     let isArchived: Bool
     let repoName: String?
     let branchName: String?
+    /// Cost from this conversation's own billing events (excludes subagents).
+    let ownCostCents: Double
+    /// `ownCostCents` plus all descendant subagent costs.
     let costCents: Double
     let inputTokens: Int
     let outputTokens: Int
@@ -68,8 +71,16 @@ struct SessionUsage: Identifiable, Sendable, Hashable {
     let lastTimestampMs: Double
     /// Models used in this session, sorted by that session's per-model cost desc.
     let models: [String]
+    /// Immediate parent conversation when this session is a subagent.
+    let parentConversationId: String?
+    /// Direct child subagent conversation ids (not transitive).
+    let childConversationIds: [String]
+
+    var isSubagent: Bool { parentConversationId != nil }
+    var hasSubagents: Bool { !childConversationIds.isEmpty }
 
     var costDollars: Double { costCents / 100.0 }
+    var ownCostDollars: Double { ownCostCents / 100.0 }
 
     var totalTokens: Int {
         inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens
@@ -106,6 +117,7 @@ struct SessionUsage: Identifiable, Sendable, Hashable {
             isArchived: meta.isArchived || isArchived,
             repoName: meta.repoName ?? repoName,
             branchName: meta.branchName ?? branchName,
+            ownCostCents: ownCostCents,
             costCents: costCents,
             inputTokens: inputTokens,
             outputTokens: outputTokens,
@@ -113,7 +125,9 @@ struct SessionUsage: Identifiable, Sendable, Hashable {
             cacheWriteTokens: cacheWriteTokens,
             eventCount: eventCount,
             lastTimestampMs: lastTimestampMs,
-            models: models
+            models: models,
+            parentConversationId: parentConversationId,
+            childConversationIds: childConversationIds
         )
     }
 }
@@ -234,10 +248,12 @@ struct UsageSnapshot: Sendable {
     let windowCostCents: Double
     let recentCostCents: Double
     let models: [ModelUsage]
-    /// Sessions aggregated across all models, sorted by cost desc.
+    /// All sessions (roots and subagents) with hierarchy + rolled-up cost, sorted by cost desc.
     let sessionsAcrossModels: [SessionUsage]
-    /// User prompts in the window with attributed costs, newest first.
+    /// Root-session prompts with subagent work folded in; used by Feed / Skills / parent detail.
     let prompts: [PromptUsage]
+    /// Subagent sessions' own prompts (events not folded to parent); used by subagent detail.
+    let subagentPrompts: [PromptUsage]
     /// Per-skill cost breakdown, sorted by cost desc.
     let skills: [SkillUsage]
     /// Variable-length buckets for the active timeline window.
@@ -249,12 +265,39 @@ struct UsageSnapshot: Sendable {
     var windowDollars: Double { windowCostCents / 100.0 }
     var recentDollars: Double { recentCostCents / 100.0 }
 
+    /// Root sessions only (subagents hidden from the top-level Sessions list).
+    var rootSessions: [SessionUsage] {
+        sessionsAcrossModels.filter { !$0.isSubagent }
+    }
+
+    func session(id: String) -> SessionUsage? {
+        sessionsAcrossModels.first { $0.conversationId == id }
+    }
+
+    func childSessions(of parent: SessionUsage) -> [SessionUsage] {
+        let order = Dictionary(uniqueKeysWithValues: parent.childConversationIds.enumerated().map { ($1, $0) })
+        return sessionsAcrossModels
+            .filter { $0.parentConversationId == parent.conversationId }
+            .sorted {
+                let lhs = order[$0.conversationId] ?? Int.max
+                let rhs = order[$1.conversationId] ?? Int.max
+                if lhs != rhs { return lhs < rhs }
+                return $0.lastTimestampMs > $1.lastTimestampMs
+            }
+    }
+
+    func prompts(for session: SessionUsage) -> [PromptUsage] {
+        let source = session.isSubagent ? subagentPrompts : prompts
+        return source.filter { $0.conversationId == session.conversationId }
+    }
+
     static let empty = UsageSnapshot(
         windowCostCents: 0,
         recentCostCents: 0,
         models: [],
         sessionsAcrossModels: [],
         prompts: [],
+        subagentPrompts: [],
         skills: [],
         sparklineCostCents: Array(repeating: 0, count: 24),
         window: UsageTimeWindow(preset: .today, timeZone: .current),

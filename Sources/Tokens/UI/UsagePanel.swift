@@ -47,7 +47,8 @@ struct UsagePanel: View {
 
     @AppStorage("panelTab") private var panelTabRaw = UsageTab.models.rawValue
     @State private var expandedModels: Set<String> = []
-    @State private var selectedSession: SessionUsage?
+    /// Navigation stack for session → subagent drilldown.
+    @State private var sessionPath: [SessionUsage] = []
     @State private var selectedSkill: SkillUsage?
     @AppStorage("modelsCostMetric") private var modelsMetricRaw = CostMetric.total.rawValue
     @AppStorage("skillsCostMetric") private var skillsMetricRaw = CostMetric.total.rawValue
@@ -86,7 +87,7 @@ struct UsagePanel: View {
             }
         }
         .onDisappear {
-            selectedSession = nil
+            sessionPath = []
             selectedSkill = nil
         }
     }
@@ -213,15 +214,21 @@ struct UsagePanel: View {
                         MenuBarPanelKeeper.keepOpen()
                     }
                 )
-            } else if let selected = selectedSession {
+            } else if let selected = sessionPath.last {
+                let session = store.snapshot.session(id: selected.conversationId) ?? selected
                 SessionDetailView(
-                    // Prefer the freshest snapshot copy; fall back to the tapped one.
-                    session: store.snapshot.sessionsAcrossModels
-                        .first { $0.conversationId == selected.conversationId } ?? selected,
-                    prompts: store.snapshot.prompts
-                        .filter { $0.conversationId == selected.conversationId },
+                    session: session,
+                    prompts: store.snapshot.prompts(for: session),
+                    subagents: store.snapshot.childSessions(of: session),
+                    windowCostCents: store.snapshot.windowCostCents,
                     onBack: {
-                        selectedSession = nil
+                        if !sessionPath.isEmpty {
+                            sessionPath.removeLast()
+                        }
+                        MenuBarPanelKeeper.keepOpen()
+                    },
+                    onOpenSubagent: { child in
+                        sessionPath.append(child)
                         MenuBarPanelKeeper.keepOpen()
                     }
                 )
@@ -277,7 +284,7 @@ struct UsagePanel: View {
                                     showShareBar: true,
                                     showLocationSubtitle: settings.showLocationSubtitle,
                                     onOpen: {
-                                        selectedSession = session
+                                        sessionPath = [session]
                                         MenuBarPanelKeeper.keepOpen()
                                     }
                                 )
@@ -410,7 +417,8 @@ struct UsagePanel: View {
     }
 
     private var visibleSessions: [SessionUsage] {
-        var sessions = store.snapshot.sessionsAcrossModels
+        // Roots only — subagents live under their parent in session detail.
+        var sessions = store.snapshot.rootSessions
         if settings.hideArchivedSessions {
             sessions = sessions.filter { !$0.isArchived }
         }
@@ -422,7 +430,7 @@ struct UsagePanel: View {
                     : $0.lastTimestampMs > $1.lastTimestampMs
             }
         case .cost:
-            return sessions // Snapshot order is already cost-descending.
+            return sessions.sorted { $0.costCents > $1.costCents }
         }
     }
 

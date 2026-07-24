@@ -15,6 +15,7 @@ final class SettingsStore {
         static let usageTimezoneIdentifier = "usageTimezoneIdentifier"
         static let showLocationSubtitle = "showLocationSubtitle"
         static let hideArchivedSessions = "hideArchivedSessions"
+        static let blurSensitiveContent = "blurSensitiveContent"
     }
 
     static let refreshIntervalOptions: [Double] = [15, 30, 60, 120, 300, 600]
@@ -73,6 +74,11 @@ final class SettingsStore {
 
     var hideArchivedSessions: Bool {
         didSet { defaults.set(hideArchivedSessions, forKey: Keys.hideArchivedSessions) }
+    }
+
+    /// Blur session titles and prompt text (for screen recordings / demos).
+    var blurSensitiveContent: Bool {
+        didSet { defaults.set(blurSensitiveContent, forKey: Keys.blurSensitiveContent) }
     }
 
     var autoCheckForUpdates: Bool {
@@ -152,6 +158,7 @@ final class SettingsStore {
         hideAmountInMenuBar = defaults.bool(forKey: Keys.hideAmountInMenuBar)
         showLocationSubtitle = defaults.bool(forKey: Keys.showLocationSubtitle)
         hideArchivedSessions = defaults.bool(forKey: Keys.hideArchivedSessions)
+        blurSensitiveContent = defaults.bool(forKey: Keys.blurSensitiveContent)
 
         if defaults.object(forKey: Keys.autoCheckForUpdates) == nil {
             autoCheckForUpdates = true

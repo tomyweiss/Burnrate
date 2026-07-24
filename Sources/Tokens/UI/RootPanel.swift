@@ -42,6 +42,7 @@ struct RootPanel: View {
             }
         }
         .frame(width: panelWidth, height: panelHeight)
+        .environment(\.blurSensitiveContent, settings.blurSensitiveContent)
         .animation(.snappy, value: panelTabRaw)
         .animation(.snappy, value: route)
         .onAppear {

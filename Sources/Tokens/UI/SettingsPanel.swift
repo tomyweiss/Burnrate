@@ -173,6 +173,13 @@ struct SettingsPanel: View {
                         .onChange(of: settings.hideAmountInMenuBar) { _, _ in
                             MenuBarPanelKeeper.keepOpen()
                         }
+                    Toggle("Blur session & prompt titles", isOn: $settings.blurSensitiveContent)
+                        .onChange(of: settings.blurSensitiveContent) { _, _ in
+                            MenuBarPanelKeeper.keepOpen()
+                        }
+                    Text("Soft-blurs chat titles and prompt text for screen recordings. Costs and models stay visible.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     Toggle("Show location subtitle", isOn: $settings.showLocationSubtitle)
                         .onChange(of: settings.showLocationSubtitle) { _, _ in
                             MenuBarPanelKeeper.keepOpen()

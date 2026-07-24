@@ -49,9 +49,15 @@ enum PromptCatalog {
         return result
     }
 
-    /// Maps subagent (child) conversation ids to their parent conversation id,
-    /// based on `subComposerIds` recorded in each parent's composer data. Only
-    /// parents present in `conversationIds` are inspected.
+    /// Maps subagent (child) conversation ids to their immediate parent conversation id.
+    ///
+    /// Cursor stores the link in two places (either may be present):
+    /// - Parent: `subagentComposerIds` (and legacy `subComposerIds`)
+    /// - Child: `subagentInfo.parentComposerId`
+    ///
+    /// Reading both sides lets us relate children even when the parent has no
+    /// billing events in the current window (so it was not in `conversationIds`
+    /// until we discover it here).
     static func subagentParents(conversationIds: Set<String>) -> [String: String] {
         guard !conversationIds.isEmpty,
               FileManager.default.fileExists(atPath: ideDatabasePath.path)
@@ -69,12 +75,15 @@ enum PromptCatalog {
         defer { sqlite3_close(database) }
 
         let query = """
-        SELECT json_extract(value, '$.subComposerIds')
+        SELECT
+            json_extract(value, '$.subagentInfo.parentComposerId'),
+            json_extract(value, '$.subagentComposerIds'),
+            json_extract(value, '$.subComposerIds')
         FROM cursorDiskKV
         WHERE key = ?
         """
         var result: [String: String] = [:]
-        for parentId in conversationIds {
+        for conversationId in conversationIds {
             var statement: OpaquePointer?
             guard sqlite3_prepare_v2(database, query, -1, &statement, nil) == SQLITE_OK else {
                 continue
@@ -82,15 +91,28 @@ enum PromptCatalog {
             defer { sqlite3_finalize(statement) }
 
             let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-            sqlite3_bind_text(statement, 1, "composerData:\(parentId)", -1, transient)
-            guard sqlite3_step(statement) == SQLITE_ROW,
-                  let cString = sqlite3_column_text(statement, 0),
-                  let data = String(cString: cString).data(using: .utf8),
-                  let children = try? JSONSerialization.jsonObject(with: data) as? [String]
-            else { continue }
+            sqlite3_bind_text(statement, 1, "composerData:\(conversationId)", -1, transient)
+            guard sqlite3_step(statement) == SQLITE_ROW else { continue }
 
-            for child in children where !child.isEmpty && child != parentId {
-                result[child] = parentId
+            if let cString = sqlite3_column_text(statement, 0) {
+                let parent = String(cString: cString)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !parent.isEmpty, parent != conversationId {
+                    result[conversationId] = parent
+                }
+            }
+
+            for column in Int32(1)...Int32(2) {
+                guard let cString = sqlite3_column_text(statement, column),
+                      let data = String(cString: cString).data(using: .utf8),
+                      let children = try? JSONSerialization.jsonObject(with: data) as? [String]
+                else { continue }
+                for child in children where !child.isEmpty && child != conversationId {
+                    // Child-side parentComposerId wins if both disagree.
+                    if result[child] == nil {
+                        result[child] = conversationId
+                    }
+                }
             }
         }
         return result
