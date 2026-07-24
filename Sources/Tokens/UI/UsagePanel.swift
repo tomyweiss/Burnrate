@@ -506,33 +506,14 @@ struct UsagePanel: View {
                     .help("Refresh")
                     .glassEffect(.regular.interactive())
 
-                    Menu {
-                        Button("Check for Updates…") {
-                            Task { await updates.checkForUpdates(userInitiated: true) }
-                            MenuBarPanelKeeper.keepOpen()
-                        }
-                        if let update = updates.availableUpdate {
-                            Button("Install \(update.version)…") {
-                                Task { await updates.installAvailableUpdate() }
-                            }
-                            .disabled(updates.isInstalling)
-                        }
-                        Button("Open Cursor Dashboard") {
-                            if let url = URL(string: "https://cursor.com/dashboard") {
-                                NSWorkspace.shared.open(url)
-                            }
-                            MenuBarPanelKeeper.keepOpen()
-                        }
-                        Divider()
-                        Button("Quit") {
-                            NSApplication.shared.terminate(nil)
-                        }
-                        .keyboardShortcut("q")
+                    Button {
+                        NSApplication.shared.terminate(nil)
                     } label: {
-                        footerIcon("ellipsis")
+                        footerIcon("power")
                     }
                     .buttonStyle(.borderless)
-                    .help("More")
+                    .keyboardShortcut("q")
+                    .help("Quit")
                     .glassEffect(.regular.interactive())
                 }
             }

@@ -7,29 +7,30 @@ struct SettingsPanel: View {
     var glassNamespace: Namespace.ID
     var onBack: () -> Void
 
-    @State private var timezoneSearch = ""
-
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Button {
-                    onBack()
-                    MenuBarPanelKeeper.keepOpen()
-                } label: {
-                    Label("Usage", systemImage: "chevron.left")
-                }
-                .buttonStyle(.borderless)
-                .glassEffect(.regular.interactive())
-                .glassEffectID("settings-gear", in: glassNamespace)
-
-                Spacer()
-
+            ZStack {
                 Text("Settings")
                     .font(.headline)
 
-                Spacer()
+                HStack {
+                    Button {
+                        onBack()
+                        MenuBarPanelKeeper.keepOpen()
+                    } label: {
+                        Label("Usage", systemImage: "chevron.left")
+                    }
+                    .buttonStyle(.borderless)
+                    .glassEffect(.regular.interactive())
+                    .glassEffectID("settings-gear", in: glassNamespace)
 
-                Color.clear.frame(width: 72, height: 1)
+                    Spacer()
+
+                    Text(appVersion)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
@@ -37,35 +38,7 @@ struct SettingsPanel: View {
             Divider()
 
             Form {
-                Section("Timeline") {
-                    Picker("Window", selection: $settings.usageTimelinePreset) {
-                        ForEach(UsageTimelinePreset.allCases) { preset in
-                            Text(preset.displayName).tag(preset)
-                        }
-                    }
-                    .onChange(of: settings.usageTimelinePreset) { _, _ in
-                        Task { await store.refresh() }
-                        MenuBarPanelKeeper.keepOpen()
-                    }
-
-                    if settings.usageTimelinePreset == .thisBilling {
-                        Stepper(value: $settings.billingDayOfMonth, in: 1...31) {
-                            Text("Billing day \(settings.billingDayOfMonth)")
-                        }
-                        .onChange(of: settings.billingDayOfMonth) { _, _ in
-                            Task { await store.refresh() }
-                            MenuBarPanelKeeper.keepOpen()
-                        }
-
-                        Text("Spend is counted from this day of each month.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    timezonePicker
-                }
-
-                Section("Refresh") {
+                Section("General") {
                     Picker("Poll every", selection: $settings.refreshIntervalSeconds) {
                         ForEach(SettingsStore.refreshIntervalOptions, id: \.self) { seconds in
                             Text(SettingsStore.intervalLabel(seconds)).tag(seconds)
@@ -74,6 +47,38 @@ struct SettingsPanel: View {
                     .onChange(of: settings.refreshIntervalSeconds) { _, _ in
                         MenuBarPanelKeeper.keepOpen()
                     }
+
+                    timezonePicker
+
+                    Toggle("Launch at login", isOn: $settings.launchAtLogin)
+                        .onChange(of: settings.launchAtLogin) { _, _ in
+                            MenuBarPanelKeeper.keepOpen()
+                        }
+                    Toggle("Hide amount in menu bar", isOn: $settings.hideAmountInMenuBar)
+                        .onChange(of: settings.hideAmountInMenuBar) { _, _ in
+                            MenuBarPanelKeeper.keepOpen()
+                        }
+                    Toggle("Blur session & prompt titles", isOn: $settings.blurSensitiveContent)
+                        .onChange(of: settings.blurSensitiveContent) { _, _ in
+                            MenuBarPanelKeeper.keepOpen()
+                        }
+                    Text("Soft-blurs chat titles and prompt text for screen recordings. Costs and models stay visible.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Toggle("Show location subtitle", isOn: $settings.showLocationSubtitle)
+                        .onChange(of: settings.showLocationSubtitle) { _, _ in
+                            MenuBarPanelKeeper.keepOpen()
+                        }
+                    Text("Extra row under each session: workspace, or repo · branch for cloud agents.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Toggle("Hide archived sessions", isOn: $settings.hideArchivedSessions)
+                        .onChange(of: settings.hideArchivedSessions) { _, _ in
+                            MenuBarPanelKeeper.keepOpen()
+                        }
+                    Text("Hide sessions Cursor has archived. Spend totals are unchanged.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("Spike alert") {
@@ -158,51 +163,26 @@ struct SettingsPanel: View {
                                 .foregroundStyle(updates.lastError == nil ? Color.secondary : Color.red)
                         }
 
-                        Text("Automatic checks run about once an hour. Updates download from GitHub Releases, verify a minisign signature, then replace this app. Builds are not Apple-notarized.")
+                        Text("Checks hourly from GitHub.")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
 
-                Section("General") {
-                    Toggle("Launch at login", isOn: $settings.launchAtLogin)
-                        .onChange(of: settings.launchAtLogin) { _, _ in
+                if settings.usageTimelinePreset == .thisBilling {
+                    Section("Timeline") {
+                        Stepper(value: $settings.billingDayOfMonth, in: 1...31) {
+                            Text("Billing day \(settings.billingDayOfMonth)")
+                        }
+                        .onChange(of: settings.billingDayOfMonth) { _, _ in
+                            Task { await store.refresh() }
                             MenuBarPanelKeeper.keepOpen()
                         }
-                    Toggle("Hide amount in menu bar", isOn: $settings.hideAmountInMenuBar)
-                        .onChange(of: settings.hideAmountInMenuBar) { _, _ in
-                            MenuBarPanelKeeper.keepOpen()
-                        }
-                    Toggle("Blur session & prompt titles", isOn: $settings.blurSensitiveContent)
-                        .onChange(of: settings.blurSensitiveContent) { _, _ in
-                            MenuBarPanelKeeper.keepOpen()
-                        }
-                    Text("Soft-blurs chat titles and prompt text for screen recordings. Costs and models stay visible.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Toggle("Show location subtitle", isOn: $settings.showLocationSubtitle)
-                        .onChange(of: settings.showLocationSubtitle) { _, _ in
-                            MenuBarPanelKeeper.keepOpen()
-                        }
-                    Text("Extra row under each session: workspace, or repo · branch for cloud agents.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Toggle("Hide archived sessions", isOn: $settings.hideArchivedSessions)
-                        .onChange(of: settings.hideArchivedSessions) { _, _ in
-                            MenuBarPanelKeeper.keepOpen()
-                        }
-                    Text("Hide sessions Cursor has archived. Spend totals are unchanged.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
 
-                Section("About") {
-                    LabeledContent("App", value: appDisplayName)
-                    LabeledContent("Version", value: appVersion)
-                    Text("Uses your local Cursor sign-in. Data may differ slightly from the official dashboard.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Link("Open Cursor Dashboard", destination: URL(string: "https://cursor.com/dashboard")!)
+                        Text("Spend is counted from this day of each month.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .formStyle(.grouped)
@@ -215,33 +195,16 @@ struct SettingsPanel: View {
         AppIdentity.versionLabel
     }
 
-    private var appDisplayName: String {
-        AppIdentity.displayName
-    }
-
-    private var filteredTimeZones: [(id: String, label: String)] {
-        let query = timezoneSearch.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty else { return SettingsStore.knownTimeZones }
-        return SettingsStore.knownTimeZones.filter {
-            $0.id.lowercased().contains(query) || $0.label.lowercased().contains(query)
-        }
-    }
-
     private var timezonePicker: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            TextField("Search timezones", text: $timezoneSearch)
-                .textFieldStyle(.roundedBorder)
-
-            Picker("Timezone", selection: timezoneSelection) {
-                Text("System (Local)").tag("")
-                ForEach(filteredTimeZones, id: \.id) { zone in
-                    Text(zone.label).tag(zone.id)
-                }
+        Picker("Timezone", selection: timezoneSelection) {
+            Text("System (Local)").tag("")
+            ForEach(SettingsStore.knownTimeZones, id: \.id) { zone in
+                Text(zone.label).tag(zone.id)
             }
-            .onChange(of: settings.usageTimezoneIdentifier) { _, _ in
-                Task { await store.refresh() }
-                MenuBarPanelKeeper.keepOpen()
-            }
+        }
+        .onChange(of: settings.usageTimezoneIdentifier) { _, _ in
+            Task { await store.refresh() }
+            MenuBarPanelKeeper.keepOpen()
         }
     }
 
