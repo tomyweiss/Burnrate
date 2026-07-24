@@ -72,29 +72,50 @@ enum Aggregator {
             bySession[sessionKey] = cross
         }
 
+        var knownConversationIds = Set(bySession.keys).filter { $0 != "unknown-session" }
+        var parentByChild = PromptCatalog.subagentParents(conversationIds: knownConversationIds)
+
+        // Parents discovered only via children may have no events in-window —
+        // still materialize them so roots can host the hierarchy.
+        let discoveredParents = Set(parentByChild.values)
+        let missingParents = discoveredParents.subtracting(knownConversationIds)
+        if !missingParents.isEmpty {
+            for parentId in missingParents {
+                bySession[parentId] = CrossSessionAccumulator()
+            }
+            knownConversationIds.formUnion(missingParents)
+            // Re-scan so we also pick up siblings listed on the parent composer.
+            parentByChild = PromptCatalog.subagentParents(conversationIds: knownConversationIds)
+            for parentId in Set(parentByChild.values) where bySession[parentId] == nil {
+                bySession[parentId] = CrossSessionAccumulator()
+                knownConversationIds.insert(parentId)
+            }
+        }
+
+        let childrenByParent = childrenByParentMap(parentByChild)
+
+        let catalog = SessionCatalog.lookup(conversationIds: knownConversationIds)
+
+        let hierarchicalSessions = buildHierarchicalSessions(
+            bySession: bySession,
+            parentByChild: parentByChild,
+            childrenByParent: childrenByParent,
+            catalog: catalog
+        )
+
+        let sessionsById = Dictionary(
+            uniqueKeysWithValues: hierarchicalSessions.map { ($0.conversationId, $0) }
+        )
+
         let models = byModel
             .map { key, value -> ModelUsage in
-                let sessions = value.sessions
-                    .map { sessionID, session in
-                        SessionUsage(
-                            conversationId: sessionID,
-                            name: nil,
-                            workspaceName: nil,
-                            isCloud: sessionID.hasPrefix("bc-"),
-                            isArchived: false,
-                            repoName: nil,
-                            branchName: nil,
-                            costCents: session.costCents,
-                            inputTokens: session.inputTokens,
-                            outputTokens: session.outputTokens,
-                            cacheReadTokens: session.cacheReadTokens,
-                            cacheWriteTokens: session.cacheWriteTokens,
-                            eventCount: session.eventCount,
-                            lastTimestampMs: session.lastTimestampMs,
-                            models: [key]
-                        )
-                    }
-                    .sorted(by: sessionSort)
+                let sessions = rollupModelSessions(
+                    modelSessions: value.sessions,
+                    modelName: key,
+                    parentByChild: parentByChild,
+                    childrenByParent: childrenByParent,
+                    sessionsById: sessionsById
+                )
                 return ModelUsage(
                     model: key,
                     costCents: value.costCents,
@@ -109,43 +130,10 @@ enum Aggregator {
             }
             .sorted { $0.costCents > $1.costCents }
 
-        let crossSessions = bySession
-            .map { sessionID, session in
-                let modelsForSession = session.modelCosts
-                    .sorted { $0.value > $1.value }
-                    .map(\.key)
-                return SessionUsage(
-                    conversationId: sessionID,
-                    name: nil,
-                    workspaceName: nil,
-                    isCloud: sessionID.hasPrefix("bc-"),
-                    isArchived: false,
-                    repoName: nil,
-                    branchName: nil,
-                    costCents: session.costCents,
-                    inputTokens: session.inputTokens,
-                    outputTokens: session.outputTokens,
-                    cacheReadTokens: session.cacheReadTokens,
-                    cacheWriteTokens: session.cacheWriteTokens,
-                    eventCount: session.eventCount,
-                    lastTimestampMs: session.lastTimestampMs,
-                    models: modelsForSession
-                )
-            }
-            .sorted(by: sessionSort)
-
-        let knownConversationIds = Set(crossSessions.map(\.conversationId))
-            .filter { $0 != "unknown-session" }
-        let catalog = SessionCatalog.lookup(conversationIds: knownConversationIds)
-
-        let enrichedModels = models.map { model in
-            model.withSessions(model.sessions.map { $0.enriched(with: catalog[$0.conversationId]) })
-        }
-        let enrichedCross = crossSessions.map { $0.enriched(with: catalog[$0.conversationId]) }
-
-        let (prompts, skills) = promptBreakdown(
+        let (prompts, subagentPrompts, skills) = promptBreakdown(
             events: events,
             conversationIds: knownConversationIds,
+            parentByChild: parentByChild,
             catalog: catalog,
             startMs: startMs,
             endMs: endMs
@@ -154,15 +142,167 @@ enum Aggregator {
         return UsageSnapshot(
             windowCostCents: windowCost,
             recentCostCents: recentCost,
-            models: enrichedModels,
-            sessionsAcrossModels: enrichedCross,
+            models: models,
+            sessionsAcrossModels: hierarchicalSessions.sorted(by: sessionSort),
             prompts: prompts,
+            subagentPrompts: subagentPrompts,
             skills: skills,
             sparklineCostCents: buckets,
             window: window,
             eventCount: filteredEventCount,
             fetchedAt: now
         )
+    }
+
+    // MARK: - Session hierarchy
+
+    private static func childrenByParentMap(_ parentByChild: [String: String]) -> [String: [String]] {
+        var childrenByParent: [String: [String]] = [:]
+        for (child, parent) in parentByChild {
+            childrenByParent[parent, default: []].append(child)
+        }
+        for key in childrenByParent.keys {
+            childrenByParent[key]?.sort()
+        }
+        return childrenByParent
+    }
+
+    private static func rootConversationId(
+        _ id: String,
+        parentByChild: [String: String]
+    ) -> String {
+        var current = id
+        var hops = 0
+        while let parent = parentByChild[current], hops < 8 {
+            current = parent
+            hops += 1
+        }
+        return current
+    }
+
+    private static func buildHierarchicalSessions(
+        bySession: [String: CrossSessionAccumulator],
+        parentByChild: [String: String],
+        childrenByParent: [String: [String]],
+        catalog: [String: SessionMeta]
+    ) -> [SessionUsage] {
+        bySession.keys.map { sessionID in
+            let own = bySession[sessionID] ?? CrossSessionAccumulator()
+            let (totalCost, totalInput, totalOutput, totalCacheRead, totalCacheWrite, totalEvents, lastTs, modelCosts) =
+                rolledTotals(
+                    rootId: sessionID,
+                    bySession: bySession,
+                    childrenByParent: childrenByParent
+                )
+            let modelsForSession = modelCosts
+                .sorted { $0.value > $1.value }
+                .map(\.key)
+            return SessionUsage(
+                conversationId: sessionID,
+                name: nil,
+                workspaceName: nil,
+                isCloud: sessionID.hasPrefix("bc-"),
+                isArchived: false,
+                repoName: nil,
+                branchName: nil,
+                ownCostCents: own.costCents,
+                costCents: totalCost,
+                inputTokens: totalInput,
+                outputTokens: totalOutput,
+                cacheReadTokens: totalCacheRead,
+                cacheWriteTokens: totalCacheWrite,
+                eventCount: totalEvents,
+                lastTimestampMs: lastTs,
+                models: modelsForSession,
+                parentConversationId: parentByChild[sessionID],
+                childConversationIds: childrenByParent[sessionID] ?? []
+            ).enriched(with: catalog[sessionID])
+        }
+    }
+
+    /// Own stats plus all descendants (DFS).
+    private static func rolledTotals(
+        rootId: String,
+        bySession: [String: CrossSessionAccumulator],
+        childrenByParent: [String: [String]]
+    ) -> (Double, Int, Int, Int, Int, Int, Double, [String: Double]) {
+        var cost: Double = 0
+        var input = 0
+        var output = 0
+        var cacheRead = 0
+        var cacheWrite = 0
+        var events = 0
+        var lastTs: Double = 0
+        var modelCosts: [String: Double] = [:]
+
+        var stack = [rootId]
+        var seen: Set<String> = []
+        while let id = stack.popLast() {
+            guard seen.insert(id).inserted else { continue }
+            if let acc = bySession[id] {
+                cost += acc.costCents
+                input += acc.inputTokens
+                output += acc.outputTokens
+                cacheRead += acc.cacheReadTokens
+                cacheWrite += acc.cacheWriteTokens
+                events += acc.eventCount
+                lastTs = max(lastTs, acc.lastTimestampMs)
+                for (model, modelCost) in acc.modelCosts {
+                    modelCosts[model, default: 0] += modelCost
+                }
+            }
+            stack.append(contentsOf: childrenByParent[id] ?? [])
+        }
+        return (cost, input, output, cacheRead, cacheWrite, events, lastTs, modelCosts)
+    }
+
+    /// Per-model session rows: hide subagents, roll their cost into the root session
+    /// for this model so model totals still reconcile with the visible breakdown.
+    private static func rollupModelSessions(
+        modelSessions: [String: SessionAccumulator],
+        modelName: String,
+        parentByChild: [String: String],
+        childrenByParent: [String: [String]],
+        sessionsById: [String: SessionUsage]
+    ) -> [SessionUsage] {
+        var rootAcc: [String: SessionAccumulator] = [:]
+        for (sessionID, acc) in modelSessions {
+            let rootID = rootConversationId(sessionID, parentByChild: parentByChild)
+            var combined = rootAcc[rootID] ?? SessionAccumulator()
+            combined.costCents += acc.costCents
+            combined.inputTokens += acc.inputTokens
+            combined.outputTokens += acc.outputTokens
+            combined.cacheReadTokens += acc.cacheReadTokens
+            combined.cacheWriteTokens += acc.cacheWriteTokens
+            combined.eventCount += acc.eventCount
+            combined.lastTimestampMs = max(combined.lastTimestampMs, acc.lastTimestampMs)
+            rootAcc[rootID] = combined
+        }
+
+        return rootAcc.map { sessionID, session in
+            let meta = sessionsById[sessionID]
+            return SessionUsage(
+                conversationId: sessionID,
+                name: meta?.name,
+                workspaceName: meta?.workspaceName,
+                isCloud: meta?.isCloud ?? sessionID.hasPrefix("bc-"),
+                isArchived: meta?.isArchived ?? false,
+                repoName: meta?.repoName,
+                branchName: meta?.branchName,
+                ownCostCents: session.costCents,
+                costCents: session.costCents,
+                inputTokens: session.inputTokens,
+                outputTokens: session.outputTokens,
+                cacheReadTokens: session.cacheReadTokens,
+                cacheWriteTokens: session.cacheWriteTokens,
+                eventCount: session.eventCount,
+                lastTimestampMs: session.lastTimestampMs,
+                models: [modelName],
+                parentConversationId: nil,
+                childConversationIds: meta?.childConversationIds ?? childrenByParent[sessionID] ?? []
+            )
+        }
+        .sorted(by: sessionSort)
     }
 
     // MARK: - Prompt & skill attribution
@@ -175,45 +315,39 @@ enum Aggregator {
     private static func promptBreakdown(
         events: [UsageEvent],
         conversationIds: Set<String>,
+        parentByChild: [String: String],
         catalog: [String: SessionMeta],
         startMs: Double,
         endMs: Double
-    ) -> (prompts: [PromptUsage], skills: [SkillUsage]) {
-        // Subagent conversations bill under their own conversation id; fold their
-        // events into the parent conversation's prompt timeline so a prompt's cost
-        // includes the subagents spawned while answering it.
-        let parentByChild = PromptCatalog.subagentParents(conversationIds: conversationIds)
-        let promptConversationIds = conversationIds
-            .subtracting(parentByChild.keys)
-            .union(parentByChild.values)
-
+    ) -> (prompts: [PromptUsage], subagentPrompts: [PromptUsage], skills: [SkillUsage]) {
         func effectiveConversationId(_ id: String) -> String {
-            var current = id
-            var hops = 0
-            while let parent = parentByChild[current], hops < 4 {
-                current = parent
-                hops += 1
-            }
-            return current
+            rootConversationId(id, parentByChild: parentByChild)
         }
 
+        // Load prompts for roots (folded attribution) and for subagents (native detail).
+        let rootIds = conversationIds
+            .subtracting(parentByChild.keys)
+            .union(parentByChild.values)
+        let promptConversationIds = rootIds.union(parentByChild.keys)
         let promptsByConversation = PromptCatalog.lookup(conversationIds: promptConversationIds)
-        guard !promptsByConversation.isEmpty else { return ([], []) }
+        guard !promptsByConversation.isEmpty else { return ([], [], []) }
 
         // Allow small clock skew between local bubble timestamps and server event
         // timestamps when the event lands just before the first known prompt.
         let firstPromptSlackMs: Double = 120_000
 
-        var accumulators: [String: PromptAccumulator] = [:]
+        var foldedAccumulators: [String: PromptAccumulator] = [:]
+        var nativeSubagentAccumulators: [String: PromptAccumulator] = [:]
 
-        for event in events {
-            let ts = event.timestampMs
-            guard ts >= startMs, ts <= endMs else { continue }
-            let conversationId = effectiveConversationId(event.sessionKey)
+        func attribute(
+            event: UsageEvent,
+            conversationId: String,
+            into accumulators: inout [String: PromptAccumulator]
+        ) {
             guard let prompts = promptsByConversation[conversationId], !prompts.isEmpty
-            else { continue }
+            else { return }
+            let ts = event.timestampMs
 
-            // Latest prompt with createdAtMs <= ts (prompts are sorted ascending).
             var chosen: PromptRecord?
             for prompt in prompts {
                 if prompt.createdAtMs <= ts {
@@ -226,7 +360,7 @@ enum Aggregator {
                ts >= first.createdAtMs - firstPromptSlackMs {
                 chosen = first
             }
-            guard let prompt = chosen else { continue }
+            guard let prompt = chosen else { return }
 
             let key = "\(prompt.conversationId):\(prompt.bubbleId)"
             var acc = accumulators[key] ?? PromptAccumulator(prompt: prompt)
@@ -241,34 +375,59 @@ enum Aggregator {
             accumulators[key] = acc
         }
 
+        for event in events {
+            let ts = event.timestampMs
+            guard ts >= startMs, ts <= endMs else { continue }
+            let rawId = event.sessionKey
+            let rootId = effectiveConversationId(rawId)
+
+            // Parent / root feed: fold subagent events onto the root timeline.
+            attribute(event: event, conversationId: rootId, into: &foldedAccumulators)
+
+            // Subagent detail: keep a native attribution on the child itself.
+            if parentByChild[rawId] != nil {
+                attribute(event: event, conversationId: rawId, into: &nativeSubagentAccumulators)
+            }
+        }
+
         // Include zero-cost prompts typed inside the window so the feed shows them,
         // but don't drag in old prompts from long-running conversations.
-        for prompts in promptsByConversation.values {
+        for (conversationId, prompts) in promptsByConversation {
+            let isSubagent = parentByChild[conversationId] != nil
             for prompt in prompts where prompt.createdAtMs >= startMs && prompt.createdAtMs <= endMs {
                 let key = "\(prompt.conversationId):\(prompt.bubbleId)"
-                if accumulators[key] == nil {
-                    accumulators[key] = PromptAccumulator(prompt: prompt)
+                if isSubagent {
+                    if nativeSubagentAccumulators[key] == nil {
+                        nativeSubagentAccumulators[key] = PromptAccumulator(prompt: prompt)
+                    }
+                } else if foldedAccumulators[key] == nil {
+                    foldedAccumulators[key] = PromptAccumulator(prompt: prompt)
                 }
             }
         }
 
-        let promptUsages = accumulators.values
-            .map { acc in
-                PromptUsage(
-                    conversationId: acc.prompt.conversationId,
-                    bubbleId: acc.prompt.bubbleId,
-                    text: acc.prompt.text,
-                    createdAtMs: acc.prompt.createdAtMs,
-                    sessionName: catalog[acc.prompt.conversationId]?.name,
-                    costCents: acc.costCents,
-                    eventCount: acc.eventCount,
-                    totalTokens: acc.totalTokens,
-                    lastEventMs: acc.lastEventMs,
-                    models: acc.modelCosts.sorted { $0.value > $1.value }.map(\.key),
-                    skills: acc.prompt.skills
-                )
-            }
-            .sorted { $0.createdAtMs > $1.createdAtMs }
+        func toUsages(_ accumulators: [String: PromptAccumulator]) -> [PromptUsage] {
+            accumulators.values
+                .map { acc in
+                    PromptUsage(
+                        conversationId: acc.prompt.conversationId,
+                        bubbleId: acc.prompt.bubbleId,
+                        text: acc.prompt.text,
+                        createdAtMs: acc.prompt.createdAtMs,
+                        sessionName: catalog[acc.prompt.conversationId]?.name,
+                        costCents: acc.costCents,
+                        eventCount: acc.eventCount,
+                        totalTokens: acc.totalTokens,
+                        lastEventMs: acc.lastEventMs,
+                        models: acc.modelCosts.sorted { $0.value > $1.value }.map(\.key),
+                        skills: acc.prompt.skills
+                    )
+                }
+                .sorted { $0.createdAtMs > $1.createdAtMs }
+        }
+
+        let promptUsages = toUsages(foldedAccumulators)
+        let subagentPromptUsages = toUsages(nativeSubagentAccumulators)
 
         var bySkill: [String: SkillAccumulator] = [:]
         for prompt in promptUsages {
@@ -300,7 +459,7 @@ enum Aggregator {
                     : $0.costCents > $1.costCents
             }
 
-        return (promptUsages, skillUsages)
+        return (promptUsages, subagentPromptUsages, skillUsages)
     }
 
     private struct PromptAccumulator {

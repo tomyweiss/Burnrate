@@ -31,6 +31,12 @@ struct SessionRowView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    if session.isSubagent {
+                        Image(systemName: "arrow.triangle.branch")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("Subagent")
+                    }
                     if session.isArchived {
                         Image(systemName: "archivebox")
                             .font(.caption.weight(.semibold))
@@ -42,6 +48,12 @@ struct SessionRowView: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .accessibilityLabel("Cloud agent")
+                    }
+                    if session.hasSubagents, !session.isSubagent {
+                        Image(systemName: "person.2")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("Has subagents")
                     }
                     Text(session.displayName)
                         .font(.callout.weight(.medium))
@@ -84,7 +96,18 @@ struct SessionRowView: View {
         )
         .onHover { hovering = $0 }
         .contentShape(Rectangle())
-        .help("Conversation \(session.conversationId)")
+        .help(sessionHelp)
+    }
+
+    private var sessionHelp: String {
+        if session.isSubagent {
+            return "Subagent · Conversation \(session.conversationId)"
+        }
+        if session.hasSubagents {
+            let n = session.childConversationIds.count
+            return "\(n) subagent\(n == 1 ? "" : "s") · Conversation \(session.conversationId)"
+        }
+        return "Conversation \(session.conversationId)"
     }
 
     private var subtitle: String {
@@ -95,6 +118,10 @@ struct SessionRowView: View {
             } else {
                 parts.append(top)
             }
+        }
+        if session.hasSubagents, !session.isSubagent {
+            let n = session.childConversationIds.count
+            parts.append(n == 1 ? "1 subagent" : "\(n) subagents")
         }
         if session.lastTimestampMs > 0 {
             parts.append(RelativeTimeFormat.string(fromTimestampMs: session.lastTimestampMs))
