@@ -233,26 +233,7 @@ struct UsagePanel: View {
                     }
                 )
             } else {
-                Picker("Scope", selection: panelTab) {
-                    ForEach(UsageTab.allCases) { tab in
-                        Text(tab.title).tag(tab)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .padding(.horizontal, 12)
-                .padding(.bottom, 8)
-                .onChange(of: panelTabRaw) { _, _ in
-                    MenuBarPanelKeeper.keepOpen()
-                }
-
-                if panelTab.wrappedValue == .models {
-                    metricPicker($modelsMetricRaw)
-                } else if panelTab.wrappedValue == .skills, !store.snapshot.skills.isEmpty {
-                    metricPicker($skillsMetricRaw)
-                } else if panelTab.wrappedValue == .sessions {
-                    sessionsSortPicker
-                }
+                controlRow
 
                 if panelTab.wrappedValue == .bench {
                     BenchView(snapshot: store.snapshot)
@@ -329,6 +310,108 @@ struct UsagePanel: View {
         }
     }
 
+    // MARK: - Tab + filter controls
+
+    private var controlRow: some View {
+        HStack(spacing: 8) {
+            PillPicker(
+                selection: panelTab,
+                options: UsageTab.allCases.map { tab in
+                    PillPicker.Option(value: tab, title: tab.title)
+                },
+                size: .controlBar,
+                fillsWidth: true
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .onChange(of: panelTabRaw) { _, _ in
+                MenuBarPanelKeeper.keepOpen()
+            }
+
+            trailingControlPicker
+                .fixedSize()
+                .layoutPriority(1)
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .zIndex(1)
+        .animation(reduceMotion ? nil : .snappy, value: panelTabRaw)
+    }
+
+    @ViewBuilder
+    private var trailingControlPicker: some View {
+        switch panelTab.wrappedValue {
+        case .models:
+            costMetricPicker(selection: $modelsMetricRaw)
+        case .skills where !store.snapshot.skills.isEmpty:
+            costMetricPicker(selection: $skillsMetricRaw)
+        case .skills:
+            EmptyView()
+        case .sessions:
+            sessionsSortPicker
+        case .feed, .bench:
+            EmptyView()
+        }
+    }
+
+    private func costMetricPicker(selection: Binding<String>) -> some View {
+        PillPicker(
+            selection: Binding(
+                get: { CostMetric(rawValue: selection.wrappedValue) ?? .total },
+                set: { selection.wrappedValue = $0.rawValue }
+            ),
+            options: [
+                PillPicker.Option(
+                    value: .total,
+                    title: "Total $",
+                    icon: "sum",
+                    help: "Total"
+                ),
+                PillPicker.Option(
+                    value: .average,
+                    title: "Avg $",
+                    icon: "divide",
+                    help: "Average"
+                ),
+                PillPicker.Option(
+                    value: .median,
+                    title: "Med $",
+                    icon: "chart.bar.xaxis",
+                    help: "Median"
+                ),
+            ],
+            size: .controlBar,
+            iconOnly: true
+        )
+        .fixedSize()
+        .onChange(of: selection.wrappedValue) { _, _ in
+            MenuBarPanelKeeper.keepOpen()
+        }
+    }
+
+    private var sessionsSortPicker: some View {
+        PillPicker(
+            selection: Binding(
+                get: { SessionPromptSort(rawValue: sessionsSortRaw) ?? .newest },
+                set: { sessionsSortRaw = $0.rawValue }
+            ),
+            options: SessionPromptSort.allCases.map { option in
+                PillPicker.Option(
+                    value: option,
+                    title: option.title,
+                    icon: option == .newest ? "clock" : "dollarsign",
+                    help: option == .newest ? "Newest" : "Cost"
+                )
+            },
+            size: .controlBar,
+            iconOnly: true
+        )
+        .fixedSize()
+        .onChange(of: sessionsSortRaw) { _, _ in
+            MenuBarPanelKeeper.keepOpen()
+        }
+    }
+
     // MARK: - Cost metric (Total vs Avg)
 
     private var modelsMetric: CostMetric {
@@ -388,26 +471,6 @@ struct UsagePanel: View {
         }
     }
 
-    private func metricPicker(_ selection: Binding<String>) -> some View {
-        HStack {
-            Spacer()
-            Picker("Cost metric", selection: selection) {
-                ForEach(CostMetric.allCases) { metric in
-                    Text(metric.title).tag(metric.rawValue)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .controlSize(.small)
-            .fixedSize()
-            .onChange(of: selection.wrappedValue) { _, _ in
-                MenuBarPanelKeeper.keepOpen()
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 8)
-    }
-
     private func tabEmptyText(_ message: String) -> some View {
         Text(message)
             .font(.callout)
@@ -432,26 +495,6 @@ struct UsagePanel: View {
         case .cost:
             return sessions.sorted { $0.costCents > $1.costCents }
         }
-    }
-
-    private var sessionsSortPicker: some View {
-        HStack {
-            Spacer()
-            Picker("Sort sessions", selection: $sessionsSortRaw) {
-                ForEach(SessionPromptSort.allCases) { option in
-                    Text(option.title).tag(option.rawValue)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .controlSize(.small)
-            .fixedSize()
-            .onChange(of: sessionsSortRaw) { _, _ in
-                MenuBarPanelKeeper.keepOpen()
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 8)
     }
 
     private func toggleExpanded(_ modelID: String) {

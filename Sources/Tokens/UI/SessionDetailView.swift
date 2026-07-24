@@ -9,7 +9,7 @@ enum SessionPromptSort: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .newest: "New → Old"
-        case .cost: "$ High → Low"
+        case .cost: "High → Low"
         }
     }
 }
@@ -87,13 +87,13 @@ struct SessionDetailView: View {
                 .padding(.bottom, 8)
 
             if showsSubagentTabs {
-                Picker("Detail", selection: $detailTab) {
-                    ForEach(SessionDetailTab.allCases) { tab in
-                        Text(tab.title).tag(tab)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+                PillPicker(
+                    selection: $detailTab,
+                    options: SessionDetailTab.allCases.map { tab in
+                        PillPicker.Option(value: tab, title: tab.title)
+                    },
+                    fillsWidth: true
+                )
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
                 .onChange(of: detailTab) { _, _ in
@@ -117,28 +117,25 @@ struct SessionDetailView: View {
     }
 
     private var promptsToolbar: some View {
-        Picker("Sort", selection: sort) {
-            ForEach(SessionPromptSort.allCases) { option in
-                Text(option.title).tag(option)
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .padding(.horizontal, 12)
-        .padding(.bottom, 8)
-        .onChange(of: sortRaw) { _, _ in
-            MenuBarPanelKeeper.keepOpen()
-        }
+        sessionSortPicker
     }
 
     private var subagentsToolbar: some View {
-        Picker("Sort", selection: sort) {
-            ForEach(SessionPromptSort.allCases) { option in
-                Text(option.title).tag(option)
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
+        sessionSortPicker
+    }
+
+    private var sessionSortPicker: some View {
+        PillPicker(
+            selection: sort,
+                options: SessionPromptSort.allCases.map { option in
+                    PillPicker.Option(
+                        value: option,
+                        title: option.title,
+                        icon: option == .newest ? "clock" : "dollarsign"
+                    )
+                },
+            fillsWidth: true
+        )
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
         .onChange(of: sortRaw) { _, _ in

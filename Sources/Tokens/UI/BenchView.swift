@@ -173,14 +173,17 @@ struct BenchView: View {
 
     private var controls: some View {
         VStack(spacing: 6) {
-            Picker("Breakdown", selection: $breakdownRaw) {
-                ForEach(BenchBreakdown.allCases) { option in
-                    Text(option.title).tag(option.rawValue)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .controlSize(.small)
+            PillPicker(
+                selection: Binding(
+                    get: { breakdown },
+                    set: { breakdownRaw = $0.rawValue }
+                ),
+                options: BenchBreakdown.allCases.map { option in
+                    PillPicker.Option(value: option, title: option.title)
+                },
+                size: .compact,
+                fillsWidth: true
+            )
             .onChange(of: breakdownRaw) { _, _ in
                 MenuBarPanelKeeper.keepOpen()
             }

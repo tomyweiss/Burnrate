@@ -153,6 +153,31 @@ struct UsageTimeWindow: Sendable, Hashable {
 
     var sparklineEndLabel: String { "now" }
 
+    func sparklineBucketLabel(index: Int, now: Date = Date()) -> String {
+        let range = dateRange(now: now)
+        switch preset {
+        case .today:
+            return hourLabel(hour: index)
+        case .last24Hours:
+            let bucketStart = range.start.addingTimeInterval(TimeInterval(index) * 3600)
+            return hourLabel(for: bucketStart)
+        case .last7Days:
+            let dayStart = calendar.date(
+                byAdding: .day,
+                value: index,
+                to: calendar.startOfDay(for: range.start)
+            ) ?? range.start
+            return Self.shortDateFormatter(timeZone: timeZone).string(from: dayStart)
+        case .thisBilling:
+            let dayStart = calendar.date(
+                byAdding: .day,
+                value: index,
+                to: calendar.startOfDay(for: range.start)
+            ) ?? range.start
+            return Self.shortDateFormatter(timeZone: timeZone).string(from: dayStart)
+        }
+    }
+
     var emptyStateMessage: String {
         switch preset {
         case .today:
@@ -191,5 +216,19 @@ struct UsageTimeWindow: Sendable, Hashable {
         formatter.timeZone = timeZone
         formatter.dateFormat = "MMM d"
         return formatter
+    }
+
+    private func hourLabel(hour: Int) -> String {
+        let normalized = ((hour % 24) + 24) % 24
+        switch normalized {
+        case 0: return "12am"
+        case 1..<12: return "\(normalized)am"
+        case 12: return "12pm"
+        default: return "\(normalized - 12)pm"
+        }
+    }
+
+    private func hourLabel(for date: Date) -> String {
+        hourLabel(hour: calendar.component(.hour, from: date))
     }
 }
