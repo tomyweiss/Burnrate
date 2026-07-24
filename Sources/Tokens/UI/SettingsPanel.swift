@@ -150,6 +150,9 @@ struct SettingsPanel: View {
                         if let update = updates.availableUpdate {
                             Text("Version \(update.version) is available.")
                                 .font(.caption)
+                            if ReleaseNotesView.hasContent(update.notes) {
+                                ReleaseNotesView(notes: update.notes)
+                            }
                             Button(updates.isInstalling ? "Installing…" : "Download & Install") {
                                 Task { await updates.installAvailableUpdate() }
                                 MenuBarPanelKeeper.keepOpen()

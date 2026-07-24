@@ -86,6 +86,8 @@ This checks out latest `main`, patch-bumps from the newest `v*` tag, creates and
 - `Burnrate-x.y.z.sha256`
 - `Burnrate-x.y.z.zip.minisig`
 
+Before releasing, commit your changes on `main`. Release notes are **auto-generated** from git commits since the previous `v*` tag and published to GitHub (shown in the in-app update banner).
+
 Use `--dry-run` to preview the next version without tagging or uploading. Use `--yes` to skip the confirmation prompt.
 
 **Manual override** (hotfix or re-release to an existing version):

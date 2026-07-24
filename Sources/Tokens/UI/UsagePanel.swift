@@ -539,13 +539,17 @@ struct UsagePanel: View {
     private func updateBanner(_ update: AvailableUpdate) -> some View {
         HStack(alignment: .center, spacing: 10) {
             Image(systemName: "arrow.down.circle.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(.blue)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Update \(update.version) available")
                     .font(.caption.weight(.semibold))
-                Text("Not notarized — replaces this app, then relaunches.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                if ReleaseNotesView.hasContent(update.notes) {
+                    ReleaseNotesView(notes: update.notes, lineLimit: 3, font: .caption2)
+                } else {
+                    Text("Install to update — Burnrate will restart briefly.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
             Spacer(minLength: 8)
             Button(updates.isInstalling ? "Installing…" : "Install") {
@@ -557,7 +561,7 @@ struct UsagePanel: View {
             .disabled(updates.isInstalling)
         }
         .padding(10)
-        .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private func footerIcon(_ systemName: String) -> some View {
