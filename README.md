@@ -139,6 +139,15 @@ bash scripts/package.sh --dev --install --open
 
 This installs `Burnrate-dev.app` with bundle id `com.tomyweiss.burnrate.dev`. The menu bar keeps the normal `$` amount and adds a small gray dot next to the flame; the panel shows an orange **DEV** badge. Self-updates are disabled. Version defaults to the latest git tag (override with `VERSION=…`).
 
+**Hot reload (watch mode):** rebuilds and relaunches `Burnrate-dev` whenever Swift sources change (debug build for speed):
+
+```bash
+make watch-dev
+# or: bash scripts/dev-watch.sh
+```
+
+Ctrl-C stops the watcher. One-shot debug install: `bash scripts/package.sh --dev --debug --install --open`.
+
 Package layout: Swift package target `Tokens` (internal name), shipped as **Burnrate.app**.
 
 ## Contributing

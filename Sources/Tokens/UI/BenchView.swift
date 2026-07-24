@@ -119,11 +119,16 @@ struct BenchView: View {
     @AppStorage("benchXMetric") private var xMetricRaw = BenchMetric.avgPromptCost.rawValue
     @AppStorage("benchYMetric") private var yMetricRaw = BenchMetric.avgTime.rawValue
 
+    @Environment(\.blurSensitiveContent) private var blurSensitiveContent
     @State private var hoveredID: String?
     @State private var hoverLocation: CGPoint = .zero
 
     /// Cap the dots so labels stay readable; keeps the biggest spenders.
     private static let maxPoints = 12
+
+    private var blurBenchNames: Bool {
+        blurSensitiveContent && breakdown == .sessions
+    }
 
     private var breakdown: BenchBreakdown {
         BenchBreakdown(rawValue: breakdownRaw) ?? .skills
@@ -230,6 +235,7 @@ struct BenchView: View {
                     .truncationMode(.middle)
                     .frame(maxWidth: 92)
                     .foregroundStyle(hoveredID == point.id ? .primary : .secondary)
+                    .privacyBlurred(blurBenchNames)
             }
         }
         .chartXScale(domain: -0.08 ... 1.12)
@@ -335,6 +341,7 @@ struct BenchView: View {
             Text(point.name)
                 .font(.caption.weight(.semibold))
                 .lineLimit(2)
+                .privacyBlurred(blurBenchNames)
             Text("\(xMetric.title): \(point.rawLabel(for: xMetric))")
             Text("\(yMetric.title): \(point.rawLabel(for: yMetric))")
             Text(

@@ -9,6 +9,7 @@ struct SessionRowView: View {
     /// When set, the row is tappable and opens the session detail view.
     var onOpen: (() -> Void)? = nil
 
+    @Environment(\.blurSensitiveContent) private var blurSensitiveContent
     @State private var hovering = false
 
     private var share: Double {
@@ -59,6 +60,7 @@ struct SessionRowView: View {
                         .font(.callout.weight(.medium))
                         .foregroundStyle(session.isArchived ? Color.secondary : Color.primary)
                         .lineLimit(2)
+                        .privacyBlurred(blurSensitiveContent)
                 }
                 Spacer(minLength: 8)
                 Text(MoneyFormat.dollars(session.costDollars))
@@ -86,6 +88,7 @@ struct SessionRowView: View {
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    .privacyBlurred(blurSensitiveContent)
             }
         }
         .padding(.vertical, 8)
@@ -96,7 +99,7 @@ struct SessionRowView: View {
         )
         .onHover { hovering = $0 }
         .contentShape(Rectangle())
-        .help(sessionHelp)
+        .help(blurSensitiveContent ? "Conversation hidden" : sessionHelp)
     }
 
     private var sessionHelp: String {

@@ -39,6 +39,7 @@ struct SessionDetailView: View {
 
     @AppStorage("sessionPromptSort") private var sortRaw = SessionPromptSort.newest.rawValue
     @State private var detailTab: SessionDetailTab = .prompts
+    @Environment(\.blurSensitiveContent) private var blurSensitiveContent
 
     private var showsSubagentTabs: Bool { session.hasSubagents }
 
@@ -231,6 +232,7 @@ struct SessionDetailView: View {
                         .font(.callout.weight(.semibold))
                         .lineLimit(1)
                         .truncationMode(.tail)
+                        .privacyBlurred(blurSensitiveContent)
                 }
                 Text(subtitle)
                     .font(.caption)

@@ -25,17 +25,24 @@ INSTALL=0
 OPEN=0
 RELEASE=0
 DEV=0
+DEBUG=0
 for arg in "$@"; do
   case "$arg" in
     --install) INSTALL=1 ;;
     --open) OPEN=1 ;;
     --release) RELEASE=1 ;;
     --dev) DEV=1 ;;
+    --debug) DEBUG=1 ;;
   esac
 done
 
 if [[ "$DEV" -eq 1 && "$RELEASE" -eq 1 ]]; then
   echo "Cannot combine --dev and --release" >&2
+  exit 1
+fi
+
+if [[ "$DEBUG" -eq 1 && "$RELEASE" -eq 1 ]]; then
+  echo "Cannot combine --debug and --release" >&2
   exit 1
 fi
 
@@ -54,10 +61,16 @@ CONTENTS="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS/MacOS"
 RESOURCES_DIR="$CONTENTS/Resources"
 
-echo "Building ${APP_NAME} ${VERSION} (release)…"
-swift build -c release
+if [[ "$DEBUG" -eq 1 ]]; then
+  echo "Building ${APP_NAME} ${VERSION} (debug)…"
+  swift build
+  BINARY="$BUILD_DIR/debug/${EXECUTABLE_NAME}"
+else
+  echo "Building ${APP_NAME} ${VERSION} (release)…"
+  swift build -c release
+  BINARY="$BUILD_DIR/release/${EXECUTABLE_NAME}"
+fi
 
-BINARY="$BUILD_DIR/release/${EXECUTABLE_NAME}"
 if [[ ! -x "$BINARY" ]]; then
   echo "Missing binary at $BINARY" >&2
   exit 1
