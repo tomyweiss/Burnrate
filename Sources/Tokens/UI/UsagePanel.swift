@@ -313,7 +313,7 @@ struct UsagePanel: View {
     // MARK: - Tab + filter controls
 
     private var controlRow: some View {
-        HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             PillPicker(
                 selection: panelTab,
                 options: UsageTab.allCases.map { tab in
@@ -327,15 +327,30 @@ struct UsagePanel: View {
                 MenuBarPanelKeeper.keepOpen()
             }
 
-            trailingControlPicker
-                .fixedSize()
-                .layoutPriority(1)
+            if hasTrailingControl {
+                HStack {
+                    Spacer()
+                    trailingControlPicker
+                        .fixedSize()
+                }
+            }
         }
         .padding(.horizontal, 12)
         .padding(.top, 10)
         .padding(.bottom, 8)
         .zIndex(1)
         .animation(reduceMotion ? nil : .snappy, value: panelTabRaw)
+    }
+
+    private var hasTrailingControl: Bool {
+        switch panelTab.wrappedValue {
+        case .models, .sessions:
+            return true
+        case .skills:
+            return !store.snapshot.skills.isEmpty
+        case .feed, .bench:
+            return false
+        }
     }
 
     @ViewBuilder
@@ -363,25 +378,25 @@ struct UsagePanel: View {
             options: [
                 PillPicker.Option(
                     value: .total,
-                    title: "Total $",
+                    title: "Total",
                     icon: "sum",
                     help: "Total"
                 ),
                 PillPicker.Option(
                     value: .average,
-                    title: "Avg $",
+                    title: "Avg",
                     icon: "divide",
                     help: "Average"
                 ),
                 PillPicker.Option(
                     value: .median,
-                    title: "Med $",
+                    title: "Med",
                     icon: "chart.bar.xaxis",
                     help: "Median"
                 ),
             ],
-            size: .controlBar,
-            iconOnly: true
+            size: .compact,
+            style: .flat
         )
         .fixedSize()
         .onChange(of: selection.wrappedValue) { _, _ in
@@ -398,13 +413,13 @@ struct UsagePanel: View {
             options: SessionPromptSort.allCases.map { option in
                 PillPicker.Option(
                     value: option,
-                    title: option.title,
+                    title: option == .newest ? "Newest" : "Cost",
                     icon: option == .newest ? "clock" : "dollarsign",
                     help: option == .newest ? "Newest" : "Cost"
                 )
             },
-            size: .controlBar,
-            iconOnly: true
+            size: .compact,
+            style: .flat
         )
         .fixedSize()
         .onChange(of: sessionsSortRaw) { _, _ in
