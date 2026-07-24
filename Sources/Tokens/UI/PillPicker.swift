@@ -145,7 +145,7 @@ struct PillPicker<Value: Hashable>: View {
         case .compact:
             isSelected ? .caption.weight(.semibold) : .caption.weight(.medium)
         case .controlBar:
-            isSelected ? .subheadline.weight(.semibold) : .subheadline.weight(.medium)
+            isSelected ? .callout.weight(.semibold) : .callout.weight(.medium)
         }
     }
 
@@ -154,7 +154,7 @@ struct PillPicker<Value: Hashable>: View {
             switch size {
             case .regular: .subheadline.weight(.semibold)
             case .compact: .caption.weight(.semibold)
-            case .controlBar: .caption.weight(.semibold)
+            case .controlBar: .subheadline.weight(.semibold)
             }
         } else {
             switch size {
@@ -191,7 +191,8 @@ struct PillPicker<Value: Hashable>: View {
     private var verticalPadding: CGFloat {
         switch size {
         case .regular: 5
-        case .compact, .controlBar: 4
+        case .compact: 4
+        case .controlBar: 5
         }
     }
 
