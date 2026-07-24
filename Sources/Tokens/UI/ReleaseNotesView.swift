@@ -11,13 +11,30 @@ struct ReleaseNotesView: View {
         return text.isEmpty ? nil : text
     }
 
+    private var displayNotes: String? {
+        guard var text = trimmed else { return nil }
+
+        if text.hasPrefix("## ") {
+            text = String(text.dropFirst(3))
+        }
+
+        // Generated notes can lose a line break after the version, e.g. "0.0.19Replace…"
+        text = text.replacingOccurrences(
+            of: #"(What's new in [\d.]+)(\S)"#,
+            with: "$1\n$2",
+            options: .regularExpression
+        )
+
+        return text
+    }
+
     var body: some View {
-        if let trimmed {
+        if let displayNotes {
             Group {
-                if let attributed = try? AttributedString(markdown: trimmed) {
+                if let attributed = try? AttributedString(markdown: displayNotes) {
                     Text(attributed)
                 } else {
-                    Text(trimmed)
+                    Text(displayNotes)
                 }
             }
             .font(font)
