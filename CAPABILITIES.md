@@ -19,7 +19,7 @@ No Dock icon. Auth comes from the local Cursor IDE login.
 - Warning triangle on error while keeping the last known amount
 - Polls on a timer (default 60s; 15s–10m presets)
 
-### Usage panel (440×520)
+### Usage panel (460×580)
 
 - **Hero** window total with numeric transitions
 - **Timeline picker** — Today, Last 24h, Last 7d, This billing
