@@ -410,14 +410,7 @@ struct UsagePanel: View {
                 get: { SessionPromptSort(rawValue: sessionsSortRaw) ?? .newest },
                 set: { sessionsSortRaw = $0.rawValue }
             ),
-            options: SessionPromptSort.allCases.map { option in
-                PillPicker.Option(
-                    value: option,
-                    title: option == .newest ? "Newest" : "Cost",
-                    icon: option == .newest ? "clock" : "dollarsign",
-                    help: option == .newest ? "Newest" : "Cost"
-                )
-            },
+            options: SessionPromptSort.pillPickerOptions,
             size: .compact,
             style: .flat
         )
