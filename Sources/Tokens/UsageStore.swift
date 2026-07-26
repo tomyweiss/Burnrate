@@ -14,6 +14,7 @@ final class UsageStore {
     private let api = CursorAPI()
     private let anomalyMonitor: AnomalyMonitor?
     private let settings: SettingsStore
+    private weak var communityStore: CommunityStore?
     private var pollTask: Task<Void, Never>?
 
     init(settings: SettingsStore, enableAnomalyAlerts: Bool = true) {
@@ -22,6 +23,10 @@ final class UsageStore {
         if enableAnomalyAlerts {
             NotificationPresenter.shared.install()
         }
+    }
+
+    func setCommunityStore(_ store: CommunityStore?) {
+        communityStore = store
     }
 
     var isStale: Bool {
@@ -109,6 +114,7 @@ final class UsageStore {
             hasCompletedFetch = true
             isSpikeActive = next.recentCostCents >= settings.anomalyThresholdDollars * 100
             await anomalyMonitor?.evaluate(snapshot: next, settings: settings)
+            await communityStore?.handleUsageRefreshIfNeeded()
         } catch {
             lastError = error.localizedDescription
             hasCompletedFetch = true

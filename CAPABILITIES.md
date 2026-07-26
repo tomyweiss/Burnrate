@@ -19,14 +19,14 @@ No Dock icon. Auth comes from the local Cursor IDE login.
 - Warning triangle on error while keeping the last known amount
 - Polls on a timer (default 60s; 15s–10m presets)
 
-### Usage panel (380×520)
+### Usage panel (460×580)
 
 - **Hero** window total with numeric transitions
 - **Timeline picker** — Today, Last 24h, Last 7d, This billing
 - **Burn pill** (glass) for rolling-window spend, tinted by severity
 - **Sparkline** for the active window (hourly or daily buckets)
 - Caption: updated time · event count (orange when stale)
-- Tabs: **Models** | **Sessions**
+- Tabs: **Models** | **Sessions** | **Skills** | **Community** | **Feed** | **Bench**
 - Footer: Settings (glass), Refresh, overflow menu (Dashboard / Quit)
 
 ### Models tab
@@ -40,6 +40,13 @@ No Dock icon. Auth comes from the local Cursor IDE login.
 - Cross-model sessions sorted by cost
 - Name (from local Cursor chat metadata), workspace, model chips, relative activity
 - Share bar vs window total
+
+### Community tab (opt-in)
+
+- Locked until you enable sharing
+- Uploads anonymous 24h spend + per-model cost breakdown (no session/prompt data)
+- Share-to-view: cohort rank, median, and near-you list only when sharing is on
+- Optional fun nickname (Shuffle / Clear); opt-out deletes server data
 
 ### Anomaly alerts
 

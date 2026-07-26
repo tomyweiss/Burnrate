@@ -6,6 +6,7 @@ struct TokensApp: App {
     @State private var settings: SettingsStore
     @State private var store: UsageStore
     @State private var updates: UpdateManager
+    @State private var community: CommunityStore
 
     init() {
         if CommandLine.arguments.contains("--status") {
@@ -13,9 +14,13 @@ struct TokensApp: App {
         }
 
         let settings = SettingsStore()
+        let store = UsageStore(settings: settings)
+        let community = CommunityStore(settings: settings)
+        store.setCommunityStore(community)
         _settings = State(initialValue: settings)
-        _store = State(initialValue: UsageStore(settings: settings))
+        _store = State(initialValue: store)
         _updates = State(initialValue: UpdateManager(settings: settings))
+        _community = State(initialValue: community)
     }
 
     private static func runStatusAndExit() -> Never {
@@ -69,7 +74,7 @@ struct TokensApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            RootPanel(store: store, settings: settings, updates: updates)
+            RootPanel(store: store, settings: settings, updates: updates, community: community)
                 .onAppear {
                     store.start()
                     updates.autoCheckIfNeeded()

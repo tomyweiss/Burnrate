@@ -7,12 +7,23 @@ let package = Package(
         .macOS(.v26)
     ],
     products: [
-        .executable(name: "Tokens", targets: ["Tokens"])
+        .executable(name: "Tokens", targets: ["Tokens"]),
+        .library(name: "TokensCore", targets: ["TokensCore"])
     ],
     targets: [
+        .target(
+            name: "TokensCore",
+            path: "Sources/TokensCore"
+        ),
         .executableTarget(
             name: "Tokens",
+            dependencies: ["TokensCore"],
             path: "Sources/Tokens"
+        ),
+        .testTarget(
+            name: "TokensTests",
+            dependencies: ["TokensCore"],
+            path: "Tests/TokensTests"
         )
     ]
 )

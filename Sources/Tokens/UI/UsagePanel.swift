@@ -7,6 +7,7 @@ enum UsageTab: String, CaseIterable, Identifiable {
     case skills
     case feed
     case bench
+    case community
 
     var id: String { rawValue }
 
@@ -17,6 +18,7 @@ enum UsageTab: String, CaseIterable, Identifiable {
         case .skills: "Skills"
         case .feed: "Feed"
         case .bench: "Bench"
+        case .community: "Community"
         }
     }
 }
@@ -42,6 +44,7 @@ struct UsagePanel: View {
     @Bindable var store: UsageStore
     @Bindable var settings: SettingsStore
     @Bindable var updates: UpdateManager
+    @Bindable var community: CommunityStore
     var glassNamespace: Namespace.ID
     var onOpenSettings: () -> Void
 
@@ -237,6 +240,8 @@ struct UsagePanel: View {
 
                 if panelTab.wrappedValue == .bench {
                     BenchView(snapshot: store.snapshot)
+                } else if panelTab.wrappedValue == .community {
+                    CommunityView(community: community)
                 } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
@@ -289,6 +294,8 @@ struct UsagePanel: View {
                                     Divider().opacity(0.35)
                                 }
                             }
+                        case .community:
+                            EmptyView()
                         case .feed:
                             if store.snapshot.prompts.isEmpty {
                                 tabEmptyText("No prompts found for this window")
@@ -348,7 +355,7 @@ struct UsagePanel: View {
             return true
         case .skills:
             return !store.snapshot.skills.isEmpty
-        case .feed, .bench:
+        case .feed, .bench, .community:
             return false
         }
     }
@@ -364,7 +371,7 @@ struct UsagePanel: View {
             EmptyView()
         case .sessions:
             sessionsSortPicker
-        case .feed, .bench:
+        case .feed, .bench, .community:
             EmptyView()
         }
     }
