@@ -1,0 +1,133 @@
+export const STALE_HOURS = 36;
+/** Always compute ranks when the requester is present (no minimum cohort). */
+export const MIN_COHORT = 1;
+export const WINDOW_HOURS = 24;
+
+export interface ModelSpend {
+  name: string;
+  spendCents: number;
+}
+
+export interface SnapshotBody {
+  participantId: string;
+  nickname?: string | null;
+  windowHours?: number;
+  spendCents: number;
+  models: ModelSpend[];
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  nickname: string | null;
+  spendCents: number;
+  isYou?: boolean;
+}
+
+export interface RankResponse {
+  participantCount: number;
+  rank: number | null;
+  yourSpendCents: number;
+  medianSpendCents: number | null;
+  p25SpendCents: number | null;
+  p75SpendCents: number | null;
+  maxSpendCents: number | null;
+  leaderboardNear: LeaderboardEntry[];
+  notEnoughParticipants: boolean;
+}
+
+export interface Participant {
+  id: string;
+  nickname: string | null;
+  spendCents: number;
+}
+
+/** Competition ranking for values sorted descending. */
+export function competitionRanks(values: number[]): number[] {
+  if (values.length === 0) return [];
+  const ranks: number[] = [];
+  let rank = 1;
+  let i = 0;
+  while (i < values.length) {
+    const value = values[i];
+    let count = 1;
+    while (i + count < values.length && values[i + count] === value) {
+      count += 1;
+    }
+    for (let j = 0; j < count; j += 1) {
+      ranks.push(rank);
+    }
+    rank += count;
+    i += count;
+  }
+  return ranks;
+}
+
+function percentile(sortedAsc: number[], p: number): number {
+  if (sortedAsc.length === 0) return 0;
+  const index = (sortedAsc.length - 1) * p;
+  const lower = Math.floor(index);
+  const upper = Math.ceil(index);
+  if (lower === upper) return sortedAsc[lower];
+  const weight = index - lower;
+  return Math.round(sortedAsc[lower] * (1 - weight) + sortedAsc[upper] * weight);
+}
+
+export function buildRankResponse(
+  participants: Participant[],
+  requesterId: string
+): RankResponse | null {
+  const requester = participants.find((p) => p.id === requesterId);
+  if (!requester) return null;
+
+  if (participants.length < MIN_COHORT) {
+    return {
+      participantCount: participants.length,
+      rank: null,
+      yourSpendCents: requester.spendCents,
+      medianSpendCents: null,
+      p25SpendCents: null,
+      p75SpendCents: null,
+      maxSpendCents: null,
+      leaderboardNear: [],
+      notEnoughParticipants: true,
+    };
+  }
+
+  const sortedDesc = [...participants].sort((a, b) => {
+    if (b.spendCents !== a.spendCents) return b.spendCents - a.spendCents;
+    return a.id.localeCompare(b.id);
+  });
+  const spendsDesc = sortedDesc.map((p) => p.spendCents);
+  const ranks = competitionRanks(spendsDesc);
+
+  const sortedAsc = [...spendsDesc].sort((a, b) => a - b);
+  const requesterIndex = sortedDesc.findIndex((p) => p.id === requesterId);
+  const requesterRank = ranks[requesterIndex];
+
+  const nearStart = Math.max(0, requesterIndex - 2);
+  const nearEnd = Math.min(sortedDesc.length, requesterIndex + 3);
+  const leaderboardNear: LeaderboardEntry[] = sortedDesc
+    .slice(nearStart, nearEnd)
+    .map((p, offset) => ({
+      rank: ranks[nearStart + offset],
+      nickname: p.nickname,
+      spendCents: p.spendCents,
+      isYou: p.id === requesterId,
+    }));
+
+  return {
+    participantCount: participants.length,
+    rank: requesterRank,
+    yourSpendCents: requester.spendCents,
+    medianSpendCents: percentile(sortedAsc, 0.5),
+    p25SpendCents: percentile(sortedAsc, 0.25),
+    p75SpendCents: percentile(sortedAsc, 0.75),
+    maxSpendCents: spendsDesc[0] ?? 0,
+    leaderboardNear,
+    notEnoughParticipants: false,
+  };
+}
+
+export function isValidUUID(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}

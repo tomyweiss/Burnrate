@@ -16,6 +16,9 @@ final class SettingsStore {
         static let showLocationSubtitle = "showLocationSubtitle"
         static let hideArchivedSessions = "hideArchivedSessions"
         static let blurSensitiveContent = "blurSensitiveContent"
+        static let shareCommunityUsage = "shareCommunityUsage"
+        static let communityParticipantId = "communityParticipantId"
+        static let communityNickname = "communityNickname"
     }
 
     static let refreshIntervalOptions: [Double] = [15, 30, 60, 120, 300, 600]
@@ -138,6 +141,41 @@ final class SettingsStore {
         didSet { applyLaunchAtLogin() }
     }
 
+    /// Opt-in community usage sharing (required to view Community tab data).
+    var shareCommunityUsage: Bool {
+        didSet { defaults.set(shareCommunityUsage, forKey: Keys.shareCommunityUsage) }
+    }
+
+    /// Anonymous participant UUID; generated on first opt-in.
+    var communityParticipantId: String? {
+        didSet {
+            if let communityParticipantId {
+                defaults.set(communityParticipantId, forKey: Keys.communityParticipantId)
+            } else {
+                defaults.removeObject(forKey: Keys.communityParticipantId)
+            }
+        }
+    }
+
+    /// Optional fun nickname; `nil` displays as Anonymous.
+    var communityNickname: String? {
+        didSet {
+            if let communityNickname {
+                defaults.set(communityNickname, forKey: Keys.communityNickname)
+            } else {
+                defaults.removeObject(forKey: Keys.communityNickname)
+            }
+        }
+    }
+
+    /// Ensures a participant id exists; call when enabling sharing.
+    func ensureCommunityParticipantId() -> String {
+        if let communityParticipantId { return communityParticipantId }
+        let id = UUID().uuidString.lowercased()
+        communityParticipantId = id
+        return id
+    }
+
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
@@ -177,6 +215,10 @@ final class SettingsStore {
         billingDayOfMonth = billingDay ?? 1
 
         usageTimezoneIdentifier = defaults.string(forKey: Keys.usageTimezoneIdentifier)
+
+        shareCommunityUsage = defaults.bool(forKey: Keys.shareCommunityUsage)
+        communityParticipantId = defaults.string(forKey: Keys.communityParticipantId)
+        communityNickname = defaults.string(forKey: Keys.communityNickname)
 
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }

@@ -29,7 +29,7 @@ chats, and whether you're in the middle of a spike.
 - **At-a-glance total** — spend for your selected window, right in the menu bar
 - **Spike alerts** — a macOS notification when spend crosses your threshold (default $10 / 10 min)
 - **Zero setup** — uses your signed-in Cursor IDE session; nothing to paste, nothing stored
-- **Privacy-minded** — no analytics, no third-party servers, and no model calls (it won't bump your AI usage)
+- **Privacy-minded** — no analytics by default, no model calls (it won't bump your AI usage); optional Community tab shares anonymous 24h aggregates only if you opt in
 
 ## Install
 
@@ -81,13 +81,14 @@ shape of spend across the active window. A timeline picker switches between
 **Today**, **Last 24h**, **Last 7d**, and **This billing** (configurable
 billing day and timezone).
 
-Below that, five tabs slice the same window:
+Below that, six tabs slice the same window:
 
 | Tab | What it shows |
 |-----|---------------|
 | **Models** | Cost share per model; expand for token detail and per-session rows |
 | **Sessions** | Chats across models, with titles and workspace names from local Cursor data; drill into a session for its prompts and subagents |
 | **Skills** | Cost per slash command, with total / average / median views |
+| **Community** | Opt-in anonymous 24h spend rank vs other sharers (share-to-view) |
 | **Feed** | Every prompt with its attributed cost, tokens, duration, and models |
 | **Bench** | Scatter chart comparing models, skills, or sessions on cost, speed, and volume — top-right is best |
 
@@ -113,7 +114,8 @@ estimate. Full behavior: [CAPABILITIES.md](CAPABILITIES.md).
 - Reads `cursorAuth/accessToken` from Cursor's local SQLite DB on each refresh — **never written** to Burnrate's own storage or Keychain
 - Fetches usage over HTTPS from Cursor's dashboard endpoints using that session
 - Session names and workspace folders come from **local** Cursor composer metadata (and cloud agent cache for `bc-*` sessions)
-- No analytics, no third-party servers, no model/API calls that consume Cursor usage
+- No analytics; no model/API calls that consume Cursor usage
+- **Community (opt-in):** uploads anonymous rolling 24h spend + per-model costs to the Burnrate community API when you enable sharing; never session titles, prompts, or Cursor identity. Turning sharing off deletes your server row. You only see cohort data if you share.
 - Self-updates require a minisign signature matching the embedded public key (not only a SHA-256 checksum from the same release)
 
 ## Self-updates

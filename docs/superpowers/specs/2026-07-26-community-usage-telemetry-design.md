@@ -129,7 +129,7 @@ Local adjective + animal word lists (e.g. `cobalt-fox`, `amber-newt`). Shuffle r
 
 | Rule | Behavior |
 |------|----------|
-| Minimum cohort | If fewer than **5** fresh participants, show “Not enough sharers yet” — no ranks |
+| Minimum cohort | None — show ranks as soon as the requester has a fresh snapshot (solo = rank 1) |
 | Freshness | Only rows updated within **36h** |
 | Ranking metric | Rolling **24h** spend (cents), descending |
 | Ties | Competition ranking (1, 2, 2, 4) |

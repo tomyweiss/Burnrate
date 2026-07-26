@@ -6,6 +6,7 @@ DerivedData/
 .swiftpm/
 .DS_Store
 dist/
+community-api/node_modules/
 
 # Local agent design/plan notes (not shared via repo)
 docs/superpowers/**

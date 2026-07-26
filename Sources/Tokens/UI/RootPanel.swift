@@ -9,11 +9,12 @@ struct RootPanel: View {
     @Bindable var store: UsageStore
     @Bindable var settings: SettingsStore
     @Bindable var updates: UpdateManager
+    @Bindable var community: CommunityStore
     @State private var route: PanelRoute = .usage
     @Namespace private var glassNamespace
     @AppStorage("panelTab") private var panelTabRaw = UsageTab.models.rawValue
 
-    private let panelWidth: CGFloat = 380
+    private let panelWidth: CGFloat = 440
 
     /// The Bench scatter needs more vertical room than the list tabs.
     private var panelHeight: CGFloat {
@@ -28,6 +29,7 @@ struct RootPanel: View {
                     store: store,
                     settings: settings,
                     updates: updates,
+                    community: community,
                     glassNamespace: glassNamespace,
                     onOpenSettings: { route = .settings }
                 )
