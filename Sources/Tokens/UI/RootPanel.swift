@@ -3,6 +3,7 @@ import SwiftUI
 enum PanelRoute: Hashable {
     case usage
     case settings
+    case community
 }
 
 struct RootPanel: View {
@@ -29,15 +30,21 @@ struct RootPanel: View {
                     store: store,
                     settings: settings,
                     updates: updates,
-                    community: community,
                     glassNamespace: glassNamespace,
-                    onOpenSettings: { route = .settings }
+                    onOpenSettings: { route = .settings },
+                    onOpenCommunity: { route = .community }
                 )
             case .settings:
                 SettingsPanel(
                     settings: settings,
                     updates: updates,
                     store: store,
+                    glassNamespace: glassNamespace,
+                    onBack: { route = .usage }
+                )
+            case .community:
+                CommunityPanel(
+                    community: community,
                     glassNamespace: glassNamespace,
                     onBack: { route = .usage }
                 )

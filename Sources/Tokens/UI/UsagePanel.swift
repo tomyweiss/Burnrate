@@ -7,7 +7,6 @@ enum UsageTab: String, CaseIterable, Identifiable {
     case skills
     case feed
     case bench
-    case community
 
     var id: String { rawValue }
 
@@ -18,7 +17,6 @@ enum UsageTab: String, CaseIterable, Identifiable {
         case .skills: "Skills"
         case .feed: "Feed"
         case .bench: "Bench"
-        case .community: "Community"
         }
     }
 }
@@ -44,9 +42,9 @@ struct UsagePanel: View {
     @Bindable var store: UsageStore
     @Bindable var settings: SettingsStore
     @Bindable var updates: UpdateManager
-    @Bindable var community: CommunityStore
     var glassNamespace: Namespace.ID
     var onOpenSettings: () -> Void
+    var onOpenCommunity: () -> Void
 
     @AppStorage("panelTab") private var panelTabRaw = UsageTab.models.rawValue
     @State private var expandedModels: Set<String> = []
@@ -116,6 +114,8 @@ struct UsagePanel: View {
                         .accessibilityLabel("Development build")
                 }
 
+                communityButton
+
                 timelinePicker
 
                 if store.isLoading {
@@ -144,6 +144,23 @@ struct UsagePanel: View {
                 .font(.caption)
                 .foregroundStyle(store.isStale ? Color.orange : Color.secondary)
         }
+    }
+
+    private var communityButton: some View {
+        Button {
+            onOpenCommunity()
+            MenuBarPanelKeeper.keepOpen()
+        } label: {
+            Label("Community", systemImage: "trophy.fill")
+                .labelStyle(.titleAndIcon)
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.orange)
+        .background(Capsule().fill(Color.orange.opacity(0.18)))
+        .help("Community ranking")
     }
 
     private var timelinePicker: some View {
@@ -240,8 +257,6 @@ struct UsagePanel: View {
 
                 if panelTab.wrappedValue == .bench {
                     BenchView(snapshot: store.snapshot)
-                } else if panelTab.wrappedValue == .community {
-                    CommunityView(community: community)
                 } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
@@ -294,8 +309,6 @@ struct UsagePanel: View {
                                     Divider().opacity(0.35)
                                 }
                             }
-                        case .community:
-                            EmptyView()
                         case .feed:
                             if store.snapshot.prompts.isEmpty {
                                 tabEmptyText("No prompts found for this window")
@@ -355,7 +368,7 @@ struct UsagePanel: View {
             return true
         case .skills:
             return !store.snapshot.skills.isEmpty
-        case .feed, .bench, .community:
+        case .feed, .bench:
             return false
         }
     }
@@ -371,7 +384,7 @@ struct UsagePanel: View {
             EmptyView()
         case .sessions:
             sessionsSortPicker
-        case .feed, .bench, .community:
+        case .feed, .bench:
             EmptyView()
         }
     }
