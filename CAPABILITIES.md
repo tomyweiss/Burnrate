@@ -26,7 +26,8 @@ No Dock icon. Auth comes from the local Cursor IDE login.
 - **Burn pill** (glass) for rolling-window spend, tinted by severity
 - **Sparkline** for the active window (hourly or daily buckets)
 - Caption: updated time · event count (orange when stale)
-- Tabs: **Models** | **Sessions** | **Skills** | **Community** | **Feed** | **Bench**
+- Tabs: **Models** | **Sessions** | **Skills** | **Feed** | **Bench**
+- **Community** opens from a trophy chip in the header (next to the timeline)
 - Footer: Settings (glass), Refresh, overflow menu (Dashboard / Quit)
 
 ### Models tab
@@ -41,7 +42,7 @@ No Dock icon. Auth comes from the local Cursor IDE login.
 - Name (from local Cursor chat metadata), workspace, model chips, relative activity
 - Share bar vs window total
 
-### Community tab (opt-in)
+### Community (opt-in)
 
 - Locked until you enable sharing
 - Uploads anonymous 24h spend + per-model cost breakdown (no session/prompt data)
