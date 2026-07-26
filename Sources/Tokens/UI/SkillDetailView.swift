@@ -36,15 +36,12 @@ struct SkillDetailView: View {
 
             PillPicker(
                 selection: sort,
-                options: SessionPromptSort.allCases.map { option in
-                    PillPicker.Option(
-                        value: option,
-                        title: option.title,
-                        icon: option == .newest ? "clock" : "dollarsign"
-                    )
-                },
-                fillsWidth: true
+                options: SessionPromptSort.pillPickerOptions,
+                size: .compact,
+                style: .flat
             )
+            .fixedSize()
+            .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
             .onChange(of: sortRaw) { _, _ in

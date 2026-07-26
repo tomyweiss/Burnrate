@@ -12,6 +12,17 @@ enum SessionPromptSort: String, CaseIterable, Identifiable {
         case .cost: "High → Low"
         }
     }
+
+    static var pillPickerOptions: [PillPicker<SessionPromptSort>.Option] {
+        allCases.map { option in
+            PillPicker.Option(
+                value: option,
+                title: option == .newest ? "Newest" : "Cost",
+                icon: option == .newest ? "clock" : "dollarsign",
+                help: option == .newest ? "Newest" : "Cost"
+            )
+        }
+    }
 }
 
 private enum SessionDetailTab: String, CaseIterable, Identifiable {
@@ -86,26 +97,11 @@ struct SessionDetailView: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
 
-            if showsSubagentTabs {
-                PillPicker(
-                    selection: $detailTab,
-                    options: SessionDetailTab.allCases.map { tab in
-                        PillPicker.Option(value: tab, title: tab.title)
-                    },
-                    fillsWidth: true
-                )
-                .padding(.horizontal, 12)
-                .padding(.bottom, 8)
-                .onChange(of: detailTab) { _, _ in
-                    MenuBarPanelKeeper.keepOpen()
-                }
-            }
+            controlRow
 
             if !showsSubagentTabs || detailTab == .prompts {
-                promptsToolbar
                 promptsBody
             } else {
-                subagentsToolbar
                 subagentsBody
             }
         }
@@ -116,28 +112,39 @@ struct SessionDetailView: View {
         }
     }
 
-    private var promptsToolbar: some View {
-        sessionSortPicker
-    }
+    private var controlRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if showsSubagentTabs {
+                PillPicker(
+                    selection: $detailTab,
+                    options: SessionDetailTab.allCases.map { tab in
+                        PillPicker.Option(value: tab, title: tab.title)
+                    },
+                    size: .controlBar,
+                    fillsWidth: true
+                )
+                .onChange(of: detailTab) { _, _ in
+                    MenuBarPanelKeeper.keepOpen()
+                }
+            }
 
-    private var subagentsToolbar: some View {
-        sessionSortPicker
+            HStack {
+                Spacer()
+                sessionSortPicker
+                    .fixedSize()
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
     }
 
     private var sessionSortPicker: some View {
         PillPicker(
             selection: sort,
-                options: SessionPromptSort.allCases.map { option in
-                    PillPicker.Option(
-                        value: option,
-                        title: option.title,
-                        icon: option == .newest ? "clock" : "dollarsign"
-                    )
-                },
-            fillsWidth: true
+            options: SessionPromptSort.pillPickerOptions,
+            size: .compact,
+            style: .flat
         )
-        .padding(.horizontal, 12)
-        .padding(.bottom, 8)
         .onChange(of: sortRaw) { _, _ in
             MenuBarPanelKeeper.keepOpen()
         }
