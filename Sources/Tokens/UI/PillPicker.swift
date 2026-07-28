@@ -100,9 +100,10 @@ struct PillPicker<Value: Hashable>: View {
                 if isSelected {
                     switch style {
                     case .capsule:
+                        // Solid fill instead of glassEffect: animated glass layers can
+                        // outlive a dismissed MenuBarExtra panel and leave screen ghosts.
                         Capsule()
-                            .fill(.clear)
-                            .glassEffect(.regular.tint(.accentColor))
+                            .fill(Color.accentColor)
                             .matchedGeometryEffect(id: "pillSelection", in: selectionNamespace)
                     case .flat:
                         Capsule()
