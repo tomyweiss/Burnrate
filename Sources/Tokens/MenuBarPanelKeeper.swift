@@ -16,7 +16,12 @@ enum MenuBarPanelKeeper {
     /// open, and record a fresh anchor once initial placement settles.
     static func panelDidShow() {
         anchors.removeAll()
-        keepOpen()
+        preparePanels()
+        for window in panelWindows where window.isVisible {
+            // Key the panel once on open so keyboard shortcuts work; skip app
+            // activation so we don't yank the user out of a fullscreen space.
+            window.makeKeyAndOrderFront(nil)
+        }
         anchorTask?.cancel()
         anchorTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(250))
@@ -31,22 +36,32 @@ enum MenuBarPanelKeeper {
         anchorTask?.cancel()
         anchorTask = nil
         anchors.removeAll()
+        for window in panelWindows {
+            flushStaleCompositorState(window)
+        }
     }
 
     static func keepOpen() {
+        preparePanels()
+        for window in panelWindows where window.isVisible {
+            // Re-front without activating the app or stealing key from the
+            // frontmost fullscreen app — NSApp.activate() was pulling users
+            // back to the main desktop on every control click.
+            window.orderFront(nil)
+            pin(window)
+        }
+    }
+
+    private static func preparePanels() {
         installMoveObserverIfNeeded()
         for window in panelWindows {
+            configurePanelWindow(window)
             window.hidesOnDeactivate = false
             window.isReleasedWhenClosed = false
             if let panel = window as? NSPanel {
                 panel.hidesOnDeactivate = false
-                panel.becomesKeyOnlyIfNeeded = false
+                panel.becomesKeyOnlyIfNeeded = true
             }
-            window.makeKeyAndOrderFront(nil)
-        }
-        NSApp.activate()
-        for window in panelWindows where window.isVisible {
-            pin(window)
         }
     }
 
@@ -121,5 +136,28 @@ enum MenuBarPanelKeeper {
             return true
         }
         return false
+    }
+
+    /// MenuBarExtra panels must stay transparent so glass controls composite
+    /// against the desktop instead of leaving opaque rectangles behind.
+    private static func configurePanelWindow(_ window: NSWindow) {
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        if let panel = window as? NSPanel {
+            panel.isFloatingPanel = true
+        }
+        guard let contentView = window.contentView else { return }
+        contentView.wantsLayer = true
+        contentView.layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
+    /// Liquid Glass layers can outlive a dismissed panel; force the window server
+    /// to redraw the panel region before the window goes off-screen.
+    private static func flushStaleCompositorState(_ window: NSWindow) {
+        guard let contentView = window.contentView else { return }
+        contentView.setNeedsDisplay(contentView.bounds)
+        contentView.displayIfNeeded()
+        window.invalidateShadow()
     }
 }
