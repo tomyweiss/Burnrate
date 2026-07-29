@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.30
+
+- Fix changelog navigation and show the last three versions. (ac02358)
+
 ## 0.0.29
 
 - Copy conversation log source path from session detail
