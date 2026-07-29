@@ -3,6 +3,7 @@ import {
   buildRankResponse,
   competitionRanks,
   isValidUUID,
+  validateInteractionStats,
 } from "./rank.js";
 
 describe("competitionRanks", () => {
@@ -56,5 +57,28 @@ describe("isValidUUID", () => {
   });
   it("rejects garbage", () => {
     expect(isValidUUID("not-a-uuid")).toBe(false);
+  });
+});
+
+describe("validateInteractionStats", () => {
+  it("accepts valid stats", () => {
+    expect(
+      validateInteractionStats({
+        panelOpens: 10,
+        tabChanges: { models: 4, feed: 2, settings: 1 },
+      })
+    ).toBeNull();
+  });
+
+  it("rejects negative panel opens", () => {
+    expect(
+      validateInteractionStats({ panelOpens: -1, tabChanges: {} })
+    ).toBe("Invalid interactionStats.panelOpens");
+  });
+
+  it("rejects invalid tab change counts", () => {
+    expect(
+      validateInteractionStats({ panelOpens: 0, tabChanges: { models: 1.5 } })
+    ).toBe("Invalid interactionStats.tabChanges value");
   });
 });

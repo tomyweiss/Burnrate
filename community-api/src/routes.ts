@@ -12,6 +12,7 @@ import {
   WINDOW_HOURS,
   buildRankResponse,
   isValidUUID,
+  validateInteractionStats,
   type SnapshotBody,
 } from "./rank.js";
 
@@ -77,6 +78,10 @@ function validateSnapshot(body: SnapshotBody): string | null {
   if (body.nickname && body.nickname.length > 64) {
     return "nickname too long";
   }
+  if (body.interactionStats !== undefined) {
+    const interactionError = validateInteractionStats(body.interactionStats);
+    if (interactionError) return interactionError;
+  }
   return null;
 }
 
@@ -122,7 +127,8 @@ export function createApp() {
       body.participantId,
       nickname,
       Math.round(body.spendCents),
-      body.models.map((m) => ({ name: m.name, spendCents: Math.round(m.spendCents) }))
+      body.models.map((m) => ({ name: m.name, spendCents: Math.round(m.spendCents) })),
+      body.interactionStats ?? null
     );
 
     return c.json({ ok: true });

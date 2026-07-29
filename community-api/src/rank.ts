@@ -8,12 +8,18 @@ export interface ModelSpend {
   spendCents: number;
 }
 
+export interface InteractionStats {
+  panelOpens: number;
+  tabChanges: Record<string, number>;
+}
+
 export interface SnapshotBody {
   participantId: string;
   nickname?: string | null;
   windowHours?: number;
   spendCents: number;
   models: ModelSpend[];
+  interactionStats?: InteractionStats;
 }
 
 export interface LeaderboardEntry {
@@ -130,4 +136,20 @@ export function buildRankResponse(
 
 export function isValidUUID(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+export function validateInteractionStats(stats: InteractionStats): string | null {
+  if (typeof stats.panelOpens !== "number" || stats.panelOpens < 0 || !Number.isInteger(stats.panelOpens)) {
+    return "Invalid interactionStats.panelOpens";
+  }
+  if (!stats.tabChanges || typeof stats.tabChanges !== "object" || Array.isArray(stats.tabChanges)) {
+    return "Invalid interactionStats.tabChanges";
+  }
+  for (const [key, count] of Object.entries(stats.tabChanges)) {
+    if (!key || key.length > 32) return "Invalid interactionStats.tabChanges key";
+    if (typeof count !== "number" || count < 0 || !Number.isInteger(count)) {
+      return "Invalid interactionStats.tabChanges value";
+    }
+  }
+  return null;
 }

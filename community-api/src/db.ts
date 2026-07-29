@@ -48,9 +48,12 @@ export async function migrate(): Promise<void> {
       nickname TEXT,
       spend_cents_24h INTEGER NOT NULL DEFAULT 0,
       model_breakdown JSONB NOT NULL DEFAULT '[]',
+      interaction_stats JSONB NOT NULL DEFAULT '{"panelOpens":0,"tabChanges":{}}',
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS participants_updated_at_idx ON participants (updated_at);
+    ALTER TABLE participants
+      ADD COLUMN IF NOT EXISTS interaction_stats JSONB NOT NULL DEFAULT '{"panelOpens":0,"tabChanges":{}}';
   `);
 }
 
@@ -59,6 +62,7 @@ export interface ParticipantRow {
   nickname: string | null;
   spend_cents_24h: number;
   model_breakdown: { name: string; spendCents: number }[];
+  interaction_stats: { panelOpens: number; tabChanges: Record<string, number> };
   updated_at: Date;
 }
 
@@ -66,9 +70,31 @@ export async function upsertParticipant(
   id: string,
   nickname: string | null,
   spendCents: number,
-  modelBreakdown: { name: string; spendCents: number }[]
+  modelBreakdown: { name: string; spendCents: number }[],
+  interactionStats: { panelOpens: number; tabChanges: Record<string, number> } | null = null
 ): Promise<void> {
   const db = getPool();
+  if (interactionStats) {
+    await db.query(
+      `INSERT INTO participants (id, nickname, spend_cents_24h, model_breakdown, interaction_stats, updated_at)
+       VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, NOW())
+       ON CONFLICT (id) DO UPDATE SET
+         nickname = EXCLUDED.nickname,
+         spend_cents_24h = EXCLUDED.spend_cents_24h,
+         model_breakdown = EXCLUDED.model_breakdown,
+         interaction_stats = EXCLUDED.interaction_stats,
+         updated_at = NOW()`,
+      [
+        id,
+        nickname,
+        spendCents,
+        JSON.stringify(modelBreakdown),
+        JSON.stringify(interactionStats),
+      ]
+    );
+    return;
+  }
+
   await db.query(
     `INSERT INTO participants (id, nickname, spend_cents_24h, model_breakdown, updated_at)
      VALUES ($1, $2, $3, $4::jsonb, NOW())
