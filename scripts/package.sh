@@ -11,7 +11,7 @@ generate_release_notes() {
   local tag="v${version}"
   local prev_tag range commits
 
-  prev_tag="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | awk -v t="$tag" '$0==t {getline; print; exit}')"
+  prev_tag="$(previous_release_tag "$version")"
 
   {
     echo "## What's new in ${version}"
