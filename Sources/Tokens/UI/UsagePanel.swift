@@ -45,6 +45,7 @@ struct UsagePanel: View {
     var glassNamespace: Namespace.ID
     var onOpenSettings: () -> Void
     var onOpenCommunity: () -> Void
+    var onUsageTabChange: (UsageTab) -> Void = { _ in }
 
     @AppStorage("panelTab") private var panelTabRaw = UsageTab.models.rawValue
     @State private var expandedModels: Set<String> = []
@@ -343,8 +344,12 @@ struct UsagePanel: View {
                 fillsWidth: true
             )
             .frame(maxWidth: .infinity, alignment: .leading)
-            .onChange(of: panelTabRaw) { _, _ in
+            .onChange(of: panelTabRaw) { oldTab, newTab in
                 MenuBarPanelKeeper.keepOpen()
+                guard oldTab != newTab else { return }
+                if let tab = UsageTab(rawValue: newTab) {
+                    onUsageTabChange(tab)
+                }
             }
 
             if hasTrailingControl {

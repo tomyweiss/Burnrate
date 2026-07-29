@@ -58,3 +58,27 @@ import Testing
     #expect(event.model == "m")
     #expect(event.costCents == 1)
 }
+
+@Test func interactionStatsRecordPanelOpenAndTabChange() {
+    var stats = CommunityInteractionStats()
+    stats.recordPanelOpen()
+    stats.recordPanelOpen()
+    stats.recordTabChange("models")
+    stats.recordTabChange("models")
+    stats.recordTabChange("feed")
+
+    #expect(stats.panelOpens == 2)
+    #expect(stats.tabChanges["models"] == 2)
+    #expect(stats.tabChanges["feed"] == 1)
+}
+
+@Test func payloadBuilderIncludesInteractionStats() {
+    let stats = CommunityInteractionStats(panelOpens: 3, tabChanges: ["sessions": 5])
+    let payload = CommunityPayloadBuilder.build(
+        participantId: "test-uuid",
+        nickname: nil,
+        events: [],
+        interactionStats: stats
+    )
+    #expect(payload.interactionStats == stats)
+}

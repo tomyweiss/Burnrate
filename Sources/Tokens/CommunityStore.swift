@@ -11,11 +11,17 @@ final class CommunityStore {
     private let settings: SettingsStore
     private let client: CommunityClient
     private let cursorAPI = CursorAPI()
+    private let interactionTracker: InteractionTracker
     private var lastUploadAt: Date?
     private let uploadThrottle: TimeInterval = 5 * 60
 
-    init(settings: SettingsStore, client: CommunityClient = CommunityClient()) {
+    init(
+        settings: SettingsStore,
+        interactionTracker: InteractionTracker,
+        client: CommunityClient = CommunityClient()
+    ) {
         self.settings = settings
+        self.interactionTracker = interactionTracker
         self.client = client
     }
 
@@ -49,6 +55,7 @@ final class CommunityStore {
         rank = nil
         lastError = nil
         lastUploadAt = nil
+        interactionTracker.reset()
     }
 
     func shuffleNickname() {
@@ -143,7 +150,8 @@ final class CommunityStore {
             participantId: participantId,
             nickname: resolvedNickname,
             events: costEvents,
-            now: now
+            now: now,
+            interactionStats: interactionTracker.snapshot()
         )
     }
 }

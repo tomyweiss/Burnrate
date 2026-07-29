@@ -4,6 +4,14 @@ enum PanelRoute: Hashable {
     case usage
     case settings
     case community
+
+    var interactionKey: String {
+        switch self {
+        case .usage: "usage"
+        case .settings: "settings"
+        case .community: "community"
+        }
+    }
 }
 
 struct RootPanel: View {
@@ -11,6 +19,7 @@ struct RootPanel: View {
     @Bindable var settings: SettingsStore
     @Bindable var updates: UpdateManager
     @Bindable var community: CommunityStore
+    var interactionTracker: InteractionTracker
     @State private var route: PanelRoute = .usage
     @Namespace private var glassNamespace
     @AppStorage("panelTab") private var panelTabRaw = UsageTab.models.rawValue
@@ -32,7 +41,13 @@ struct RootPanel: View {
                     updates: updates,
                     glassNamespace: glassNamespace,
                     onOpenSettings: { route = .settings },
-                    onOpenCommunity: { route = .community }
+                    onOpenCommunity: { route = .community },
+                    onUsageTabChange: { tab in
+                        interactionTracker.recordTabChange(
+                            tab.rawValue,
+                            ifEnabled: settings.shareCommunityUsage
+                        )
+                    }
                 )
             case .settings:
                 SettingsPanel(
@@ -57,13 +72,19 @@ struct RootPanel: View {
         .onAppear {
             MenuBarPanelKeeper.panelDidShow()
             updates.autoCheckIfNeeded()
+            interactionTracker.recordPanelOpen(ifEnabled: settings.shareCommunityUsage)
         }
         .onDisappear {
             MenuBarPanelKeeper.panelDidHide()
             route = .usage
         }
-        .onChange(of: route) { _, _ in
+        .onChange(of: route) { oldRoute, newRoute in
             MenuBarPanelKeeper.keepOpen()
+            guard oldRoute != newRoute else { return }
+            interactionTracker.recordTabChange(
+                newRoute.interactionKey,
+                ifEnabled: settings.shareCommunityUsage
+            )
         }
         .onChange(of: settings.billingDayOfMonth) { _, _ in
             Task { await store.refresh() }

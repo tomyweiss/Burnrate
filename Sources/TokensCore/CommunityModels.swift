@@ -18,19 +18,43 @@ public struct CommunitySnapshotPayload: Sendable, Codable, Equatable {
     public let windowHours: Int
     public let spendCents: Int
     public let models: [CommunityModelSpend]
+    /// Cumulative UI interaction counts (panel opens vs tab changes), only when opted in.
+    public let interactionStats: CommunityInteractionStats?
 
     public init(
         participantId: String,
         nickname: String?,
         windowHours: Int = 24,
         spendCents: Int,
-        models: [CommunityModelSpend]
+        models: [CommunityModelSpend],
+        interactionStats: CommunityInteractionStats? = nil
     ) {
         self.participantId = participantId
         self.nickname = nickname
         self.windowHours = windowHours
         self.spendCents = spendCents
         self.models = models
+        self.interactionStats = interactionStats
+    }
+}
+
+/// Cumulative panel interaction metrics uploaded with community snapshots.
+public struct CommunityInteractionStats: Sendable, Codable, Equatable {
+    public var panelOpens: Int
+    /// Per-surface tab/route change counts (e.g. "models", "sessions", "settings").
+    public var tabChanges: [String: Int]
+
+    public init(panelOpens: Int = 0, tabChanges: [String: Int] = [:]) {
+        self.panelOpens = panelOpens
+        self.tabChanges = tabChanges
+    }
+
+    public mutating func recordPanelOpen() {
+        panelOpens += 1
+    }
+
+    public mutating func recordTabChange(_ tab: String) {
+        tabChanges[tab, default: 0] += 1
     }
 }
 

@@ -7,6 +7,7 @@ struct TokensApp: App {
     @State private var store: UsageStore
     @State private var updates: UpdateManager
     @State private var community: CommunityStore
+    @State private var interactionTracker: InteractionTracker
 
     init() {
         if CommandLine.arguments.contains("--status") {
@@ -14,13 +15,15 @@ struct TokensApp: App {
         }
 
         let settings = SettingsStore()
+        let interactionTracker = InteractionTracker()
         let store = UsageStore(settings: settings)
-        let community = CommunityStore(settings: settings)
+        let community = CommunityStore(settings: settings, interactionTracker: interactionTracker)
         store.setCommunityStore(community)
         _settings = State(initialValue: settings)
         _store = State(initialValue: store)
         _updates = State(initialValue: UpdateManager(settings: settings))
         _community = State(initialValue: community)
+        _interactionTracker = State(initialValue: interactionTracker)
     }
 
     private static func runStatusAndExit() -> Never {
@@ -74,7 +77,13 @@ struct TokensApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            RootPanel(store: store, settings: settings, updates: updates, community: community)
+            RootPanel(
+                store: store,
+                settings: settings,
+                updates: updates,
+                community: community,
+                interactionTracker: interactionTracker
+            )
                 .onAppear {
                     store.start()
                     updates.autoCheckIfNeeded()
