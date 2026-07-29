@@ -21,7 +21,8 @@ extract_changelog_section() {
 previous_release_tag() {
   local version="$1"
   local tag="v${version}"
-  git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | awk -v t="$tag" '$0==t {getline; print; exit}'
+  # Newest tag before the target version (works whether the target tag exists yet or not).
+  git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -vFx "$tag" | head -1
 }
 
 draft_changelog_bullets() {
