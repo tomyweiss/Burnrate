@@ -20,6 +20,8 @@ public struct CommunitySnapshotPayload: Sendable, Codable, Equatable {
     public let models: [CommunityModelSpend]
     /// Cumulative UI interaction counts (panel opens vs tab changes), only when opted in.
     public let interactionStats: CommunityInteractionStats?
+    /// Burnrate app version string, e.g. `0.0.25` or `0.0.25-dev`.
+    public let clientVersion: String?
 
     public init(
         participantId: String,
@@ -27,7 +29,8 @@ public struct CommunitySnapshotPayload: Sendable, Codable, Equatable {
         windowHours: Int = 24,
         spendCents: Int,
         models: [CommunityModelSpend],
-        interactionStats: CommunityInteractionStats? = nil
+        interactionStats: CommunityInteractionStats? = nil,
+        clientVersion: String? = nil
     ) {
         self.participantId = participantId
         self.nickname = nickname
@@ -35,6 +38,7 @@ public struct CommunitySnapshotPayload: Sendable, Codable, Equatable {
         self.spendCents = spendCents
         self.models = models
         self.interactionStats = interactionStats
+        self.clientVersion = clientVersion
     }
 }
 

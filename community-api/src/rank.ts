@@ -20,6 +20,7 @@ export interface SnapshotBody {
   spendCents: number;
   models: ModelSpend[];
   interactionStats?: InteractionStats;
+  clientVersion?: string;
 }
 
 export interface LeaderboardEntry {
@@ -150,6 +151,16 @@ export function validateInteractionStats(stats: InteractionStats): string | null
     if (typeof count !== "number" || count < 0 || !Number.isInteger(count)) {
       return "Invalid interactionStats.tabChanges value";
     }
+  }
+  return null;
+}
+
+export function validateClientVersion(version: string): string | null {
+  if (typeof version !== "string" || version.length === 0 || version.length > 32) {
+    return "Invalid clientVersion";
+  }
+  if (!/^[0-9A-Za-z][0-9A-Za-z._-]*$/.test(version)) {
+    return "Invalid clientVersion";
   }
   return null;
 }

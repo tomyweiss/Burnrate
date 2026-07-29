@@ -7,6 +7,9 @@ struct SkillDetailView: View {
     let onBack: () -> Void
 
     @AppStorage("sessionPromptSort") private var sortRaw = SessionPromptSort.newest.rawValue
+    @State private var searchText = ""
+    @State private var isSearchPresented = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var sort: Binding<SessionPromptSort> {
         Binding(
@@ -28,25 +31,35 @@ struct SkillDetailView: View {
         }
     }
 
+    private var filteredPrompts: [PromptUsage] {
+        sortedPrompts.filter { ListSearch.prompt($0, query: searchText) }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
 
-            PillPicker(
-                selection: sort,
-                options: SessionPromptSort.pillPickerOptions,
-                size: .compact,
-                style: .flat
-            )
-            .fixedSize()
-            .frame(maxWidth: .infinity, alignment: .trailing)
+            SectionSearchControl(
+                text: $searchText,
+                isPresented: $isSearchPresented,
+                placeholder: "Search prompts",
+                reduceMotion: reduceMotion
+            ) {
+                PillPicker(
+                    selection: sort,
+                    options: SessionPromptSort.pillPickerOptions,
+                    size: .compact,
+                    style: .flat
+                )
+                .fixedSize()
+                .onChange(of: sortRaw) { _, _ in
+                    MenuBarPanelKeeper.keepOpen()
+                }
+            }
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
-            .onChange(of: sortRaw) { _, _ in
-                MenuBarPanelKeeper.keepOpen()
-            }
 
             if prompts.isEmpty {
                 Text("No prompts used this skill in the window")
@@ -54,10 +67,16 @@ struct SkillDetailView: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                     .padding(.vertical, 24)
+            } else if filteredPrompts.isEmpty {
+                Text(ListSearch.noMatchesMessage(searchText))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                    .padding(.vertical, 24)
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
-                        ForEach(sortedPrompts) { prompt in
+                        ForEach(filteredPrompts) { prompt in
                             PromptRowView(prompt: prompt)
                             Divider().opacity(0.35)
                         }

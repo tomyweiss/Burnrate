@@ -18,7 +18,8 @@ let package = Package(
         .executableTarget(
             name: "Tokens",
             dependencies: ["TokensCore"],
-            path: "Sources/Tokens"
+            path: "Sources/Tokens",
+            resources: [.process("Resources")]
         ),
         .testTarget(
             name: "TokensTests",

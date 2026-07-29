@@ -13,6 +13,7 @@ import {
   buildRankResponse,
   isValidUUID,
   validateInteractionStats,
+  validateClientVersion,
   type SnapshotBody,
 } from "./rank.js";
 
@@ -82,6 +83,10 @@ function validateSnapshot(body: SnapshotBody): string | null {
     const interactionError = validateInteractionStats(body.interactionStats);
     if (interactionError) return interactionError;
   }
+  if (body.clientVersion !== undefined) {
+    const versionError = validateClientVersion(body.clientVersion);
+    if (versionError) return versionError;
+  }
   return null;
 }
 
@@ -128,7 +133,10 @@ export function createApp() {
       nickname,
       Math.round(body.spendCents),
       body.models.map((m) => ({ name: m.name, spendCents: Math.round(m.spendCents) })),
-      body.interactionStats ?? null
+      {
+        interactionStats: body.interactionStats ?? null,
+        clientVersion: body.clientVersion ?? null,
+      }
     );
 
     return c.json({ ok: true });

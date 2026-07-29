@@ -19,6 +19,7 @@ final class SettingsStore {
         static let shareCommunityUsage = "shareCommunityUsage"
         static let communityParticipantId = "communityParticipantId"
         static let communityNickname = "communityNickname"
+        static let communityNicknameSource = "communityNicknameSource"
     }
 
     static let refreshIntervalOptions: [Double] = [15, 30, 60, 120, 300, 600]
@@ -168,6 +169,12 @@ final class SettingsStore {
         }
     }
 
+    var communityNicknameSource: CommunityNicknameSource {
+        didSet {
+            defaults.set(communityNicknameSource.rawValue, forKey: Keys.communityNicknameSource)
+        }
+    }
+
     /// Ensures a participant id exists; call when enabling sharing.
     func ensureCommunityParticipantId() -> String {
         if let communityParticipantId { return communityParticipantId }
@@ -219,6 +226,12 @@ final class SettingsStore {
         shareCommunityUsage = defaults.bool(forKey: Keys.shareCommunityUsage)
         communityParticipantId = defaults.string(forKey: Keys.communityParticipantId)
         communityNickname = defaults.string(forKey: Keys.communityNickname)
+        if let sourceRaw = defaults.string(forKey: Keys.communityNicknameSource),
+           let source = CommunityNicknameSource(rawValue: sourceRaw) {
+            communityNicknameSource = source
+        } else {
+            communityNicknameSource = .random
+        }
 
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }

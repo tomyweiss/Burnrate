@@ -50,6 +50,11 @@ struct SessionDetailView: View {
 
     @AppStorage("sessionPromptSort") private var sortRaw = SessionPromptSort.newest.rawValue
     @State private var detailTab: SessionDetailTab = .prompts
+    @State private var searchText = ""
+    @State private var isSearchPresented = false
+    @State private var storageLocation: SessionStorageLocation?
+    @State private var didCopySourcePath = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.blurSensitiveContent) private var blurSensitiveContent
 
     private var showsSubagentTabs: Bool { session.hasSubagents }
@@ -91,6 +96,21 @@ struct SessionDetailView: View {
         }
     }
 
+    private var filteredPrompts: [PromptUsage] {
+        sortedPrompts.filter { ListSearch.prompt($0, query: searchText) }
+    }
+
+    private var filteredSubagents: [SessionUsage] {
+        sortedSubagents.filter { ListSearch.session($0, query: searchText) }
+    }
+
+    private var searchPlaceholder: String {
+        if showsSubagentTabs, detailTab == .subagents {
+            return "Search subagents"
+        }
+        return "Search prompts"
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -110,32 +130,50 @@ struct SessionDetailView: View {
                 detailTab = .prompts
             }
         }
+        .task(id: session.conversationId) {
+            storageLocation = SessionLocationCatalog.resolve(
+                conversationId: session.conversationId,
+                parentConversationId: session.parentConversationId
+            )
+        }
     }
 
     private var controlRow: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        HStack(spacing: 8) {
             if showsSubagentTabs {
-                PillPicker(
-                    selection: $detailTab,
-                    options: SessionDetailTab.allCases.map { tab in
-                        PillPicker.Option(value: tab, title: tab.title)
-                    },
-                    size: .controlBar,
-                    fillsWidth: true
-                )
-                .onChange(of: detailTab) { _, _ in
-                    MenuBarPanelKeeper.keepOpen()
-                }
+                detailTabPicker
             }
 
-            HStack {
-                Spacer()
+            SectionSearchControl(
+                text: $searchText,
+                isPresented: $isSearchPresented,
+                placeholder: searchPlaceholder,
+                reduceMotion: reduceMotion
+            ) {
                 sessionSortPicker
                     .fixedSize()
             }
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
+    }
+
+    private var detailTabPicker: some View {
+        PillPicker(
+            selection: $detailTab,
+            options: SessionDetailTab.allCases.map { tab in
+                PillPicker.Option(value: tab, title: tab.title)
+            },
+            size: .compact,
+            style: .flat
+        )
+        .fixedSize()
+        .onChange(of: detailTab) { _, _ in
+            searchText = ""
+            isSearchPresented = false
+            MenuBarPanelKeeper.keepOpen()
+        }
     }
 
     private var sessionSortPicker: some View {
@@ -158,10 +196,16 @@ struct SessionDetailView: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                 .padding(.vertical, 24)
+        } else if filteredPrompts.isEmpty {
+            Text(ListSearch.noMatchesMessage(searchText))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                .padding(.vertical, 24)
         } else {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
-                    ForEach(sortedPrompts) { prompt in
+                    ForEach(filteredPrompts) { prompt in
                         PromptRowView(prompt: prompt, showSessionName: false)
                         Divider().opacity(0.35)
                     }
@@ -174,13 +218,24 @@ struct SessionDetailView: View {
 
     @ViewBuilder
     private var subagentsBody: some View {
+        if filteredSubagents.isEmpty {
+            Text(
+                subagents.isEmpty
+                    ? "No subagents for this session"
+                    : ListSearch.noMatchesMessage(searchText)
+            )
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            .padding(.vertical, 24)
+        } else {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 2) {
                 subagentCostSummary
                     .padding(.horizontal, 8)
                     .padding(.bottom, 6)
 
-                ForEach(sortedSubagents) { child in
+                ForEach(filteredSubagents) { child in
                     SessionRowView(
                         session: child.withDisplayedCost(child.ownCostCents),
                         windowCostCents: max(windowCostCents, session.costCents),
@@ -196,6 +251,7 @@ struct SessionDetailView: View {
             }
             .padding(.horizontal, 8)
             .padding(.bottom, 8)
+        }
         }
     }
 
@@ -237,6 +293,8 @@ struct SessionDetailView: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .privacyBlurred(blurSensitiveContent)
+
+                    sourcePathButton
                 }
                 Text(subtitle)
                     .font(.caption)
@@ -280,6 +338,39 @@ struct SessionDetailView: View {
             parts.append(location)
         }
         return parts.joined(separator: " · ")
+    }
+
+    private var sourcePathButton: some View {
+        Button(action: copySourcePath) {
+            HStack(spacing: 3) {
+                Image(systemName: didCopySourcePath ? "checkmark" : "doc.on.doc")
+                    .font(.caption2.weight(.semibold))
+                Text("Source path")
+                    .font(.caption2.weight(.medium))
+            }
+            .foregroundStyle(didCopySourcePath ? Color.accentColor : Color.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(Color.secondary.opacity(0.12), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(blurSensitiveContent)
+        .help(blurSensitiveContent ? "Disabled while content is blurred" : sourcePathHelp)
+    }
+
+    private var sourcePathHelp: String {
+        storageLocation?.copyHelp ?? "Copy conversation log path"
+    }
+
+    private func copySourcePath() {
+        let text = storageLocation?.copyablePath ?? session.conversationId
+        FileActions.copyToPasteboard(text)
+        didCopySourcePath = true
+        MenuBarPanelKeeper.keepOpen()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            didCopySourcePath = false
+        }
     }
 }
 

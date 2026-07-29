@@ -1,0 +1,22 @@
+# Changelog
+
+## 0.0.29
+
+- Copy conversation log source path from session detail
+- Open a model session in the Sessions tab and drill into its detail view
+- Change log in Settings with what's new for your version
+
+## 0.0.28
+
+- Opt-in community interaction stats for panel opens and tab changes
+- Fix panel ghost artifacts when dismissing the menu bar panel
+- Fix panel behavior when switching macOS fullscreen spaces
+- Community tab moved to a header trophy chip
+- Section search on Models, Sessions, Skills, and Feed tabs
+- Bench breakdown picker moved to the secondary control row
+
+## 0.0.27
+
+- Community nickname options including Cursor display name
+- Client version sent with community snapshots
+- Session subagent hierarchy in session detail

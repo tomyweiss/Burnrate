@@ -172,27 +172,29 @@ struct BenchView: View {
     // MARK: - Controls
 
     private var controls: some View {
-        VStack(spacing: 6) {
-            PillPicker(
-                selection: Binding(
-                    get: { breakdown },
-                    set: { breakdownRaw = $0.rawValue }
-                ),
-                options: BenchBreakdown.allCases.map { option in
-                    PillPicker.Option(value: option, title: option.title)
-                },
-                size: .compact,
-                fillsWidth: true
-            )
-            .onChange(of: breakdownRaw) { _, _ in
-                MenuBarPanelKeeper.keepOpen()
-            }
+        HStack(spacing: 8) {
+            breakdownPicker
+            Spacer(minLength: 8)
+            metricMenu(title: "X", selection: $xMetricRaw)
+            metricMenu(title: "Y", selection: $yMetricRaw)
+        }
+    }
 
-            HStack(spacing: 8) {
-                metricMenu(title: "X", selection: $xMetricRaw)
-                metricMenu(title: "Y", selection: $yMetricRaw)
-                Spacer()
-            }
+    private var breakdownPicker: some View {
+        PillPicker(
+            selection: Binding(
+                get: { breakdown },
+                set: { breakdownRaw = $0.rawValue }
+            ),
+            options: BenchBreakdown.allCases.map { option in
+                PillPicker.Option(value: option, title: option.title)
+            },
+            size: .compact,
+            style: .flat
+        )
+        .fixedSize()
+        .onChange(of: breakdownRaw) { _, _ in
+            MenuBarPanelKeeper.keepOpen()
         }
     }
 

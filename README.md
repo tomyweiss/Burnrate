@@ -86,7 +86,7 @@ Below that, six tabs slice the same window:
 | Tab | What it shows |
 |-----|---------------|
 | **Models** | Cost share per model; expand for token detail and per-session rows |
-| **Sessions** | Chats across models, with titles and workspace names from local Cursor data; drill into a session for its prompts and subagents |
+| **Sessions** | Chats across models, with titles and workspace names from local Cursor data; drill into a session for its prompts, subagents, and local conversation log path when available |
 | **Skills** | Cost per slash command, with total / average / median views |
 | **Community** | Opt-in anonymous 24h spend rank vs other sharers (share-to-view) |
 | **Feed** | Every prompt with its attributed cost, tokens, duration, and models |
@@ -182,16 +182,18 @@ signing secret key at `~/.config/burnrate/burnrate.key` (or set
 bash scripts/release.sh
 ```
 
-This checks out latest `main`, patch-bumps from the newest `v*` tag, creates
-and pushes the tag, then builds, signs, and uploads:
+This checks out latest `main`, patch-bumps from the newest `v*` tag, opens
+**Sources/Tokens/Resources/CHANGELOG.md** for you to review and approve (drafted
+from commits when the section is missing), commits the changelog, then tags,
+pushes, builds, signs, and uploads:
 
 - `Burnrate-x.y.z.zip`
 - `Burnrate-x.y.z.sha256`
 - `Burnrate-x.y.z.zip.minisig`
 
-Before releasing, commit your changes on `main`. Release notes are
-**auto-generated** from git commits since the previous `v*` tag and published
-to GitHub (shown in the in-app update banner).
+Before releasing, commit your changes on `main`. Release notes on GitHub and
+in the in-app change log come from the approved **CHANGELOG.md** section for
+that version (falling back to auto-generated commit list if missing).
 
 Use `--dry-run` to preview the next version without tagging or uploading. Use
 `--yes` to skip the confirmation prompt.
