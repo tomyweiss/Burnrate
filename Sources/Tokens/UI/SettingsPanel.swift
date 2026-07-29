@@ -12,8 +12,8 @@ struct SettingsPanel: View {
     var body: some View {
         if showsChangeLog {
             ChangeLogView(
-                version: AppIdentity.versionLabel,
-                items: ChangeLog.itemsForCurrentVersion(),
+                sections: ChangeLog.displaySections(),
+                backTitle: "Settings",
                 glassNamespace: glassNamespace,
                 onBack: { showsChangeLog = false }
             )
