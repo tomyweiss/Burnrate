@@ -14,6 +14,7 @@ struct CommunityView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task {
+            community.refreshCursorDisplayName()
             if community.isSharing {
                 await community.refreshRank()
             }
@@ -106,29 +107,58 @@ struct CommunityView: View {
     }
 
     private var nicknameRow: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "hare.fill")
-                .font(.caption)
-                .foregroundStyle(Color.orange)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: nicknameIcon)
+                    .font(.caption)
+                    .foregroundStyle(Color.orange)
 
-            Text(community.displayNickname)
-                .font(.subheadline.weight(.medium))
+                Text(community.displayNickname)
+                    .font(.subheadline.weight(.medium))
 
-            Spacer()
+                if community.nicknameSource == .random {
+                    Button {
+                        community.shuffleNickname()
+                    } label: {
+                        Image(systemName: "shuffle")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.mini)
+                    .help("Shuffle nickname")
+                }
 
-            Button("Shuffle") {
-                community.shuffleNickname()
+                Spacer()
             }
-            .font(.caption.weight(.medium))
-            .buttonStyle(.bordered)
-            .controlSize(.small)
 
-            Button("Clear") {
-                community.clearNickname()
+            Picker("Display name", selection: Binding(
+                get: { community.nicknameSource },
+                set: { newSource in
+                    guard newSource != community.nicknameSource else { return }
+                    switch newSource {
+                    case .cursor: community.useCursorName()
+                    case .random: community.shuffleNickname()
+                    case .anonymous: community.useAnonymous()
+                    }
+                }
+            )) {
+                if community.canUseCursorName, let cursorName = community.cursorDisplayName {
+                    Text("Cursor · \(cursorName)").tag(CommunityNicknameSource.cursor)
+                }
+                Text("Random").tag(CommunityNicknameSource.random)
+                Text("Anonymous").tag(CommunityNicknameSource.anonymous)
             }
-            .font(.caption.weight(.medium))
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            .pickerStyle(.segmented)
+            .disabled(!community.canUseCursorName && community.nicknameSource == .cursor)
+        }
+    }
+
+    private var nicknameIcon: String {
+        switch community.nicknameSource {
+        case .cursor: "person.crop.circle"
+        case .random: "hare.fill"
+        case .anonymous: "eye.slash"
         }
     }
 

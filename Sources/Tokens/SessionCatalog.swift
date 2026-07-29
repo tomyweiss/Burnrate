@@ -5,6 +5,7 @@ struct SessionMeta: Sendable, Hashable {
     let conversationId: String
     let name: String?
     let workspaceName: String?
+    let workspaceFSPath: String?
     let isCloud: Bool
     let isArchived: Bool
     let repoName: String?
@@ -14,6 +15,7 @@ struct SessionMeta: Sendable, Hashable {
         conversationId: String,
         name: String? = nil,
         workspaceName: String? = nil,
+        workspaceFSPath: String? = nil,
         isCloud: Bool = false,
         isArchived: Bool = false,
         repoName: String? = nil,
@@ -22,6 +24,7 @@ struct SessionMeta: Sendable, Hashable {
         self.conversationId = conversationId
         self.name = name
         self.workspaceName = workspaceName
+        self.workspaceFSPath = workspaceFSPath
         self.isCloud = isCloud || conversationId.hasPrefix("bc-")
         self.isArchived = isArchived
         self.repoName = repoName
@@ -83,11 +86,6 @@ enum SessionCatalog {
             )
     }
 
-    private static var cliChatsDir: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".cursor/chats")
-    }
-
     /// Resolve titles/workspaces for the given conversation IDs from local Cursor state.
     /// Checks the desktop IDE database, CLI store.db files, then cloud agent repository cache.
     static func lookup(conversationIds: Set<String>) -> [String: SessionMeta] {
@@ -112,6 +110,7 @@ enum SessionCatalog {
                     conversationId: id,
                     name: cloudMeta.name ?? existing.name,
                     workspaceName: existing.workspaceName,
+                    workspaceFSPath: existing.workspaceFSPath,
                     isCloud: true,
                     isArchived: cloudMeta.isArchived || existing.isArchived,
                     repoName: cloudMeta.repoName ?? existing.repoName,
@@ -133,6 +132,7 @@ enum SessionCatalog {
                     conversationId: id,
                     name: existing.name,
                     workspaceName: existing.workspaceName,
+                    workspaceFSPath: existing.workspaceFSPath,
                     isCloud: true,
                     isArchived: existing.isArchived,
                     repoName: existing.repoName,
@@ -174,6 +174,7 @@ enum SessionCatalog {
                     conversationId: id,
                     name: stringValue(composer["name"]),
                     workspaceName: workspaceName(from: composer["workspaceIdentifier"]),
+                    workspaceFSPath: workspaceFSPath(from: composer["workspaceIdentifier"]),
                     isCloud: id.hasPrefix("bc-"),
                     isArchived: boolValue(composer["isArchived"])
                 )
@@ -193,6 +194,7 @@ enum SessionCatalog {
                 conversationId: id,
                 name: stringValue(root["name"]),
                 workspaceName: workspaceName(from: root["workspaceIdentifier"]),
+                workspaceFSPath: workspaceFSPath(from: root["workspaceIdentifier"]),
                 isCloud: id.hasPrefix("bc-"),
                 isArchived: boolValue(root["isArchived"])
             )
@@ -252,42 +254,12 @@ enum SessionCatalog {
 
     // MARK: - CLI lookup
 
-    private static func normalizeID(_ id: String) -> String {
-        id.replacingOccurrences(of: "-", with: "").lowercased()
-    }
-
     private static func lookupCLI(conversationIds: Set<String>) -> [String: SessionMeta] {
-        let chatsDir = cliChatsDir
-        guard FileManager.default.fileExists(atPath: chatsDir.path) else { return [:] }
-
-        guard let workspaceDirs = try? FileManager.default.contentsOfDirectory(
-            at: chatsDir,
-            includingPropertiesForKeys: nil,
-            options: .skipsHiddenFiles
-        ) else { return [:] }
-
-        let wanted = Dictionary(uniqueKeysWithValues: conversationIds.map { (normalizeID($0), $0) })
-        var index: [String: URL] = [:]
-
-        for wsDir in workspaceDirs {
-            guard let sessions = try? FileManager.default.contentsOfDirectory(
-                at: wsDir,
-                includingPropertiesForKeys: nil,
-                options: .skipsHiddenFiles
-            ) else { continue }
-            for sessionDir in sessions {
-                let norm = normalizeID(sessionDir.lastPathComponent)
-                if wanted[norm] != nil {
-                    index[norm] = sessionDir.appendingPathComponent("store.db")
-                }
-            }
-        }
-
         var result: [String: SessionMeta] = [:]
-        for (norm, originalID) in wanted {
-            guard let dbURL = index[norm] else { continue }
-            if let meta = readCLIStoreMeta(conversationId: originalID, dbPath: dbURL) {
-                result[originalID] = meta
+        for conversationId in conversationIds {
+            guard let dbURL = CLIChatStore.storeURL(for: conversationId) else { continue }
+            if let meta = readCLIStoreMeta(conversationId: conversationId, dbPath: dbURL) {
+                result[conversationId] = meta
             }
         }
         return result
@@ -351,20 +323,22 @@ enum SessionCatalog {
         return false
     }
 
-    private static func workspaceName(from value: Any?) -> String? {
-        guard let dict = value as? [String: Any] else { return nil }
-        if let uri = dict["uri"] as? [String: Any] {
-            if let fsPath = uri["fsPath"] as? String, !fsPath.isEmpty {
-                return URL(fileURLWithPath: fsPath).lastPathComponent
-            }
-            if let path = uri["path"] as? String, !path.isEmpty {
-                return URL(fileURLWithPath: path).lastPathComponent
-            }
+    private static func workspaceFSPath(from value: Any?) -> String? {
+        guard let dict = value as? [String: Any],
+              let uri = dict["uri"] as? [String: Any]
+        else { return nil }
+        if let fsPath = uri["fsPath"] as? String, !fsPath.isEmpty {
+            return fsPath
         }
-        if let id = dict["id"] as? String, id != "empty-window", !id.isEmpty {
-            return nil
+        if let path = uri["path"] as? String, !path.isEmpty {
+            return path
         }
         return nil
+    }
+
+    private static func workspaceName(from value: Any?) -> String? {
+        guard let fsPath = workspaceFSPath(from: value) else { return nil }
+        return URL(fileURLWithPath: fsPath).lastPathComponent
     }
 
     private static func readItemValue(database: OpaquePointer?, key: String) -> String? {

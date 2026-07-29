@@ -55,6 +55,10 @@ struct UsagePanel: View {
     @AppStorage("modelsCostMetric") private var modelsMetricRaw = CostMetric.total.rawValue
     @AppStorage("skillsCostMetric") private var skillsMetricRaw = CostMetric.total.rawValue
     @AppStorage("sessionsSort") private var sessionsSortRaw = SessionPromptSort.newest.rawValue
+    @State private var sectionSearchText = ""
+    @State private var isSectionSearchPresented = false
+    @State private var showsChangeLog = false
+    @State private var changeLogVersion: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var panelTab: Binding<UsageTab> {
@@ -65,6 +69,18 @@ struct UsagePanel: View {
     }
 
     var body: some View {
+        if showsChangeLog {
+            ChangeLogView(
+                version: changeLogDisplayVersion,
+                items: changeLogItems,
+                backTitle: "Usage",
+                glassNamespace: glassNamespace,
+                onBack: {
+                    showsChangeLog = false
+                    changeLogVersion = nil
+                }
+            )
+        } else {
         VStack(spacing: 0) {
             if !store.hasCompletedFetch, store.isLoading {
                 UsageSkeletonView()
@@ -91,7 +107,27 @@ struct UsagePanel: View {
         .onDisappear {
             sessionPath = []
             selectedSkill = nil
+            showsChangeLog = false
+            changeLogVersion = nil
         }
+        }
+    }
+
+    private var changeLogDisplayVersion: String {
+        changeLogVersion ?? AppIdentity.versionLabel
+    }
+
+    private var changeLogItems: [String] {
+        if let changeLogVersion {
+            return ChangeLog.items(for: changeLogVersion)
+        }
+        return ChangeLog.itemsForCurrentVersion()
+    }
+
+    private func openChangeLog(version: String? = nil) {
+        changeLogVersion = version
+        showsChangeLog = true
+        MenuBarPanelKeeper.keepOpen()
     }
 
     private var header: some View {
@@ -263,40 +299,57 @@ struct UsagePanel: View {
                     LazyVStack(alignment: .leading, spacing: 2) {
                         switch panelTab.wrappedValue {
                         case .models:
-                            ForEach(displayedModels) { model in
-                                ModelRowView(
-                                    model: model,
-                                    windowCostCents: store.snapshot.windowCostCents,
-                                    isExpanded: expandedModels.contains(model.id),
-                                    reduceMotion: reduceMotion,
-                                    showLocationSubtitle: settings.showLocationSubtitle,
-                                    hideArchivedSessions: settings.hideArchivedSessions,
-                                    metric: modelsMetric,
-                                    metricMaxDollars: maxModelMetricDollars,
-                                    onToggle: { toggleExpanded(model.id) }
+                            if filteredModels.isEmpty {
+                                tabEmptyText(
+                                    ListSearch.isActive(sectionSearchText)
+                                        ? ListSearch.noMatchesMessage(sectionSearchText)
+                                        : "No models in this window"
                                 )
-                                Divider().opacity(0.35)
+                            } else {
+                                ForEach(filteredModels) { model in
+                                    ModelRowView(
+                                        model: model,
+                                        windowCostCents: store.snapshot.windowCostCents,
+                                        isExpanded: expandedModels.contains(model.id),
+                                        reduceMotion: reduceMotion,
+                                        showLocationSubtitle: settings.showLocationSubtitle,
+                                        hideArchivedSessions: settings.hideArchivedSessions,
+                                        metric: modelsMetric,
+                                        metricMaxDollars: maxModelMetricDollars,
+                                        sessionSearchQuery: sectionSearchText,
+                                        onToggle: { toggleExpanded(model.id) },
+                                        onOpenSession: openSession
+                                    )
+                                    Divider().opacity(0.35)
+                                }
                             }
                         case .sessions:
-                            ForEach(visibleSessions) { session in
-                                SessionRowView(
-                                    session: session,
-                                    windowCostCents: store.snapshot.windowCostCents,
-                                    showModelChips: true,
-                                    showShareBar: true,
-                                    showLocationSubtitle: settings.showLocationSubtitle,
-                                    onOpen: {
-                                        sessionPath = [session]
-                                        MenuBarPanelKeeper.keepOpen()
-                                    }
+                            if filteredSessions.isEmpty {
+                                tabEmptyText(
+                                    ListSearch.isActive(sectionSearchText)
+                                        ? ListSearch.noMatchesMessage(sectionSearchText)
+                                        : "No sessions in this window"
                                 )
-                                Divider().opacity(0.35)
+                            } else {
+                                ForEach(filteredSessions) { session in
+                                    SessionRowView(
+                                        session: session,
+                                        windowCostCents: store.snapshot.windowCostCents,
+                                        showModelChips: true,
+                                        showShareBar: true,
+                                        showLocationSubtitle: settings.showLocationSubtitle,
+                                        onOpen: { openSession(session) }
+                                    )
+                                    Divider().opacity(0.35)
+                                }
                             }
                         case .skills:
                             if store.snapshot.skills.isEmpty {
                                 tabEmptyText("No skill invocations in this window")
+                            } else if filteredSkills.isEmpty {
+                                tabEmptyText(ListSearch.noMatchesMessage(sectionSearchText))
                             } else {
-                                ForEach(displayedSkills) { skill in
+                                ForEach(filteredSkills) { skill in
                                     SkillRowView(
                                         skill: skill,
                                         windowCostCents: store.snapshot.windowCostCents,
@@ -313,14 +366,16 @@ struct UsagePanel: View {
                         case .feed:
                             if store.snapshot.prompts.isEmpty {
                                 tabEmptyText("No prompts found for this window")
+                            } else if filteredPrompts.isEmpty {
+                                tabEmptyText(ListSearch.noMatchesMessage(sectionSearchText))
                             } else {
-                                ForEach(store.snapshot.prompts) { prompt in
+                                ForEach(filteredPrompts) { prompt in
                                     PromptRowView(prompt: prompt)
                                     Divider().opacity(0.35)
                                 }
                             }
                         case .bench:
-                            EmptyView() // Rendered outside the scroll view.
+                            EmptyView()
                         }
                     }
                     .padding(.horizontal, 8)
@@ -347,12 +402,26 @@ struct UsagePanel: View {
             .onChange(of: panelTabRaw) { oldTab, newTab in
                 MenuBarPanelKeeper.keepOpen()
                 guard oldTab != newTab else { return }
+                sectionSearchText = ""
+                isSectionSearchPresented = false
                 if let tab = UsageTab(rawValue: newTab) {
                     onUsageTabChange(tab)
                 }
             }
 
-            if hasTrailingControl {
+            if showsSectionSearch {
+                SectionSearchControl(
+                    text: $sectionSearchText,
+                    isPresented: $isSectionSearchPresented,
+                    placeholder: searchPlaceholder,
+                    reduceMotion: reduceMotion
+                ) {
+                    if hasTrailingControl {
+                        trailingControlPicker
+                            .fixedSize()
+                    }
+                }
+            } else if hasTrailingControl {
                 HStack {
                     Spacer()
                     trailingControlPicker
@@ -367,15 +436,51 @@ struct UsagePanel: View {
         .animation(reduceMotion ? nil : .snappy, value: panelTabRaw)
     }
 
+    private var showsSectionSearch: Bool {
+        panelTab.wrappedValue != .bench
+    }
+
     private var hasTrailingControl: Bool {
         switch panelTab.wrappedValue {
         case .models, .sessions:
             return true
         case .skills:
             return !store.snapshot.skills.isEmpty
-        case .feed, .bench:
+        case .feed:
+            return false
+        case .bench:
             return false
         }
+    }
+
+    private var searchPlaceholder: String {
+        switch panelTab.wrappedValue {
+        case .models: return "Search models or sessions"
+        case .sessions: return "Search sessions"
+        case .skills: return "Search skills"
+        case .feed: return "Search prompts"
+        case .bench: return ""
+        }
+    }
+
+    private var filteredModels: [ModelUsage] {
+        guard ListSearch.isActive(sectionSearchText) else { return displayedModels }
+        return displayedModels.filter { ListSearch.model($0, query: sectionSearchText) }
+    }
+
+    private var filteredSessions: [SessionUsage] {
+        guard ListSearch.isActive(sectionSearchText) else { return visibleSessions }
+        return visibleSessions.filter { ListSearch.session($0, query: sectionSearchText) }
+    }
+
+    private var filteredSkills: [SkillUsage] {
+        guard ListSearch.isActive(sectionSearchText) else { return displayedSkills }
+        return displayedSkills.filter { ListSearch.skill($0, query: sectionSearchText) }
+    }
+
+    private var filteredPrompts: [PromptUsage] {
+        guard ListSearch.isActive(sectionSearchText) else { return store.snapshot.prompts }
+        return store.snapshot.prompts.filter { ListSearch.prompt($0, query: sectionSearchText) }
     }
 
     @ViewBuilder
@@ -389,7 +494,9 @@ struct UsagePanel: View {
             EmptyView()
         case .sessions:
             sessionsSortPicker
-        case .feed, .bench:
+        case .bench:
+            EmptyView()
+        case .feed:
             EmptyView()
         }
     }
@@ -530,6 +637,16 @@ struct UsagePanel: View {
         }
     }
 
+    private func openSession(_ session: SessionUsage) {
+        let resolved = store.snapshot.session(id: session.conversationId) ?? session
+        panelTabRaw = UsageTab.sessions.rawValue
+        sectionSearchText = ""
+        isSectionSearchPresented = false
+        sessionPath = [resolved]
+        onUsageTabChange(.sessions)
+        MenuBarPanelKeeper.keepOpen()
+    }
+
     private func toggleExpanded(_ modelID: String) {
         if reduceMotion {
             if expandedModels.contains(modelID) {
@@ -619,13 +736,13 @@ struct UsagePanel: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Update \(update.version) available")
                     .font(.caption.weight(.semibold))
-                if ReleaseNotesView.hasContent(update.notes) {
-                    ReleaseNotesView(notes: update.notes, lineLimit: 3, font: .caption2)
-                } else {
-                    Text("Install to update — Burnrate will restart briefly.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                Button("View change log") {
+                    openChangeLog(version: update.version)
                 }
+                .buttonStyle(.plain)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.blue)
+                .help("See what's new in version \(update.version)")
             }
             Spacer(minLength: 8)
             Button(updates.isInstalling ? "Installing…" : "Install") {

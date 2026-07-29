@@ -7,6 +7,7 @@ final class CommunityStore {
     private(set) var rank: CommunityRankResponse?
     private(set) var isLoading = false
     private(set) var lastError: String?
+    private(set) var cursorDisplayName: String?
 
     private let settings: SettingsStore
     private let client: CommunityClient
@@ -23,19 +24,40 @@ final class CommunityStore {
         self.settings = settings
         self.interactionTracker = interactionTracker
         self.client = client
+        refreshCursorDisplayName()
     }
 
     var isSharing: Bool { settings.shareCommunityUsage }
 
+    var nicknameSource: CommunityNicknameSource {
+        settings.communityNicknameSource
+    }
+
     var displayNickname: String {
-        let trimmed = settings.communityNickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmed.isEmpty ? "Anonymous" : trimmed
+        resolvedUploadNickname() ?? "Anonymous"
+    }
+
+    var canUseCursorName: Bool {
+        cursorDisplayName != nil
+    }
+
+    func refreshCursorDisplayName() {
+        cursorDisplayName = TokenProvider.loadCursorDisplayName()
     }
 
     func enableSharing() async {
+        refreshCursorDisplayName()
         let participantId = settings.ensureCommunityParticipantId()
-        if settings.communityNickname == nil {
+        if cursorDisplayName != nil {
+            settings.communityNicknameSource = .cursor
+        } else if settings.communityNicknameSource == .random,
+                  settings.communityNickname == nil {
             settings.communityNickname = NicknameGenerator.random()
+        } else if settings.communityNicknameSource == .cursor {
+            settings.communityNicknameSource = .random
+            if settings.communityNickname == nil {
+                settings.communityNickname = NicknameGenerator.random()
+            }
         }
         settings.shareCommunityUsage = true
         lastUploadAt = nil
@@ -58,18 +80,22 @@ final class CommunityStore {
         interactionTracker.reset()
     }
 
-    func shuffleNickname() {
-        settings.communityNickname = NicknameGenerator.random()
-        if settings.shareCommunityUsage {
-            Task { await uploadSnapshotIfNeeded(force: true) }
-        }
+    func useCursorName() {
+        refreshCursorDisplayName()
+        settings.communityNicknameSource = .cursor
+        uploadIfSharing()
     }
 
-    func clearNickname() {
+    func shuffleNickname() {
+        settings.communityNicknameSource = .random
+        settings.communityNickname = NicknameGenerator.random()
+        uploadIfSharing()
+    }
+
+    func useAnonymous() {
+        settings.communityNicknameSource = .anonymous
         settings.communityNickname = nil
-        if settings.shareCommunityUsage {
-            Task { await uploadSnapshotIfNeeded(force: true) }
-        }
+        uploadIfSharing()
     }
 
     func refreshRank() async {
@@ -93,8 +119,15 @@ final class CommunityStore {
     /// Called after UsageStore completes a successful refresh.
     func handleUsageRefreshIfNeeded() async {
         guard settings.shareCommunityUsage else { return }
+        refreshCursorDisplayName()
         await uploadSnapshotIfNeeded(force: false)
         await refreshRank()
+    }
+
+    private func uploadIfSharing() {
+        if settings.shareCommunityUsage {
+            Task { await uploadSnapshotIfNeeded(force: true) }
+        }
     }
 
     private func uploadSnapshotIfNeeded(force: Bool) async {
@@ -114,6 +147,19 @@ final class CommunityStore {
             lastError = nil
         } catch {
             lastError = error.localizedDescription
+        }
+    }
+
+    private func resolvedUploadNickname() -> String? {
+        switch settings.communityNicknameSource {
+        case .cursor:
+            return cursorDisplayName
+        case .random:
+            let nickname = settings.communityNickname?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return (nickname?.isEmpty == false) ? nickname : nil
+        case .anonymous:
+            return nil
         }
     }
 
@@ -143,15 +189,13 @@ final class CommunityStore {
             )
         }
 
-        let nickname = settings.communityNickname?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedNickname = (nickname?.isEmpty == false) ? nickname : nil
-
         return CommunityPayloadBuilder.build(
             participantId: participantId,
-            nickname: resolvedNickname,
+            nickname: resolvedUploadNickname(),
             events: costEvents,
             now: now,
-            interactionStats: interactionTracker.snapshot()
+            interactionStats: interactionTracker.snapshot(),
+            clientVersion: AppIdentity.versionLabel
         )
     }
 }

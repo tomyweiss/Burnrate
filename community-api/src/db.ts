@@ -49,11 +49,14 @@ export async function migrate(): Promise<void> {
       spend_cents_24h INTEGER NOT NULL DEFAULT 0,
       model_breakdown JSONB NOT NULL DEFAULT '[]',
       interaction_stats JSONB NOT NULL DEFAULT '{"panelOpens":0,"tabChanges":{}}',
+      client_version TEXT,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS participants_updated_at_idx ON participants (updated_at);
     ALTER TABLE participants
       ADD COLUMN IF NOT EXISTS interaction_stats JSONB NOT NULL DEFAULT '{"panelOpens":0,"tabChanges":{}}';
+    ALTER TABLE participants
+      ADD COLUMN IF NOT EXISTS client_version TEXT;
   `);
 }
 
@@ -63,7 +66,13 @@ export interface ParticipantRow {
   spend_cents_24h: number;
   model_breakdown: { name: string; spendCents: number }[];
   interaction_stats: { panelOpens: number; tabChanges: Record<string, number> };
+  client_version: string | null;
   updated_at: Date;
+}
+
+export interface ParticipantUpsertExtras {
+  interactionStats?: { panelOpens: number; tabChanges: Record<string, number> } | null;
+  clientVersion?: string | null;
 }
 
 export async function upsertParticipant(
@@ -71,25 +80,32 @@ export async function upsertParticipant(
   nickname: string | null,
   spendCents: number,
   modelBreakdown: { name: string; spendCents: number }[],
-  interactionStats: { panelOpens: number; tabChanges: Record<string, number> } | null = null
+  extras: ParticipantUpsertExtras = {}
 ): Promise<void> {
   const db = getPool();
-  if (interactionStats) {
+  const interactionStats = extras.interactionStats ?? null;
+  const clientVersion = extras.clientVersion ?? null;
+
+  if (interactionStats || clientVersion) {
     await db.query(
-      `INSERT INTO participants (id, nickname, spend_cents_24h, model_breakdown, interaction_stats, updated_at)
-       VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, NOW())
+      `INSERT INTO participants (
+         id, nickname, spend_cents_24h, model_breakdown, interaction_stats, client_version, updated_at
+       )
+       VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, NOW())
        ON CONFLICT (id) DO UPDATE SET
          nickname = EXCLUDED.nickname,
          spend_cents_24h = EXCLUDED.spend_cents_24h,
          model_breakdown = EXCLUDED.model_breakdown,
-         interaction_stats = EXCLUDED.interaction_stats,
+         interaction_stats = COALESCE(EXCLUDED.interaction_stats, participants.interaction_stats),
+         client_version = COALESCE(EXCLUDED.client_version, participants.client_version),
          updated_at = NOW()`,
       [
         id,
         nickname,
         spendCents,
         JSON.stringify(modelBreakdown),
-        JSON.stringify(interactionStats),
+        JSON.stringify(interactionStats ?? { panelOpens: 0, tabChanges: {} }),
+        clientVersion,
       ]
     );
     return;
@@ -116,7 +132,7 @@ export async function deleteParticipant(id: string): Promise<boolean> {
 export async function fetchFreshParticipants(staleHours = 36): Promise<ParticipantRow[]> {
   const db = getPool();
   const result = await db.query<ParticipantRow>(
-    `SELECT id, nickname, spend_cents_24h, model_breakdown, updated_at
+    `SELECT id, nickname, spend_cents_24h, model_breakdown, interaction_stats, client_version, updated_at
      FROM participants
      WHERE updated_at >= NOW() - ($1::text || ' hours')::interval
      ORDER BY spend_cents_24h DESC, updated_at ASC`,

@@ -9,7 +9,8 @@ public enum CommunityPayloadBuilder {
         nickname: String?,
         events: [CommunityCostEvent],
         now: Date = Date(),
-        interactionStats: CommunityInteractionStats? = nil
+        interactionStats: CommunityInteractionStats? = nil,
+        clientVersion: String? = nil
     ) -> CommunitySnapshotPayload {
         let startMs = now.addingTimeInterval(-Double(windowHours) * 3600).timeIntervalSince1970 * 1000
         let endMs = now.timeIntervalSince1970 * 1000
@@ -34,7 +35,8 @@ public enum CommunityPayloadBuilder {
             windowHours: windowHours,
             spendCents: Int(totalCents.rounded()),
             models: models,
-            interactionStats: interactionStats
+            interactionStats: interactionStats,
+            clientVersion: clientVersion
         )
     }
 }

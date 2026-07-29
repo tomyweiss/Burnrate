@@ -4,6 +4,7 @@ import {
   competitionRanks,
   isValidUUID,
   validateInteractionStats,
+  validateClientVersion,
 } from "./rank.js";
 
 describe("competitionRanks", () => {
@@ -80,5 +81,17 @@ describe("validateInteractionStats", () => {
     expect(
       validateInteractionStats({ panelOpens: 0, tabChanges: { models: 1.5 } })
     ).toBe("Invalid interactionStats.tabChanges value");
+  });
+});
+
+describe("validateClientVersion", () => {
+  it("accepts semver labels", () => {
+    expect(validateClientVersion("0.0.25")).toBeNull();
+    expect(validateClientVersion("0.0.25-dev")).toBeNull();
+  });
+
+  it("rejects empty or too long", () => {
+    expect(validateClientVersion("")).toBe("Invalid clientVersion");
+    expect(validateClientVersion("x".repeat(33))).toBe("Invalid clientVersion");
   });
 });

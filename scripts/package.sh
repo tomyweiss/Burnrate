@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+source "$ROOT/scripts/changelog-release.sh"
 
 generate_release_notes() {
   local version="$1"
@@ -91,6 +92,14 @@ else
   DISPLAY_NAME="Burnrate"
 fi
 
+if [[ "$RELEASE" -eq 1 && "${CHANGELOG_APPROVED:-}" != "1" ]]; then
+  approve_changelog_for_release "$VERSION" || exit 1
+  if ! git diff --quiet -- "$CHANGELOG_FILE" 2>/dev/null; then
+    echo "Changelog was updated. Commit Sources/Tokens/Resources/CHANGELOG.md before releasing." >&2
+    exit 1
+  fi
+fi
+
 APP_DIR="$BUILD_DIR/App/${APP_NAME}.app"
 CONTENTS="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS/MacOS"
@@ -118,6 +127,10 @@ chmod +x "$MACOS_DIR/${EXECUTABLE_NAME}"
 
 if [[ -f "$ROOT/Resources/AppIcon.icns" ]]; then
   cp "$ROOT/Resources/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
+fi
+
+if [[ -f "$ROOT/Sources/Tokens/Resources/CHANGELOG.md" ]]; then
+  cp "$ROOT/Sources/Tokens/Resources/CHANGELOG.md" "$RESOURCES_DIR/CHANGELOG.md"
 fi
 
 # Remove old Tokens.app install if present
@@ -212,6 +225,8 @@ if [[ "$RELEASE" -eq 1 ]]; then
   if [[ -n "${RELEASE_NOTES_FILE:-}" && -f "$RELEASE_NOTES_FILE" && -s "$RELEASE_NOTES_FILE" ]]; then
     NOTES_PATH="$RELEASE_NOTES_FILE"
     echo "Using release notes from ${NOTES_PATH}"
+  elif write_release_notes_from_changelog "$VERSION" "$NOTES_PATH"; then
+    echo "Using approved changelog → ${NOTES_PATH}"
   else
     generate_release_notes "$VERSION" "$NOTES_PATH"
     echo "Generated release notes from commits → ${NOTES_PATH}"

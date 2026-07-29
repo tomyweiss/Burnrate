@@ -82,3 +82,23 @@ import Testing
     )
     #expect(payload.interactionStats == stats)
 }
+
+@Test func cursorDisplayNameParsesScopedProfile() {
+    let json = #"{"displayName":"Tom Weiss","pictureUrl":"https://example.com/x"}"#
+    #expect(CursorDisplayName.parseScopedProfileJSON(json) == "Tom Weiss")
+}
+
+@Test func cursorDisplayNameSanitizeRejectsEmpty() {
+    #expect(CursorDisplayName.sanitize("  ") == nil)
+    #expect(CursorDisplayName.sanitize("Ada") == "Ada")
+}
+
+@Test func payloadBuilderIncludesClientVersion() {
+    let payload = CommunityPayloadBuilder.build(
+        participantId: "test-uuid",
+        nickname: nil,
+        events: [],
+        clientVersion: "0.0.25-dev"
+    )
+    #expect(payload.clientVersion == "0.0.25-dev")
+}

@@ -28,7 +28,9 @@ struct ModelRowView: View {
     /// Highest value of the selected per-unit metric; scales the bar in
     /// avg/median modes.
     var metricMaxDollars: Double = 0
+    var sessionSearchQuery: String = ""
     let onToggle: () -> Void
+    var onOpenSession: ((SessionUsage) -> Void)? = nil
 
     @State private var hovering = false
 
@@ -52,8 +54,13 @@ struct ModelRowView: View {
     }
 
     private var visibleSessions: [SessionUsage] {
-        guard hideArchivedSessions else { return model.sessions }
-        return model.sessions.filter { !$0.isArchived }
+        var sessions = hideArchivedSessions
+            ? model.sessions.filter { !$0.isArchived }
+            : model.sessions
+        if ListSearch.isActive(sessionSearchQuery) {
+            sessions = sessions.filter { ListSearch.session($0, query: sessionSearchQuery) }
+        }
+        return sessions
     }
 
     var body: some View {
@@ -105,7 +112,10 @@ struct ModelRowView: View {
                             windowCostCents: windowCostCents,
                             showModelChips: false,
                             showShareBar: false,
-                            showLocationSubtitle: showLocationSubtitle
+                            showLocationSubtitle: showLocationSubtitle,
+                            onOpen: onOpenSession.map { open in
+                                { open(session) }
+                            }
                         )
                     }
                 }

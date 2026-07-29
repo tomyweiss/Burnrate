@@ -7,7 +7,22 @@ struct SettingsPanel: View {
     var glassNamespace: Namespace.ID
     var onBack: () -> Void
 
+    @State private var showsChangeLog = false
+
     var body: some View {
+        if showsChangeLog {
+            ChangeLogView(
+                version: AppIdentity.versionLabel,
+                items: ChangeLog.itemsForCurrentVersion(),
+                glassNamespace: glassNamespace,
+                onBack: { showsChangeLog = false }
+            )
+        } else {
+            settingsForm
+        }
+    }
+
+    private var settingsForm: some View {
         VStack(spacing: 0) {
             ZStack {
                 Text("Settings")
@@ -165,11 +180,21 @@ struct SettingsPanel: View {
                                 .font(.caption)
                                 .foregroundStyle(updates.lastError == nil ? Color.secondary : Color.red)
                         }
-
-                        Text("Checks hourly from GitHub.")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
                     }
+
+                    Button {
+                        showsChangeLog = true
+                        MenuBarPanelKeeper.keepOpen()
+                    } label: {
+                        HStack {
+                            Text("Change log")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .buttonStyle(.plain)
                 }
 
                 if settings.usageTimelinePreset == .thisBilling {
