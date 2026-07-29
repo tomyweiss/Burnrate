@@ -58,7 +58,8 @@ struct UsagePanel: View {
     @State private var sectionSearchText = ""
     @State private var isSectionSearchPresented = false
     @State private var showsChangeLog = false
-    @State private var changeLogVersion: String?
+    @State private var changeLogHighlightVersion: String?
+    @State private var changeLogReleaseNotes: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var panelTab: Binding<UsageTab> {
@@ -71,13 +72,13 @@ struct UsagePanel: View {
     var body: some View {
         if showsChangeLog {
             ChangeLogView(
-                version: changeLogDisplayVersion,
-                items: changeLogItems,
+                sections: changeLogSections,
                 backTitle: "Usage",
                 glassNamespace: glassNamespace,
                 onBack: {
                     showsChangeLog = false
-                    changeLogVersion = nil
+                    changeLogHighlightVersion = nil
+                    changeLogReleaseNotes = nil
                 }
             )
         } else {
@@ -107,25 +108,20 @@ struct UsagePanel: View {
         .onDisappear {
             sessionPath = []
             selectedSkill = nil
-            showsChangeLog = false
-            changeLogVersion = nil
         }
         }
     }
 
-    private var changeLogDisplayVersion: String {
-        changeLogVersion ?? AppIdentity.versionLabel
+    private var changeLogSections: [ChangeLogDisplaySection] {
+        ChangeLog.displaySections(
+            highlightVersion: changeLogHighlightVersion,
+            releaseNotes: changeLogReleaseNotes
+        )
     }
 
-    private var changeLogItems: [String] {
-        if let changeLogVersion {
-            return ChangeLog.items(for: changeLogVersion)
-        }
-        return ChangeLog.itemsForCurrentVersion()
-    }
-
-    private func openChangeLog(version: String? = nil) {
-        changeLogVersion = version
+    private func openChangeLog(version: String? = nil, releaseNotes: String? = nil) {
+        changeLogHighlightVersion = version
+        changeLogReleaseNotes = releaseNotes
         showsChangeLog = true
         MenuBarPanelKeeper.keepOpen()
     }
@@ -737,7 +733,7 @@ struct UsagePanel: View {
                 Text("Update \(update.version) available")
                     .font(.caption.weight(.semibold))
                 Button("View change log") {
-                    openChangeLog(version: update.version)
+                    openChangeLog(version: update.version, releaseNotes: update.notes)
                 }
                 .buttonStyle(.plain)
                 .font(.caption2.weight(.medium))

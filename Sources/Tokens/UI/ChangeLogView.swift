@@ -1,11 +1,16 @@
 import SwiftUI
 
 struct ChangeLogView: View {
-    let version: String
-    let items: [String]
+    let sections: [ChangeLogDisplaySection]
     var backTitle: String = "Settings"
     var glassNamespace: Namespace.ID
     var onBack: () -> Void
+
+    private var headerVersion: String {
+        sections.first(where: \.isHighlighted)?.version
+            ?? sections.first?.version
+            ?? ""
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -26,10 +31,12 @@ struct ChangeLogView: View {
 
                     Spacer()
 
-                    Text(version)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
+                    if !headerVersion.isEmpty {
+                        Text(headerVersion)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
                 }
             }
             .padding(.horizontal, 14)
@@ -38,37 +45,59 @@ struct ChangeLogView: View {
             Divider()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("What's new in \(version)")
-                        .font(.subheadline.weight(.semibold))
+                if sections.isEmpty {
+                    Text("No release notes available.")
+                        .font(.callout)
                         .foregroundStyle(.secondary)
-
-                    if items.isEmpty {
-                        Text("No release notes for this version.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .padding(.vertical, 24)
-                    } else {
-                        VStack(alignment: .leading, spacing: 10) {
-                            ForEach(items, id: \.self) { item in
-                                HStack(alignment: .top, spacing: 8) {
-                                    Text("•")
-                                        .font(.callout)
-                                        .foregroundStyle(.secondary)
-                                    Text(item)
-                                        .font(.callout)
-                                        .foregroundStyle(.primary)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                            }
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 24)
+                } else {
+                    VStack(alignment: .leading, spacing: 20) {
+                        ForEach(sections) { section in
+                            sectionBlock(section)
                         }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
             }
         }
         .onAppear { MenuBarPanelKeeper.keepOpen() }
+    }
+
+    @ViewBuilder
+    private func sectionBlock(_ section: ChangeLogDisplaySection) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(sectionTitle(section))
+                .font(section.isHighlighted ? .subheadline.weight(.semibold) : .caption.weight(.semibold))
+                .foregroundStyle(section.isHighlighted ? Color.primary : Color.secondary)
+
+            if section.items.isEmpty {
+                Text("No notes for this version.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(section.items, id: \.self) { item in
+                        HStack(alignment: .top, spacing: 8) {
+                            Text("•")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                            Text(item)
+                                .font(.callout)
+                                .foregroundStyle(.primary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func sectionTitle(_ section: ChangeLogDisplaySection) -> String {
+        if section.isHighlighted {
+            return "What's new in \(section.version)"
+        }
+        return section.version
     }
 }
