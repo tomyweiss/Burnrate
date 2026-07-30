@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.32
+
+- Fix changelog crash by removing Liquid Glass and make usage tabs configurable. (6c84c1f)
+
 ## 0.0.31
 
 - Fix Settings change log crash from mismatched glass effect IDs
