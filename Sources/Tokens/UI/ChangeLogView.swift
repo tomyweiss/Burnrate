@@ -3,7 +3,6 @@ import SwiftUI
 struct ChangeLogView: View {
     let sections: [ChangeLogDisplaySection]
     var backTitle: String = "Settings"
-    var glassNamespace: Namespace.ID
     var onBack: () -> Void
 
     private var headerVersion: String {
@@ -12,47 +11,11 @@ struct ChangeLogView: View {
             ?? ""
     }
 
-    /// Matches the header back button in the parent panel so Liquid Glass can
-    /// morph between Settings and this drill-in without tripping internal asserts.
-    private var backGlassEffectID: String {
-        switch backTitle {
-        case "Settings": "settings-header-back"
-        case "Usage": "usage-changelog-back"
-        default: "changelog-back"
-        }
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            ZStack {
-                Text("Change log")
-                    .font(.headline)
-
-                GlassEffectContainer {
-                    HStack {
-                        Button {
-                            onBack()
-                            MenuBarPanelKeeper.keepOpen()
-                        } label: {
-                            Label(backTitle, systemImage: "chevron.left")
-                        }
-                        .buttonStyle(.borderless)
-                        .glassEffect(.regular.interactive())
-                        .glassEffectID(backGlassEffectID, in: glassNamespace)
-
-                        Spacer()
-
-                        if !headerVersion.isEmpty {
-                            Text(headerVersion)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                        }
-                    }
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            header
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
 
             Divider()
 
@@ -74,7 +37,34 @@ struct ChangeLogView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear { MenuBarPanelKeeper.keepOpen() }
+    }
+
+    private var header: some View {
+        ZStack {
+            Text("Change log")
+                .font(.headline)
+
+            HStack {
+                Button {
+                    onBack()
+                    MenuBarPanelKeeper.keepOpen()
+                } label: {
+                    Label(backTitle, systemImage: "chevron.left")
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                if !headerVersion.isEmpty {
+                    Text(headerVersion)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -90,12 +80,12 @@ struct ChangeLogView: View {
                     .foregroundStyle(.secondary)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
-                    ForEach(section.items, id: \.self) { item in
+                    ForEach(section.items) { item in
                         HStack(alignment: .top, spacing: 8) {
                             Text("•")
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
-                            Text(item)
+                            Text(item.text)
                                 .font(.callout)
                                 .foregroundStyle(.primary)
                                 .frame(maxWidth: .infinity, alignment: .leading)

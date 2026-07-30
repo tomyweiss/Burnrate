@@ -2,10 +2,15 @@ import Foundation
 import TokensCore
 
 struct ChangeLogDisplaySection: Identifiable, Sendable {
+    let id: String
     let version: String
-    let items: [String]
+    let items: [ChangeLogItem]
     let isHighlighted: Bool
-    var id: String { version }
+}
+
+struct ChangeLogItem: Identifiable, Sendable, Hashable {
+    let id: String
+    let text: String
 }
 
 enum ChangeLog {
@@ -21,10 +26,13 @@ enum ChangeLog {
             highlightVersion: highlightVersion,
             releaseNotes: releaseNotes
         )
-        return sections.map { section in
+        return sections.enumerated().map { index, section in
             ChangeLogDisplaySection(
+                id: "\(section.version)-\(index)",
                 version: section.version,
-                items: section.items,
+                items: section.items.enumerated().map { itemIndex, text in
+                    ChangeLogItem(id: "\(section.version)-\(index)-\(itemIndex)", text: text)
+                },
                 isHighlighted: normalizedHighlight == section.version
             )
         }

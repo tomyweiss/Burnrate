@@ -20,7 +20,11 @@ final class SettingsStore {
         static let communityParticipantId = "communityParticipantId"
         static let communityNickname = "communityNickname"
         static let communityNicknameSource = "communityNicknameSource"
+        static let visibleUsageTabs = "visibleUsageTabs"
     }
+
+    /// Tabs shown in the main usage panel picker. Bench is off by default.
+    static let defaultVisibleUsageTabs: [UsageTab] = UsageTab.allCases.filter { $0 != .bench }
 
     static let refreshIntervalOptions: [Double] = [15, 30, 60, 120, 300, 600]
 
@@ -175,6 +179,61 @@ final class SettingsStore {
         }
     }
 
+    private(set) var visibleUsageTabRawValues: [String] {
+        didSet {
+            let validated = Self.validatedVisibleTabRawValues(visibleUsageTabRawValues)
+            if validated != visibleUsageTabRawValues {
+                visibleUsageTabRawValues = validated
+                return
+            }
+            defaults.set(validated, forKey: Keys.visibleUsageTabs)
+        }
+    }
+
+    var visibleUsageTabs: Set<UsageTab> {
+        get { Set(visibleUsageTabRawValues.compactMap(UsageTab.init(rawValue:))) }
+        set {
+            visibleUsageTabRawValues = UsageTab.allCases
+                .filter { newValue.contains($0) }
+                .map(\.rawValue)
+        }
+    }
+
+    func orderedVisibleUsageTabs() -> [UsageTab] {
+        UsageTab.allCases.filter { visibleUsageTabs.contains($0) }
+    }
+
+    func isUsageTabVisible(_ tab: UsageTab) -> Bool {
+        visibleUsageTabs.contains(tab)
+    }
+
+    func setUsageTabVisible(_ tab: UsageTab, visible: Bool) {
+        var tabs = visibleUsageTabs
+        if visible {
+            tabs.insert(tab)
+        } else {
+            tabs.remove(tab)
+        }
+        visibleUsageTabs = tabs
+    }
+
+    /// Returns a tab raw value that is currently visible in the usage panel picker.
+    func normalizedPanelTabSelection(_ panelTabRaw: String) -> String {
+        let visible = orderedVisibleUsageTabs()
+        guard let current = UsageTab(rawValue: panelTabRaw), visible.contains(current) else {
+            return (visible.first ?? .models).rawValue
+        }
+        return panelTabRaw
+    }
+
+    private static func validatedVisibleTabRawValues(_ rawValues: [String]) -> [String] {
+        let tabs = UsageTab.allCases.filter { rawValues.contains($0.rawValue) }
+        if tabs.isEmpty {
+            return defaultVisibleUsageTabs.map(\.rawValue)
+        }
+        return tabs.map(\.rawValue)
+    }
+
     /// Ensures a participant id exists; call when enabling sharing.
     func ensureCommunityParticipantId() -> String {
         if let communityParticipantId { return communityParticipantId }
@@ -231,6 +290,12 @@ final class SettingsStore {
             communityNicknameSource = source
         } else {
             communityNicknameSource = .random
+        }
+
+        if let savedTabs = defaults.stringArray(forKey: Keys.visibleUsageTabs) {
+            visibleUsageTabRawValues = Self.validatedVisibleTabRawValues(savedTabs)
+        } else {
+            visibleUsageTabRawValues = Self.defaultVisibleUsageTabs.map(\.rawValue)
         }
 
         launchAtLogin = SMAppService.mainApp.status == .enabled
