@@ -47,14 +47,25 @@ enum ChangeLog {
     }
 
     private static var markdown: String {
-        if let url = Bundle.module.url(forResource: "CHANGELOG", withExtension: "md"),
-           let text = try? String(contentsOf: url, encoding: .utf8) {
+        if let text = loadMarkdown(from: Bundle.main) {
             return text
         }
-        if let url = Bundle.main.url(forResource: "CHANGELOG", withExtension: "md"),
-           let text = try? String(contentsOf: url, encoding: .utf8) {
+        // `swift run` places resources in Tokens_Tokens.bundle beside the executable.
+        // Do not use Bundle.module here — it traps in a packaged .app (no SPM module bundle).
+        let spmBundleURL = Bundle.main.bundleURL
+            .appendingPathComponent("Tokens_Tokens.bundle", isDirectory: true)
+        if let spmBundle = Bundle(url: spmBundleURL),
+           let text = loadMarkdown(from: spmBundle) {
             return text
         }
         return ""
+    }
+
+    private static func loadMarkdown(from bundle: Bundle) -> String? {
+        guard let url = bundle.url(forResource: "CHANGELOG", withExtension: "md"),
+              let text = try? String(contentsOf: url, encoding: .utf8) else {
+            return nil
+        }
+        return text
     }
 }
