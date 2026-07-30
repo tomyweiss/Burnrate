@@ -1,15 +1,22 @@
 import SwiftUI
 
+enum ChangeLogOrigin: Hashable {
+    case settings
+    case usage
+}
+
 enum PanelRoute: Hashable {
     case usage
     case settings
     case community
+    case changeLog(ChangeLogOrigin)
 
     var interactionKey: String {
         switch self {
         case .usage: "usage"
         case .settings: "settings"
         case .community: "community"
+        case .changeLog: "changelog"
         }
     }
 }
@@ -21,6 +28,8 @@ struct RootPanel: View {
     @Bindable var community: CommunityStore
     var interactionTracker: InteractionTracker
     @State private var route: PanelRoute = .usage
+    @State private var changeLogHighlightVersion: String?
+    @State private var changeLogReleaseNotes: String?
     @Namespace private var glassNamespace
     @AppStorage("panelTab") private var panelTabRaw = UsageTab.models.rawValue
 
@@ -42,6 +51,11 @@ struct RootPanel: View {
                     glassNamespace: glassNamespace,
                     onOpenSettings: { route = .settings },
                     onOpenCommunity: { route = .community },
+                    onOpenChangeLog: { version, notes in
+                        changeLogHighlightVersion = version
+                        changeLogReleaseNotes = notes
+                        route = .changeLog(.usage)
+                    },
                     onUsageTabChange: { tab in
                         interactionTracker.recordTabChange(
                             tab.rawValue,
@@ -54,8 +68,25 @@ struct RootPanel: View {
                     settings: settings,
                     updates: updates,
                     store: store,
-                    glassNamespace: glassNamespace,
-                    onBack: { route = .usage }
+                    onBack: { route = .usage },
+                    onOpenChangeLog: {
+                        changeLogHighlightVersion = nil
+                        changeLogReleaseNotes = nil
+                        route = .changeLog(.settings)
+                    }
+                )
+            case .changeLog(let origin):
+                ChangeLogView(
+                    sections: ChangeLog.displaySections(
+                        highlightVersion: changeLogHighlightVersion,
+                        releaseNotes: changeLogReleaseNotes
+                    ),
+                    backTitle: origin == .settings ? "Settings" : "Usage",
+                    onBack: {
+                        changeLogHighlightVersion = nil
+                        changeLogReleaseNotes = nil
+                        route = origin == .settings ? .settings : .usage
+                    }
                 )
             case .community:
                 CommunityPanel(

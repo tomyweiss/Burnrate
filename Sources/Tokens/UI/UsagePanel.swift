@@ -45,6 +45,7 @@ struct UsagePanel: View {
     var glassNamespace: Namespace.ID
     var onOpenSettings: () -> Void
     var onOpenCommunity: () -> Void
+    var onOpenChangeLog: (_ highlightVersion: String?, _ releaseNotes: String?) -> Void
     var onUsageTabChange: (UsageTab) -> Void = { _ in }
 
     @AppStorage("panelTab") private var panelTabRaw = UsageTab.models.rawValue
@@ -57,9 +58,6 @@ struct UsagePanel: View {
     @AppStorage("sessionsSort") private var sessionsSortRaw = SessionPromptSort.newest.rawValue
     @State private var sectionSearchText = ""
     @State private var isSectionSearchPresented = false
-    @State private var showsChangeLog = false
-    @State private var changeLogHighlightVersion: String?
-    @State private var changeLogReleaseNotes: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var panelTab: Binding<UsageTab> {
@@ -74,17 +72,6 @@ struct UsagePanel: View {
     }
 
     var body: some View {
-        if showsChangeLog {
-            ChangeLogView(
-                sections: changeLogSections,
-                backTitle: "Usage",
-                onBack: {
-                    showsChangeLog = false
-                    changeLogHighlightVersion = nil
-                    changeLogReleaseNotes = nil
-                }
-            )
-        } else {
         VStack(spacing: 0) {
             if !store.hasCompletedFetch, store.isLoading {
                 UsageSkeletonView()
@@ -118,23 +105,11 @@ struct UsagePanel: View {
         .onChange(of: settings.visibleUsageTabRawValues) { _, _ in
             panelTabRaw = settings.normalizedPanelTabSelection(panelTabRaw)
         }
-        }
-    }
-
-    private var changeLogSections: [ChangeLogDisplaySection] {
-        ChangeLog.displaySections(
-            highlightVersion: changeLogHighlightVersion,
-            releaseNotes: changeLogReleaseNotes
-        )
     }
 
     private func openChangeLog(version: String? = nil, releaseNotes: String? = nil) {
-        changeLogHighlightVersion = version
-        changeLogReleaseNotes = releaseNotes
-        Task { @MainActor in
-            showsChangeLog = true
-            MenuBarPanelKeeper.keepOpen()
-        }
+        onOpenChangeLog(version, releaseNotes)
+        MenuBarPanelKeeper.keepOpen()
     }
 
     private var header: some View {
