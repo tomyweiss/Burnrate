@@ -69,7 +69,9 @@ actor CommunityClient {
     }
 
     private func validate(_ response: URLResponse, data: Data? = nil) throws {
-        guard let http = response as? HTTPURLResponse else { return }
+        guard let http = response as? HTTPURLResponse else {
+            throw CommunityError.invalidResponse
+        }
         guard (200..<300).contains(http.statusCode) else {
             if let data,
                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],

@@ -7,6 +7,7 @@ enum CommunityConfig {
 
 enum CommunityError: Error, LocalizedError, Sendable {
     case invalidURL
+    case invalidResponse
     case httpStatus(Int)
     case shareToViewRequired
     case decodingFailed
@@ -16,6 +17,8 @@ enum CommunityError: Error, LocalizedError, Sendable {
         switch self {
         case .invalidURL:
             "Invalid community API URL."
+        case .invalidResponse:
+            "Community API returned an invalid response."
         case .httpStatus(let code):
             "Community API returned HTTP \(code)."
         case .shareToViewRequired:

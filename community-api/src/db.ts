@@ -57,7 +57,47 @@ export async function migrate(): Promise<void> {
       ADD COLUMN IF NOT EXISTS interaction_stats JSONB NOT NULL DEFAULT '{"panelOpens":0,"tabChanges":{}}';
     ALTER TABLE participants
       ADD COLUMN IF NOT EXISTS client_version TEXT;
+
+    CREATE TABLE IF NOT EXISTS failure_logs (
+      id BIGSERIAL PRIMARY KEY,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      source TEXT NOT NULL,
+      category TEXT NOT NULL,
+      message TEXT NOT NULL,
+      client_version TEXT,
+      participant_id UUID,
+      context JSONB NOT NULL DEFAULT '{}'
+    );
+    CREATE INDEX IF NOT EXISTS failure_logs_created_at_idx ON failure_logs (created_at DESC);
+    CREATE INDEX IF NOT EXISTS failure_logs_source_idx ON failure_logs (source, created_at DESC);
   `);
+}
+
+export interface FailureLogInsert {
+  source: string;
+  category: string;
+  message: string;
+  clientVersion?: string | null;
+  participantId?: string | null;
+  context?: Record<string, string>;
+}
+
+export async function insertFailureLog(entry: FailureLogInsert): Promise<void> {
+  const db = getPool();
+  await db.query(
+    `INSERT INTO failure_logs (
+       source, category, message, client_version, participant_id, context
+     )
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
+    [
+      entry.source,
+      entry.category,
+      entry.message,
+      entry.clientVersion ?? null,
+      entry.participantId ?? null,
+      JSON.stringify(entry.context ?? {}),
+    ]
+  );
 }
 
 export interface ParticipantRow {

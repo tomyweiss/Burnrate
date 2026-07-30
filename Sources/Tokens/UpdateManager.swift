@@ -85,6 +85,7 @@ final class UpdateManager {
         } catch {
             availableUpdate = nil
             lastError = error.localizedDescription
+            FailureReporter.report(error: error, source: .updates)
             if userInitiated {
                 statusMessage = error.localizedDescription
             }
@@ -110,6 +111,7 @@ final class UpdateManager {
         } catch {
             lastError = error.localizedDescription
             statusMessage = error.localizedDescription
+            FailureReporter.report(error: error, source: .updates)
         }
     }
 

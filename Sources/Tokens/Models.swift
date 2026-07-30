@@ -1,11 +1,11 @@
 import Foundation
 
-struct UsageEventsResponse: Decodable, Sendable {
+struct UsageEventsResponse: Codable, Sendable {
     let totalUsageEventsCount: Int?
     let usageEventsDisplay: [UsageEvent]?
 }
 
-struct UsageEvent: Decodable, Sendable, Hashable {
+struct UsageEvent: Codable, Sendable, Hashable {
     let timestamp: String
     let model: String?
     let kind: String?
@@ -41,7 +41,7 @@ struct UsageEvent: Decodable, Sendable, Hashable {
     }
 }
 
-struct TokenUsage: Decodable, Sendable, Hashable {
+struct TokenUsage: Codable, Sendable, Hashable {
     let inputTokens: Int?
     let outputTokens: Int?
     let cacheWriteTokens: Int?
