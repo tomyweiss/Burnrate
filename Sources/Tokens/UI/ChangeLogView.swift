@@ -38,6 +38,7 @@ struct ChangeLogView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color(nsColor: .windowBackgroundColor))
         .onAppear { MenuBarPanelKeeper.keepOpen() }
     }
 
