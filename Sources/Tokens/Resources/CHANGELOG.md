@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.35
+
+- Fix changelog crash in packaged app by avoiding Bundle.module. (02a130b)
+
 ## 0.0.34
 
 - Route changelog at panel level to avoid Settings Form teardown crash. (875b38a)
