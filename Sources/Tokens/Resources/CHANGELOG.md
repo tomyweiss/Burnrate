@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.33
+
+- Replace changelog overlay with full view swap so Settings does not show through. (62b5649)
+- Stay usable offline and log client failures for debugging. (5b9ed17)
+
 ## 0.0.32
 
 - Fix changelog crash by removing Liquid Glass and make usage tabs configurable. (6c84c1f)
