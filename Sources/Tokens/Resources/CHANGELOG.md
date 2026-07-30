@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.36
+
+- Changelog for v0.0.35 (4c108f7)
+
 ## 0.0.35
 
 - Fix changelog crash in packaged app by avoiding Bundle.module. (02a130b)
