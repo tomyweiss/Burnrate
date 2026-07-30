@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.31
+
+- Fix Settings change log crash from mismatched glass effect IDs
+
 ## 0.0.30
 
 - Fix changelog navigation and show the last three versions. (ac02358)
