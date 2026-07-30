@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.34
+
+- Route changelog at panel level to avoid Settings Form teardown crash. (875b38a)
+
 ## 0.0.33
 
 - Replace changelog overlay with full view swap so Settings does not show through. (62b5649)
