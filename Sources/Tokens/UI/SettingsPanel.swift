@@ -4,22 +4,11 @@ struct SettingsPanel: View {
     @Bindable var settings: SettingsStore
     @Bindable var updates: UpdateManager
     @Bindable var store: UsageStore
-    var glassNamespace: Namespace.ID
     var onBack: () -> Void
-
-    @State private var showsChangeLog = false
-    @State private var changeLogSections: [ChangeLogDisplaySection] = []
+    var onOpenChangeLog: () -> Void
 
     var body: some View {
-        if showsChangeLog {
-            ChangeLogView(
-                sections: changeLogSections,
-                backTitle: "Settings",
-                onBack: { showsChangeLog = false }
-            )
-        } else {
-            settingsForm
-        }
+        settingsForm
     }
 
     private var settingsForm: some View {
@@ -28,25 +17,21 @@ struct SettingsPanel: View {
                 Text("Settings")
                     .font(.headline)
 
-                GlassEffectContainer {
-                    HStack {
-                        Button {
-                            onBack()
-                            MenuBarPanelKeeper.keepOpen()
-                        } label: {
-                            Label("Usage", systemImage: "chevron.left")
-                        }
-                        .buttonStyle(.borderless)
-                        .glassEffect(.regular.interactive())
-                        .glassEffectID("settings-header-back", in: glassNamespace)
-
-                        Spacer()
-
-                        Text(appVersion)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
+                HStack {
+                    Button {
+                        onBack()
+                        MenuBarPanelKeeper.keepOpen()
+                    } label: {
+                        Label("Usage", systemImage: "chevron.left")
                     }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+
+                    Text(appVersion)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
                 }
             }
             .padding(.horizontal, 14)
@@ -198,11 +183,8 @@ struct SettingsPanel: View {
                     }
 
                     Button {
-                        changeLogSections = ChangeLog.displaySections()
-                        Task { @MainActor in
-                            showsChangeLog = true
-                            MenuBarPanelKeeper.keepOpen()
-                        }
+                        onOpenChangeLog()
+                        MenuBarPanelKeeper.keepOpen()
                     } label: {
                         HStack {
                             Text("Change log")
