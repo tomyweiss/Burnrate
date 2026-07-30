@@ -69,12 +69,15 @@ struct UsagePanel: View {
         )
     }
 
+    private var visibleTabs: [UsageTab] {
+        settings.orderedVisibleUsageTabs()
+    }
+
     var body: some View {
         if showsChangeLog {
             ChangeLogView(
                 sections: changeLogSections,
                 backTitle: "Usage",
-                glassNamespace: glassNamespace,
                 onBack: {
                     showsChangeLog = false
                     changeLogHighlightVersion = nil
@@ -109,6 +112,12 @@ struct UsagePanel: View {
             sessionPath = []
             selectedSkill = nil
         }
+        .onAppear {
+            panelTabRaw = settings.normalizedPanelTabSelection(panelTabRaw)
+        }
+        .onChange(of: settings.visibleUsageTabRawValues) { _, _ in
+            panelTabRaw = settings.normalizedPanelTabSelection(panelTabRaw)
+        }
         }
     }
 
@@ -122,8 +131,10 @@ struct UsagePanel: View {
     private func openChangeLog(version: String? = nil, releaseNotes: String? = nil) {
         changeLogHighlightVersion = version
         changeLogReleaseNotes = releaseNotes
-        showsChangeLog = true
-        MenuBarPanelKeeper.keepOpen()
+        Task { @MainActor in
+            showsChangeLog = true
+            MenuBarPanelKeeper.keepOpen()
+        }
     }
 
     private var header: some View {
@@ -388,7 +399,7 @@ struct UsagePanel: View {
         VStack(alignment: .leading, spacing: 6) {
             PillPicker(
                 selection: panelTab,
-                options: UsageTab.allCases.map { tab in
+                options: visibleTabs.map { tab in
                     PillPicker.Option(value: tab, title: tab.title)
                 },
                 size: .controlBar,

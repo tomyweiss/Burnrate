@@ -8,17 +8,20 @@ struct SettingsPanel: View {
     var onBack: () -> Void
 
     @State private var showsChangeLog = false
+    @State private var changeLogSections: [ChangeLogDisplaySection] = []
 
     var body: some View {
-        if showsChangeLog {
-            ChangeLogView(
-                sections: ChangeLog.displaySections(),
-                backTitle: "Settings",
-                glassNamespace: glassNamespace,
-                onBack: { showsChangeLog = false }
-            )
-        } else {
+        ZStack {
             settingsForm
+
+            if showsChangeLog {
+                ChangeLogView(
+                    sections: changeLogSections,
+                    backTitle: "Settings",
+                    onBack: { showsChangeLog = false }
+                )
+                .background(.background)
+            }
         }
     }
 
@@ -94,6 +97,19 @@ struct SettingsPanel: View {
                             MenuBarPanelKeeper.keepOpen()
                         }
                     Text("Hide sessions Cursor has archived. Spend totals are unchanged.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("Usage panel") {
+                    ForEach(UsageTab.allCases) { tab in
+                        Toggle(tab.title, isOn: usageTabVisibilityBinding(tab))
+                            .disabled(
+                                settings.isUsageTabVisible(tab)
+                                    && settings.visibleUsageTabs.count == 1
+                            )
+                    }
+                    Text("Choose which tabs appear in the main panel. At least one tab must stay visible.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -185,8 +201,11 @@ struct SettingsPanel: View {
                     }
 
                     Button {
-                        showsChangeLog = true
-                        MenuBarPanelKeeper.keepOpen()
+                        changeLogSections = ChangeLog.displaySections()
+                        Task { @MainActor in
+                            showsChangeLog = true
+                            MenuBarPanelKeeper.keepOpen()
+                        }
                     } label: {
                         HStack {
                             Text("Change log")
@@ -243,6 +262,16 @@ struct SettingsPanel: View {
             get: { settings.usageTimezoneIdentifier ?? "" },
             set: { newValue in
                 settings.usageTimezoneIdentifier = newValue.isEmpty ? nil : newValue
+            }
+        )
+    }
+
+    private func usageTabVisibilityBinding(_ tab: UsageTab) -> Binding<Bool> {
+        Binding(
+            get: { settings.isUsageTabVisible(tab) },
+            set: { visible in
+                settings.setUsageTabVisible(tab, visible: visible)
+                MenuBarPanelKeeper.keepOpen()
             }
         )
     }
