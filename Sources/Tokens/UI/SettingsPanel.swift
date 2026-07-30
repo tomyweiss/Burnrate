@@ -28,23 +28,25 @@ struct SettingsPanel: View {
                 Text("Settings")
                     .font(.headline)
 
-                HStack {
-                    Button {
-                        onBack()
-                        MenuBarPanelKeeper.keepOpen()
-                    } label: {
-                        Label("Usage", systemImage: "chevron.left")
+                GlassEffectContainer {
+                    HStack {
+                        Button {
+                            onBack()
+                            MenuBarPanelKeeper.keepOpen()
+                        } label: {
+                            Label("Usage", systemImage: "chevron.left")
+                        }
+                        .buttonStyle(.borderless)
+                        .glassEffect(.regular.interactive())
+                        .glassEffectID("settings-header-back", in: glassNamespace)
+
+                        Spacer()
+
+                        Text(appVersion)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
                     }
-                    .buttonStyle(.borderless)
-                    .glassEffect(.regular.interactive())
-                    .glassEffectID("settings-gear", in: glassNamespace)
-
-                    Spacer()
-
-                    Text(appVersion)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
                 }
             }
             .padding(.horizontal, 14)

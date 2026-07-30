@@ -12,30 +12,42 @@ struct ChangeLogView: View {
             ?? ""
     }
 
+    /// Matches the header back button in the parent panel so Liquid Glass can
+    /// morph between Settings and this drill-in without tripping internal asserts.
+    private var backGlassEffectID: String {
+        switch backTitle {
+        case "Settings": "settings-header-back"
+        case "Usage": "usage-changelog-back"
+        default: "changelog-back"
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
                 Text("Change log")
                     .font(.headline)
 
-                HStack {
-                    Button {
-                        onBack()
-                        MenuBarPanelKeeper.keepOpen()
-                    } label: {
-                        Label(backTitle, systemImage: "chevron.left")
-                    }
-                    .buttonStyle(.borderless)
-                    .glassEffect(.regular.interactive())
-                    .glassEffectID("changelog-back", in: glassNamespace)
+                GlassEffectContainer {
+                    HStack {
+                        Button {
+                            onBack()
+                            MenuBarPanelKeeper.keepOpen()
+                        } label: {
+                            Label(backTitle, systemImage: "chevron.left")
+                        }
+                        .buttonStyle(.borderless)
+                        .glassEffect(.regular.interactive())
+                        .glassEffectID(backGlassEffectID, in: glassNamespace)
 
-                    Spacer()
+                        Spacer()
 
-                    if !headerVersion.isEmpty {
-                        Text(headerVersion)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
+                        if !headerVersion.isEmpty {
+                            Text(headerVersion)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
                     }
                 }
             }
