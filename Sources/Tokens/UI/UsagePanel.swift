@@ -242,6 +242,9 @@ struct UsagePanel: View {
         if store.snapshot.fetchedAt == .distantPast {
             return "Not refreshed yet"
         }
+        if store.isShowingCachedData {
+            return "Offline · data from \(RelativeTimeFormat.clockTime(store.snapshot.fetchedAt))"
+        }
         if store.isStale {
             return "Data from \(RelativeTimeFormat.clockTime(store.snapshot.fetchedAt)) (stale)"
         }

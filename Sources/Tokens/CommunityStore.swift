@@ -7,12 +7,13 @@ final class CommunityStore {
     private(set) var rank: CommunityRankResponse?
     private(set) var isLoading = false
     private(set) var lastError: String?
+    private(set) var rankIsStale = false
     private(set) var cursorDisplayName: String?
 
     private let settings: SettingsStore
     private let client: CommunityClient
-    private let cursorAPI = CursorAPI()
     private let interactionTracker: InteractionTracker
+    private weak var usageStore: UsageStore?
     private var lastUploadAt: Date?
     private let uploadThrottle: TimeInterval = 5 * 60
 
@@ -25,6 +26,11 @@ final class CommunityStore {
         self.interactionTracker = interactionTracker
         self.client = client
         refreshCursorDisplayName()
+        restoreCachedRankIfAvailable()
+    }
+
+    func setUsageStore(_ store: UsageStore?) {
+        usageStore = store
     }
 
     var isSharing: Bool { settings.shareCommunityUsage }
@@ -76,8 +82,10 @@ final class CommunityStore {
         }
         rank = nil
         lastError = nil
+        rankIsStale = false
         lastUploadAt = nil
         interactionTracker.reset()
+        CommunityRankCache.clear()
     }
 
     func useCursorName() {
@@ -102,6 +110,7 @@ final class CommunityStore {
         guard settings.shareCommunityUsage,
               let participantId = settings.communityParticipantId else {
             rank = nil
+            rankIsStale = false
             return
         }
 
@@ -110,9 +119,23 @@ final class CommunityStore {
 
         do {
             rank = try await client.fetchRank(participantId: participantId)
+            rankIsStale = false
             lastError = nil
+            if let rank {
+                CommunityRankCache.save(rank, participantId: participantId)
+            }
         } catch {
-            lastError = error.localizedDescription
+            lastError = NetworkMessages.userMessage(for: error, cachedDataAvailable: rank != nil)
+            FailureReporter.report(
+                error: error,
+                source: .community,
+                participantId: settings.communityParticipantId
+            )
+            if rank == nil {
+                restoreCachedRankIfAvailable()
+            } else {
+                rankIsStale = true
+            }
         }
     }
 
@@ -141,13 +164,28 @@ final class CommunityStore {
         }
 
         do {
-            let payload = try await buildSnapshotPayload(participantId: participantId)
+            let payload = try buildSnapshotPayload(participantId: participantId)
             try await client.postSnapshot(payload)
             lastUploadAt = Date()
             lastError = nil
         } catch {
-            lastError = error.localizedDescription
+            lastError = NetworkMessages.userMessage(for: error, cachedDataAvailable: rank != nil)
+            FailureReporter.report(
+                error: error,
+                source: .community,
+                participantId: participantId
+            )
         }
+    }
+
+    private func restoreCachedRankIfAvailable() {
+        guard settings.shareCommunityUsage,
+              let participantId = settings.communityParticipantId,
+              let cached = CommunityRankCache.load(participantId: participantId) else {
+            return
+        }
+        rank = cached.rank
+        rankIsStale = true
     }
 
     private func resolvedUploadNickname() -> String? {
@@ -163,37 +201,17 @@ final class CommunityStore {
         }
     }
 
-    private func buildSnapshotPayload(participantId: String) async throws -> CommunitySnapshotPayload {
-        let credentials = try TokenProvider.loadSessionCredentials()
-        let now = Date()
-        let window = UsageTimeWindow(
-            preset: .last24Hours,
-            timeZone: settings.resolvedTimeZone,
-            billingDayOfMonth: settings.billingDayOfMonth
-        )
-        let range = window.dateRange(now: now)
-        let startMs = Int64(range.start.timeIntervalSince1970 * 1000)
-        let endMs = Int64(range.end.timeIntervalSince1970 * 1000)
-
-        let events = try await cursorAPI.fetchUsageEvents(
-            credentials: credentials,
-            startMs: startMs,
-            endMs: endMs
-        )
-
-        let costEvents = events.map { event in
-            CommunityCostEvent(
-                timestampMs: event.timestampMs,
-                model: event.model?.isEmpty == false ? event.model! : "unknown",
-                costCents: event.costCents
-            )
+    private func buildSnapshotPayload(participantId: String) throws -> CommunitySnapshotPayload {
+        let events = usageStore?.communityCostEvents ?? []
+        guard !events.isEmpty else {
+            throw CommunityError.apiMessage("No recent usage data to share yet.")
         }
 
         return CommunityPayloadBuilder.build(
             participantId: participantId,
             nickname: resolvedUploadNickname(),
-            events: costEvents,
-            now: now,
+            events: events,
+            now: Date(),
             interactionStats: interactionTracker.snapshot(),
             clientVersion: AppIdentity.versionLabel
         )

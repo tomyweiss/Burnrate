@@ -11,17 +11,14 @@ struct SettingsPanel: View {
     @State private var changeLogSections: [ChangeLogDisplaySection] = []
 
     var body: some View {
-        ZStack {
+        if showsChangeLog {
+            ChangeLogView(
+                sections: changeLogSections,
+                backTitle: "Settings",
+                onBack: { showsChangeLog = false }
+            )
+        } else {
             settingsForm
-
-            if showsChangeLog {
-                ChangeLogView(
-                    sections: changeLogSections,
-                    backTitle: "Settings",
-                    onBack: { showsChangeLog = false }
-                )
-                .background(.background)
-            }
         }
     }
 

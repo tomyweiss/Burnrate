@@ -76,6 +76,11 @@ struct CommunityView: View {
             if let rank = community.rank, rank.notEnoughParticipants {
                 notEnoughView(rank)
             } else if let rank = community.rank {
+                if community.rankIsStale {
+                    Text("Offline — showing cached cohort data.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
                 heroStats(rank)
                 distributionBar(rank)
                 nearYouList(rank)

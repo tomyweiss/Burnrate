@@ -19,6 +19,7 @@ struct TokensApp: App {
         let store = UsageStore(settings: settings)
         let community = CommunityStore(settings: settings, interactionTracker: interactionTracker)
         store.setCommunityStore(community)
+        community.setUsageStore(store)
         _settings = State(initialValue: settings)
         _store = State(initialValue: store)
         _updates = State(initialValue: UpdateManager(settings: settings))

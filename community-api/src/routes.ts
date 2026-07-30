@@ -2,10 +2,12 @@ import { Hono } from "hono";
 import {
   deleteParticipant,
   fetchFreshParticipants,
+  insertFailureLog,
   participantExistsFresh,
   upsertParticipant,
   type ParticipantRow,
 } from "./db.js";
+import { normalizeFailure, validateFailure, type FailureBody } from "./failure-log.js";
 import {
   MIN_COHORT,
   STALE_HOURS,
@@ -93,7 +95,7 @@ function validateSnapshot(body: SnapshotBody): string | null {
 export function createApp() {
   const app = new Hono();
 
-  app.get("/health", (c) => c.json({ ok: true, v: 3 }));
+  app.get("/health", (c) => c.json({ ok: true, v: 4 }));
 
   app.get("/ready", async (c) => {
     if (!process.env.DATABASE_URL) {
@@ -186,6 +188,37 @@ export function createApp() {
 
     const deleted = await deleteParticipant(body.participantId);
     return c.json({ ok: true, deleted });
+  });
+
+  app.post("/v1/client/failures", async (c) => {
+    const ip = clientIP(c);
+    let body: FailureBody;
+    try {
+      body = await c.req.json<FailureBody>();
+    } catch {
+      return c.json({ error: "Invalid JSON" }, 400);
+    }
+
+    const validationError = validateFailure(body);
+    if (validationError) {
+      return c.json({ error: validationError }, 400);
+    }
+
+    if (!checkRateLimit(rateLimitKey(ip))) {
+      return c.json({ error: "Rate limit exceeded" }, 429);
+    }
+
+    const normalized = normalizeFailure(body);
+    await insertFailureLog({
+      source: normalized.source,
+      category: normalized.category,
+      message: normalized.message,
+      clientVersion: normalized.clientVersion,
+      participantId: normalized.participantId,
+      context: normalized.context,
+    });
+
+    return c.json({ ok: true });
   });
 
   return app;

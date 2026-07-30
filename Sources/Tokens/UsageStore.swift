@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import TokensCore
 
 @MainActor
 @Observable
@@ -10,6 +11,8 @@ final class UsageStore {
     private(set) var lastError: String?
     private(set) var isSpikeActive = false
     private(set) var notificationFeedback: String?
+    private(set) var isShowingCachedData = false
+    private(set) var communityCostEvents: [CommunityCostEvent] = []
 
     private let api = CursorAPI()
     private let anomalyMonitor: AnomalyMonitor?
@@ -40,7 +43,7 @@ final class UsageStore {
         BurnLevel.level(
             recentDollars: snapshot.recentDollars,
             thresholdDollars: settings.anomalyThresholdDollars,
-            hasError: lastError != nil
+            hasError: lastError != nil && !isShowingCachedData
         )
     }
 
@@ -64,6 +67,7 @@ final class UsageStore {
     }
 
     func start() {
+        loadCachedSnapshotIfAvailable()
         pollTask?.cancel()
         pollTask = Task { [weak self] in
             await self?.anomalyMonitor?.requestAuthorizationIfNeeded()
@@ -110,14 +114,23 @@ final class UsageStore {
                 )
             }.value
             snapshot = next
+            communityCostEvents = Self.communityCostEvents(from: events, now: now)
             lastError = nil
+            isShowingCachedData = false
             hasCompletedFetch = true
             isSpikeActive = next.recentCostCents >= settings.anomalyThresholdDollars * 100
+            UsageRefreshCache.save(
+                events: events,
+                settings: settings,
+                recentWindowMinutes: recentWindowMinutes,
+                fetchedAt: next.fetchedAt
+            )
             await anomalyMonitor?.evaluate(snapshot: next, settings: settings)
             await communityStore?.handleUsageRefreshIfNeeded()
         } catch {
-            lastError = error.localizedDescription
+            lastError = NetworkMessages.userMessage(for: error, cachedDataAvailable: isShowingCachedData)
             hasCompletedFetch = true
+            FailureReporter.report(error: error, source: .usage)
             // Keep last good snapshot and amount visible.
         }
     }
@@ -128,5 +141,53 @@ final class UsageStore {
             return
         }
         notificationFeedback = await anomalyMonitor.sendTestNotification(settings: settings)
+    }
+
+    private func loadCachedSnapshotIfAvailable() {
+        let recentWindowMinutes = settings.anomalyWindowMinutes
+        guard let cache = UsageRefreshCache.load(
+            matching: settings,
+            recentWindowMinutes: recentWindowMinutes
+        ) else {
+            return
+        }
+
+        let now = Date()
+        let window = settings.usageWindow
+        let cachedSnapshot = Aggregator.snapshot(
+            events: cache.events,
+            now: now,
+            window: window,
+            recentWindowMinutes: recentWindowMinutes
+        )
+        snapshot = UsageSnapshot(
+            windowCostCents: cachedSnapshot.windowCostCents,
+            recentCostCents: cachedSnapshot.recentCostCents,
+            models: cachedSnapshot.models,
+            sessionsAcrossModels: cachedSnapshot.sessionsAcrossModels,
+            prompts: cachedSnapshot.prompts,
+            subagentPrompts: cachedSnapshot.subagentPrompts,
+            skills: cachedSnapshot.skills,
+            sparklineCostCents: cachedSnapshot.sparklineCostCents,
+            window: cachedSnapshot.window,
+            eventCount: cachedSnapshot.eventCount,
+            fetchedAt: cache.fetchedAt
+        )
+        communityCostEvents = Self.communityCostEvents(from: cache.events, now: now)
+        hasCompletedFetch = true
+        isShowingCachedData = true
+    }
+
+    static func communityCostEvents(from events: [UsageEvent], now: Date = Date()) -> [CommunityCostEvent] {
+        let cutoffMs = now.addingTimeInterval(-24 * 60 * 60).timeIntervalSince1970 * 1000
+        return events.compactMap { event in
+            guard event.timestampMs >= cutoffMs else { return nil }
+            let model = event.model?.isEmpty == false ? event.model! : "unknown"
+            return CommunityCostEvent(
+                timestampMs: event.timestampMs,
+                model: model,
+                costCents: event.costCents
+            )
+        }
     }
 }
