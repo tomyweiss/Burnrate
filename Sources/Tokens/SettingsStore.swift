@@ -12,6 +12,8 @@ final class SettingsStore {
         static let autoCheckForUpdates = "autoCheckForUpdates"
         static let usageTimelinePreset = "usageTimelinePreset"
         static let billingDayOfMonth = "billingDayOfMonth"
+        static let customRangeStart = "customRangeStart"
+        static let customRangeEnd = "customRangeEnd"
         static let usageTimezoneIdentifier = "usageTimezoneIdentifier"
         static let showLocationSubtitle = "showLocationSubtitle"
         static let hideArchivedSessions = "hideArchivedSessions"
@@ -96,7 +98,54 @@ final class SettingsStore {
     var usageTimelinePreset: UsageTimelinePreset {
         didSet {
             defaults.set(usageTimelinePreset.rawValue, forKey: Keys.usageTimelinePreset)
+            if usageTimelinePreset == .custom, oldValue != .custom {
+                resetCustomRangeToLastSevenDays()
+            }
         }
+    }
+
+    /// Start of the custom date range (day granularity, inclusive).
+    /// Never in the future; never after `customRangeEnd`.
+    var customRangeStart: Date {
+        didSet {
+            let clamped = Self.clampDayToToday(customRangeStart)
+            if clamped != customRangeStart {
+                customRangeStart = clamped
+                return
+            }
+            defaults.set(customRangeStart, forKey: Keys.customRangeStart)
+            if customRangeEnd < customRangeStart {
+                customRangeEnd = customRangeStart
+            }
+        }
+    }
+
+    /// End of the custom date range (day granularity, inclusive).
+    /// Never in the future; never before `customRangeStart`.
+    var customRangeEnd: Date {
+        didSet {
+            let clamped = Self.clampDayToToday(customRangeEnd)
+            if clamped != customRangeEnd {
+                customRangeEnd = clamped
+                return
+            }
+            defaults.set(customRangeEnd, forKey: Keys.customRangeEnd)
+            if customRangeStart > customRangeEnd {
+                customRangeStart = customRangeEnd
+            }
+        }
+    }
+
+    func resetCustomRangeToLastSevenDays() {
+        let calendar = Calendar.current
+        let todayStart = calendar.startOfDay(for: Date())
+        customRangeEnd = todayStart
+        customRangeStart = calendar.date(byAdding: .day, value: -6, to: todayStart) ?? todayStart
+    }
+
+    private static func clampDayToToday(_ date: Date) -> Date {
+        let calendar = Calendar.current
+        return min(calendar.startOfDay(for: date), calendar.startOfDay(for: Date()))
     }
 
     var billingDayOfMonth: Int {
@@ -138,7 +187,9 @@ final class SettingsStore {
         UsageTimeWindow(
             preset: usageTimelinePreset,
             timeZone: resolvedTimeZone,
-            billingDayOfMonth: billingDayOfMonth
+            billingDayOfMonth: billingDayOfMonth,
+            customStart: customRangeStart,
+            customEnd: customRangeEnd
         )
     }
 
@@ -279,6 +330,23 @@ final class SettingsStore {
 
         let billingDay = defaults.object(forKey: Keys.billingDayOfMonth) as? Int
         billingDayOfMonth = billingDay ?? 1
+
+        let calendar = Calendar.current
+        let todayStart = calendar.startOfDay(for: Date())
+        let endDay: Date
+        if let storedEnd = defaults.object(forKey: Keys.customRangeEnd) as? Date {
+            endDay = min(calendar.startOfDay(for: storedEnd), todayStart)
+        } else {
+            endDay = todayStart
+        }
+        let startDay: Date
+        if let storedStart = defaults.object(forKey: Keys.customRangeStart) as? Date {
+            startDay = min(calendar.startOfDay(for: storedStart), endDay)
+        } else {
+            startDay = calendar.date(byAdding: .day, value: -6, to: todayStart) ?? todayStart
+        }
+        customRangeEnd = endDay
+        customRangeStart = startDay
 
         usageTimezoneIdentifier = defaults.string(forKey: Keys.usageTimezoneIdentifier)
 

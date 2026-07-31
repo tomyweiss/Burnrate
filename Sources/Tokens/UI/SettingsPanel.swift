@@ -212,6 +212,36 @@ struct SettingsPanel: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                if settings.usageTimelinePreset == .custom {
+                    Section("Timeline") {
+                        DatePicker(
+                            "Start date",
+                            selection: $settings.customRangeStart,
+                            in: Date.distantPast...Date(),
+                            displayedComponents: [.date]
+                        )
+                        .onChange(of: settings.customRangeStart) { _, _ in
+                            Task { await store.refresh() }
+                            MenuBarPanelKeeper.keepOpen()
+                        }
+
+                        DatePicker(
+                            "End date",
+                            selection: $settings.customRangeEnd,
+                            in: settings.customRangeStart...Date(),
+                            displayedComponents: [.date]
+                        )
+                        .onChange(of: settings.customRangeEnd) { _, _ in
+                            Task { await store.refresh() }
+                            MenuBarPanelKeeper.keepOpen()
+                        }
+
+                        Text("Both dates are included. Future dates can't be selected.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)

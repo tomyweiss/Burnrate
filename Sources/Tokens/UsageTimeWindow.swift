@@ -5,6 +5,7 @@ enum UsageTimelinePreset: String, CaseIterable, Codable, Identifiable {
     case last24Hours
     case last7Days
     case thisBilling
+    case custom
 
     var id: String { rawValue }
 
@@ -14,6 +15,7 @@ enum UsageTimelinePreset: String, CaseIterable, Codable, Identifiable {
         case .last24Hours: "Last 24h"
         case .last7Days: "Last 7d"
         case .thisBilling: "This billing"
+        case .custom: "Custom"
         }
     }
 }
@@ -22,15 +24,22 @@ struct UsageTimeWindow: Sendable, Hashable {
     let preset: UsageTimelinePreset
     let timeZone: TimeZone
     let billingDayOfMonth: Int
+    /// Day-granularity bounds for the `.custom` preset; both days are inclusive.
+    let customStart: Date
+    let customEnd: Date
 
     init(
         preset: UsageTimelinePreset,
         timeZone: TimeZone,
-        billingDayOfMonth: Int = 1
+        billingDayOfMonth: Int = 1,
+        customStart: Date = Date(),
+        customEnd: Date = Date()
     ) {
         self.preset = preset
         self.timeZone = timeZone
         self.billingDayOfMonth = min(max(billingDayOfMonth, 1), 31)
+        self.customStart = min(customStart, customEnd)
+        self.customEnd = max(customStart, customEnd)
     }
 
     var calendar: Calendar {
@@ -51,8 +60,22 @@ struct UsageTimeWindow: Sendable, Hashable {
             start = now.addingTimeInterval(-7 * 24 * 60 * 60)
         case .thisBilling:
             start = billingCycleStart(before: now)
+        case .custom:
+            let startDay = calendar.startOfDay(for: customStart)
+            let endDay = calendar.startOfDay(for: customEnd)
+            let endOfEndDay = calendar.date(byAdding: .day, value: 1, to: endDay)?
+                .addingTimeInterval(-1) ?? now
+            return (min(startDay, now), min(endOfEndDay, now))
         }
         return (start, end)
+    }
+
+    /// Number of inclusive days spanned by the `.custom` range.
+    var customDayCount: Int {
+        let startDay = calendar.startOfDay(for: customStart)
+        let endDay = calendar.startOfDay(for: customEnd)
+        let days = calendar.dateComponents([.day], from: startDay, to: endDay).day ?? 0
+        return max(days, 0) + 1
     }
 
     func billingCycleStart(before date: Date) -> Date {
@@ -87,6 +110,11 @@ struct UsageTimeWindow: Sendable, Hashable {
             let range = dateRange(now: now)
             let days = calendar.dateComponents([.day], from: range.start, to: now).day ?? 0
             return min(max(days + 1, 1), 31)
+        case .custom:
+            // Single day gets hourly resolution; longer ranges get one bar per
+            // day, capped so the sparkline bars stay readable.
+            let days = customDayCount
+            return days == 1 ? 24 : min(days, 60)
         }
     }
 
@@ -112,6 +140,19 @@ struct UsageTimeWindow: Sendable, Hashable {
             let days = calendar.dateComponents([.day], from: startDay, to: eventDay).day ?? 0
             let count = bucketCount(now: now)
             return (0..<count).contains(days) ? days : nil
+        case .custom:
+            let dayCount = customDayCount
+            if dayCount == 1 {
+                let hour = calendar.component(.hour, from: eventDate)
+                return (0..<24).contains(hour) ? hour : nil
+            }
+            let startDay = calendar.startOfDay(for: range.start)
+            let eventDay = calendar.startOfDay(for: eventDate)
+            let dayIndex = calendar.dateComponents([.day], from: startDay, to: eventDay).day ?? 0
+            let count = bucketCount(now: now)
+            // When the range is longer than the bar cap, several days share a bar.
+            let index = dayCount <= count ? dayIndex : dayIndex * count / dayCount
+            return (0..<count).contains(index) ? index : nil
         }
     }
 
@@ -125,6 +166,9 @@ struct UsageTimeWindow: Sendable, Hashable {
             return 6
         case .thisBilling:
             return bucketCount(now: now) - 1
+        case .custom:
+            // Only highlight a "current" bar when now falls inside the range.
+            return bucketIndex(for: now, now: now) ?? -1
         }
     }
 
@@ -132,6 +176,13 @@ struct UsageTimeWindow: Sendable, Hashable {
         switch preset {
         case .today:
             return index > currentBucketIndex(now: now)
+        case .custom:
+            // A single-day range that is today behaves like Today: dim hours
+            // that haven't happened yet.
+            guard customDayCount == 1, calendar.isDate(now, inSameDayAs: customEnd) else {
+                return false
+            }
+            return index > calendar.component(.hour, from: now)
         default:
             return false
         }
@@ -146,12 +197,17 @@ struct UsageTimeWindow: Sendable, Hashable {
             return "-24h"
         case .last7Days:
             return "-7d"
-        case .thisBilling:
+        case .thisBilling, .custom:
             return Self.shortDateFormatter(timeZone: timeZone).string(from: range.start)
         }
     }
 
-    var sparklineEndLabel: String { "now" }
+    var sparklineEndLabel: String {
+        if preset == .custom, !calendar.isDateInToday(customEnd) {
+            return Self.shortDateFormatter(timeZone: timeZone).string(from: customEnd)
+        }
+        return "now"
+    }
 
     func sparklineBucketLabel(index: Int, now: Date = Date()) -> String {
         let range = dateRange(now: now)
@@ -175,6 +231,20 @@ struct UsageTimeWindow: Sendable, Hashable {
                 to: calendar.startOfDay(for: range.start)
             ) ?? range.start
             return Self.shortDateFormatter(timeZone: timeZone).string(from: dayStart)
+        case .custom:
+            if customDayCount == 1 {
+                return hourLabel(hour: index)
+            }
+            let count = bucketCount(now: now)
+            let dayCount = customDayCount
+            // When several days share a bar, label the bar with its first day.
+            let dayIndex = dayCount <= count ? index : index * dayCount / count
+            let dayStart = calendar.date(
+                byAdding: .day,
+                value: dayIndex,
+                to: calendar.startOfDay(for: range.start)
+            ) ?? range.start
+            return Self.shortDateFormatter(timeZone: timeZone).string(from: dayStart)
         }
     }
 
@@ -188,6 +258,8 @@ struct UsageTimeWindow: Sendable, Hashable {
             return "No spend in the last 7 days"
         case .thisBilling:
             return "No spend this billing cycle"
+        case .custom:
+            return "No spend in this date range"
         }
     }
 

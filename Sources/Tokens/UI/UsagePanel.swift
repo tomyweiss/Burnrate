@@ -58,6 +58,7 @@ struct UsagePanel: View {
     @AppStorage("sessionsSort") private var sessionsSortRaw = SessionPromptSort.newest.rawValue
     @State private var sectionSearchText = ""
     @State private var isSectionSearchPresented = false
+    @State private var showCustomRangePicker = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var panelTab: Binding<UsageTab> {
@@ -147,6 +148,8 @@ struct UsagePanel: View {
                 Text("Since \(store.snapshot.window.sparklineStartLabel())")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            } else if settings.usageTimelinePreset == .custom {
+                customRangeButton
             }
 
             if store.snapshot.recentDollars > 0 {
@@ -197,6 +200,52 @@ struct UsagePanel: View {
             Task { await store.refresh() }
             MenuBarPanelKeeper.keepOpen()
         }
+    }
+
+    private var customRangeButton: some View {
+        Button {
+            showCustomRangePicker.toggle()
+            MenuBarPanelKeeper.keepOpen()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "calendar")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+                Text(customRangeLabel)
+                    .font(.caption.weight(.medium))
+                    .monospacedDigit()
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive())
+        .clipShape(Capsule())
+        .help("Pick a custom date range")
+        .popover(isPresented: $showCustomRangePicker, arrowEdge: .bottom) {
+            CustomRangePicker(settings: settings, store: store)
+        }
+    }
+
+    private var customRangeLabel: String {
+        let calendar = Calendar.current
+        let start = settings.customRangeStart
+        let end = settings.customRangeEnd
+        let startYear = calendar.component(.year, from: start)
+        let endYear = calendar.component(.year, from: end)
+        let currentYear = calendar.component(.year, from: Date())
+        let showYear = startYear != currentYear || endYear != currentYear
+        let style: Date.FormatStyle = showYear
+            ? .dateTime.month(.abbreviated).day().year()
+            : .dateTime.month(.abbreviated).day()
+        if calendar.isDate(start, inSameDayAs: end) {
+            return start.formatted(style)
+        }
+        return "\(start.formatted(style)) – \(end.formatted(style))"
     }
 
     private var burnPill: some View {
