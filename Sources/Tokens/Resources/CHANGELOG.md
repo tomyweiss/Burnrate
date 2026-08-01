@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.37
+
+- feat: Custom timeline preset with inclusive date-range picker (5358475)
+
 ## 0.0.36
 
 - Changelog for v0.0.35 (4c108f7)
