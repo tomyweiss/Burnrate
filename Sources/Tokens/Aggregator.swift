@@ -5,7 +5,8 @@ enum Aggregator {
         events: [UsageEvent],
         now: Date = Date(),
         window: UsageTimeWindow,
-        recentWindowMinutes: Int
+        recentWindowMinutes: Int,
+        rates: SpendRates = .unavailable
     ) -> UsageSnapshot {
         let range = window.dateRange(now: now)
         let startMs = range.start.timeIntervalSince1970 * 1000
@@ -26,7 +27,7 @@ enum Aggregator {
             guard ts >= startMs, ts <= endMs else { continue }
 
             filteredEventCount += 1
-            let cost = event.costCents
+            let cost = event.costCents(using: rates)
             windowCost += cost
             if ts >= recentStartMs {
                 recentCost += cost
@@ -136,7 +137,8 @@ enum Aggregator {
             parentByChild: parentByChild,
             catalog: catalog,
             startMs: startMs,
-            endMs: endMs
+            endMs: endMs,
+            rates: rates
         )
 
         return UsageSnapshot(
@@ -318,7 +320,8 @@ enum Aggregator {
         parentByChild: [String: String],
         catalog: [String: SessionMeta],
         startMs: Double,
-        endMs: Double
+        endMs: Double,
+        rates: SpendRates
     ) -> (prompts: [PromptUsage], subagentPrompts: [PromptUsage], skills: [SkillUsage]) {
         func effectiveConversationId(_ id: String) -> String {
             rootConversationId(id, parentByChild: parentByChild)
@@ -363,14 +366,15 @@ enum Aggregator {
             guard let prompt = chosen else { return }
 
             let key = "\(prompt.conversationId):\(prompt.bubbleId)"
+            let cost = event.costCents(using: rates)
             var acc = accumulators[key] ?? PromptAccumulator(prompt: prompt)
-            acc.costCents += event.costCents
+            acc.costCents += cost
             acc.eventCount += 1
             acc.totalTokens += event.inputTokens + event.outputTokens
                 + event.cacheReadTokens + event.cacheWriteTokens
             acc.lastEventMs = max(acc.lastEventMs, ts)
             if let model = event.model, !model.isEmpty {
-                acc.modelCosts[model, default: 0] += event.costCents
+                acc.modelCosts[model, default: 0] += cost
             }
             accumulators[key] = acc
         }

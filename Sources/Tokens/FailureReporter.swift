@@ -55,7 +55,7 @@ enum FailureReporter {
                 return .auth
             case .decodingFailed:
                 return .decode
-            case .httpStatus, .apiMessage:
+            case .httpStatus, .apiMessage, .spendUnavailable:
                 return .api
             case .tooManyPages:
                 return .validation

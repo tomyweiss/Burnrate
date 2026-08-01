@@ -14,11 +14,18 @@ final class UsageStore {
     private(set) var isShowingCachedData = false
     private(set) var communityCostEvents: [CommunityCostEvent] = []
 
+    private(set) var spendSummary: SpendSummary?
+
     private let api = CursorAPI()
     private let anomalyMonitor: AnomalyMonitor?
     private let settings: SettingsStore
     private weak var communityStore: CommunityStore?
     private var pollTask: Task<Void, Never>?
+    private var rates: SpendRates = .unavailable
+
+    /// Pricing only moves when the billing cycle rolls over, and calibrating costs
+    /// a full-cycle event fetch, so it runs far less often than the usage poll.
+    private let calibrationInterval: TimeInterval = 30 * 60
 
     init(settings: SettingsStore, enableAnomalyAlerts: Bool = true) {
         self.settings = settings
@@ -102,19 +109,23 @@ final class UsageStore {
                 endMs: endMs
             )
 
+            await refreshSpendCalibrationIfNeeded(credentials: credentials, now: now)
+
             // Aggregation scans local Cursor SQLite data (session + prompt
             // catalogs); keep it off the main thread.
             let recentWindowMinutes = settings.anomalyWindowMinutes
+            let activeRates = rates
             let next = await Task.detached(priority: .userInitiated) {
                 Aggregator.snapshot(
                     events: events,
                     now: now,
                     window: window,
-                    recentWindowMinutes: recentWindowMinutes
+                    recentWindowMinutes: recentWindowMinutes,
+                    rates: activeRates
                 )
             }.value
             snapshot = next
-            communityCostEvents = Self.communityCostEvents(from: events, now: now)
+            communityCostEvents = Self.communityCostEvents(from: events, now: now, rates: activeRates)
             lastError = nil
             isShowingCachedData = false
             hasCompletedFetch = true
@@ -143,6 +154,36 @@ final class UsageStore {
         notificationFeedback = await anomalyMonitor.sendTestNotification(settings: settings)
     }
 
+    /// Prices request units in dollars for plans where Cursor reports no per-event cost.
+    ///
+    /// Cursor only exposes real spend as a billing-cycle total, so the cycle's
+    /// events are refetched to work out what one request unit is worth.
+    private func refreshSpendCalibrationIfNeeded(
+        credentials: SessionCredentials,
+        now: Date
+    ) async {
+        guard now.timeIntervalSince(rates.computedAt) > calibrationInterval else { return }
+
+        do {
+            let summary = try await api.fetchSpendSummary(credentials: credentials)
+            let cycleStart = summary.cycleStartMs > 0
+                ? Int64(summary.cycleStartMs)
+                : Int64(now.addingTimeInterval(-30 * 24 * 60 * 60).timeIntervalSince1970 * 1000)
+            let cycleEvents = try await api.fetchUsageEvents(
+                credentials: credentials,
+                startMs: cycleStart,
+                endMs: Int64(now.timeIntervalSince1970 * 1000)
+            )
+            let calibrated = SpendRates.calibrate(summary: summary, cycleEvents: cycleEvents)
+            guard calibrated.isAvailable else { return }
+            rates = calibrated
+            spendSummary = summary
+        } catch {
+            // Falls back to Cursor's own per-event amounts; not worth surfacing.
+            FailureReporter.report(error: error, source: .usage)
+        }
+    }
+
     private func loadCachedSnapshotIfAvailable() {
         let recentWindowMinutes = settings.anomalyWindowMinutes
         guard let cache = UsageRefreshCache.load(
@@ -158,7 +199,8 @@ final class UsageStore {
             events: cache.events,
             now: now,
             window: window,
-            recentWindowMinutes: recentWindowMinutes
+            recentWindowMinutes: recentWindowMinutes,
+            rates: rates
         )
         snapshot = UsageSnapshot(
             windowCostCents: cachedSnapshot.windowCostCents,
@@ -173,12 +215,16 @@ final class UsageStore {
             eventCount: cachedSnapshot.eventCount,
             fetchedAt: cache.fetchedAt
         )
-        communityCostEvents = Self.communityCostEvents(from: cache.events, now: now)
+        communityCostEvents = Self.communityCostEvents(from: cache.events, now: now, rates: rates)
         hasCompletedFetch = true
         isShowingCachedData = true
     }
 
-    static func communityCostEvents(from events: [UsageEvent], now: Date = Date()) -> [CommunityCostEvent] {
+    static func communityCostEvents(
+        from events: [UsageEvent],
+        now: Date = Date(),
+        rates: SpendRates = .unavailable
+    ) -> [CommunityCostEvent] {
         let cutoffMs = now.addingTimeInterval(-24 * 60 * 60).timeIntervalSince1970 * 1000
         return events.compactMap { event in
             guard event.timestampMs >= cutoffMs else { return nil }
@@ -186,7 +232,7 @@ final class UsageStore {
             return CommunityCostEvent(
                 timestampMs: event.timestampMs,
                 model: model,
-                costCents: event.costCents
+                costCents: event.costCents(using: rates)
             )
         }
     }

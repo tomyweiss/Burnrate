@@ -152,6 +152,12 @@ struct UsagePanel: View {
                 customRangeButton
             }
 
+            if let spend = store.spendSummary {
+                Text(billingCycleCaption(spend))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             if store.snapshot.recentDollars > 0 {
                 burnPill
             }
@@ -166,6 +172,13 @@ struct UsagePanel: View {
                 .font(.caption)
                 .foregroundStyle(store.isStale ? Color.orange : Color.secondary)
         }
+    }
+
+    /// Cursor's own cycle totals, which are exact where the per-event figures are apportioned.
+    private func billingCycleCaption(_ spend: SpendSummary) -> String {
+        let onDemand = MoneyFormat.dollars(spend.onDemandCents / 100)
+        let included = MoneyFormat.dollars(spend.includedCents / 100)
+        return "This cycle: \(onDemand) on-demand · \(included) included"
     }
 
     private var communityButton: some View {

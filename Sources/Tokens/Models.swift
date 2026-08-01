@@ -15,19 +15,39 @@ struct UsageEvent: Codable, Sendable, Hashable {
     let tokenUsage: TokenUsage?
     let usageBasedCosts: String?
     let conversationId: String?
+    /// Billable request units. On request-based plans this is the only per-event
+    /// billing signal Cursor populates; the dollar fields stay at zero.
+    let requestsCosts: Double?
 
     var timestampMs: Double {
         Double(timestamp) ?? 0
     }
 
+    var billingKind: BillingKind {
+        BillingKind(rawKind: kind)
+    }
+
+    var requestUnits: Double {
+        guard billingKind.isBillable else { return 0 }
+        return requestsCosts ?? 0
+    }
+
     var costCents: Double {
-        if let chargedCents {
+        if let chargedCents, chargedCents > 0 {
             return chargedCents
         }
         if let total = tokenUsage?.totalCents {
             return total + (cursorTokenFee ?? 0)
         }
         return 0
+    }
+
+    /// Dollar cost in cents, preferring Cursor's own per-event amount and falling
+    /// back to request units priced by `rates` on request-based plans.
+    func costCents(using rates: SpendRates) -> Double {
+        let charged = costCents
+        if charged > 0 { return charged }
+        return rates.cents(forUnits: requestUnits, kind: billingKind)
     }
 
     var inputTokens: Int { tokenUsage?.inputTokens ?? 0 }
@@ -48,6 +68,98 @@ struct TokenUsage: Codable, Sendable, Hashable {
     let cacheReadTokens: Int?
     let totalCents: Double?
     let discountPercentOff: Double?
+}
+
+/// How Cursor billed a usage event.
+enum BillingKind: Sendable, Hashable {
+    /// Covered by the plan's included allowance.
+    case included
+    /// Charged as on-demand spend beyond the included allowance.
+    case usageBased
+    /// Failed request; never billed.
+    case errored
+    case unknown
+
+    init(rawKind: String?) {
+        switch rawKind {
+        case "USAGE_EVENT_KIND_INCLUDED_IN_BUSINESS", "USAGE_EVENT_KIND_INCLUDED_IN_PRO":
+            self = .included
+        case "USAGE_EVENT_KIND_USAGE_BASED":
+            self = .usageBased
+        case "USAGE_EVENT_KIND_ERRORED_NOT_CHARGED":
+            self = .errored
+        default:
+            self = .unknown
+        }
+    }
+
+    var isBillable: Bool { self != .errored }
+}
+
+/// Billing-cycle spend totals for the signed-in user, straight from Cursor.
+struct SpendSummary: Codable, Sendable, Hashable {
+    /// On-demand spend beyond the included allowance, in cents.
+    let onDemandCents: Double
+    /// Spend absorbed by the plan's included allowance, in cents.
+    let includedCents: Double
+    let cycleStartMs: Double
+
+    var totalCents: Double { onDemandCents + includedCents }
+}
+
+/// Converts request units into cents, calibrated against `SpendSummary` totals.
+///
+/// Request-based plans report no per-event dollar amount, so the only way to
+/// attribute spend to a session or model is to price each event's request units
+/// using the cycle-wide rate Cursor implies.
+struct SpendRates: Codable, Sendable, Hashable {
+    let includedCentsPerUnit: Double
+    let usageBasedCentsPerUnit: Double
+    let computedAt: Date
+
+    static let unavailable = SpendRates(
+        includedCentsPerUnit: 0,
+        usageBasedCentsPerUnit: 0,
+        computedAt: .distantPast
+    )
+
+    var isAvailable: Bool {
+        includedCentsPerUnit > 0 || usageBasedCentsPerUnit > 0
+    }
+
+    func cents(forUnits units: Double, kind: BillingKind) -> Double {
+        guard units > 0 else { return 0 }
+        switch kind {
+        case .errored:
+            return 0
+        case .included:
+            return units * includedCentsPerUnit
+        case .usageBased, .unknown:
+            return units * usageBasedCentsPerUnit
+        }
+    }
+
+    /// Derives per-unit rates by spreading cycle spend across the cycle's request units.
+    static func calibrate(summary: SpendSummary, cycleEvents: [UsageEvent]) -> SpendRates {
+        var includedUnits: Double = 0
+        var usageBasedUnits: Double = 0
+        for event in cycleEvents {
+            switch event.billingKind {
+            case .included:
+                includedUnits += event.requestUnits
+            case .usageBased, .unknown:
+                usageBasedUnits += event.requestUnits
+            case .errored:
+                continue
+            }
+        }
+
+        return SpendRates(
+            includedCentsPerUnit: includedUnits > 0 ? summary.includedCents / includedUnits : 0,
+            usageBasedCentsPerUnit: usageBasedUnits > 0 ? summary.onDemandCents / usageBasedUnits : 0,
+            computedAt: Date()
+        )
+    }
 }
 
 struct SessionUsage: Identifiable, Sendable, Hashable {
@@ -314,6 +426,7 @@ enum TokensError: Error, LocalizedError, Sendable {
     case apiMessage(String)
     case decodingFailed
     case tooManyPages
+    case spendUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -331,6 +444,8 @@ enum TokensError: Error, LocalizedError, Sendable {
             "Could not decode usage response."
         case .tooManyPages:
             "Too many usage events to load for the selected timeline."
+        case .spendUnavailable:
+            "Cursor did not report spend totals for this account."
         }
     }
 }
