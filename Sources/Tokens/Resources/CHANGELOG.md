@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.38
+
+- Fix the calculation (6cdf1af)
+
 ## 0.0.37
 
 - feat: Custom timeline preset with inclusive date-range picker (5358475)
