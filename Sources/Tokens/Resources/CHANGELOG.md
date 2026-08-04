@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.39
+
+- Add community daily analytics with backward-compatible server support. (f7abf0c)
+
 ## 0.0.38
 
 - Fix the calculation (6cdf1af)
