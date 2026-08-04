@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.40
+
+- Show top 30 community leaderboard entries with scrollable layout. (ad87c0a)
+
 ## 0.0.39
 
 - Add community daily analytics with backward-compatible server support. (f7abf0c)
