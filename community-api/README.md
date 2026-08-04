@@ -8,11 +8,35 @@ Anonymous community usage ranking API for Burnrate.
 - `PORT` — set automatically by Railway for HTTP (do **not** copy from Postgres)
 - `HTTP_PORT` — optional override if `PORT` is wrong (e.g. leaked `5432`)
 
-## Endpoints
+## Endpoints (public)
 
-- `POST /v1/community/snapshot` — upsert participant 24h aggregate
-- `GET /v1/community/rank?participantId=` — cohort rank (share-to-view)
-- `DELETE /v1/community/me` — delete participant row
+- `POST /v1/community/snapshot` — upsert participant rolling-24h aggregate + optional `dailyReports` (operator analytics, write-only)
+- `GET /v1/community/rank?participantId=` — cohort rank (share-to-view); **never reads analytics tables**
+- `DELETE /v1/community/me` — opt-out: records anonymous churn tally, deletes participant + daily rows
+- `POST /v1/client/failures` — client error telemetry (no session/prompt content)
+
+Snapshot bodies are capped at 64 KiB. Rolling `models` arrays are capped at 50 entries.
+
+## Operator analytics (Postgres only)
+
+These tables are **never returned by any HTTP route**. Query via Railway Postgres / `psql` only.
+
+| Table | Purpose |
+|-------|---------|
+| `participants` | Current rolling-24h snapshot + `first_seen_at` (install cohort) |
+| `participant_daily_stats` | UTC calendar-day aggregates per device; replaced each upload, `upload_count` increments |
+| `optout_events` | Anonymous churn tallies (no participant id) |
+| `daily_cohort_rollup` | Durable cohort totals (survives opt-out deletion); closes **day − 2 UTC** |
+| `failure_logs` | Client error reports |
+
+See `docs/superpowers/specs/2026-08-04-community-daily-analytics-design.md` for field lists, caveats, and example SQL.
+
+**Caveats (read before querying):**
+
+- Missing upload days = no row (not zero spend)
+- Today's row is partial; treat days `< 2 days old` as provisional
+- `participant_id` means **device**, not human (multi-device double counting)
+- All snapshot numbers are client-asserted and bounded on write, not cryptographically verified
 
 ## Development
 

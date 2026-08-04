@@ -138,10 +138,16 @@ struct UsagePanel: View {
 
                 timelinePicker
 
-                if store.isLoading {
-                    ProgressView()
-                        .controlSize(.small)
-                }
+                // Reserve spinner space so the price doesn't reflow while refreshing.
+                Color.clear
+                    .frame(width: 16, height: 16)
+                    .overlay {
+                        if store.isLoading {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    }
+                    .accessibilityHidden(!store.isLoading)
             }
 
             if settings.usageTimelinePreset == .thisBilling {

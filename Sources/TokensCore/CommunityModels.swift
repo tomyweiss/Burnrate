@@ -15,9 +15,13 @@ public struct CommunityModelSpend: Sendable, Codable, Equatable {
 public struct CommunitySnapshotPayload: Sendable, Codable, Equatable {
     public let participantId: String
     public let nickname: String?
+    /// When renaming, the nickname previously stored for this participant (server reconciliation).
+    public let previousNickname: String?
     public let windowHours: Int
     public let spendCents: Int
     public let models: [CommunityModelSpend]
+    /// UTC calendar-day aggregates for operator analytics (today + yesterday).
+    public let dailyReports: [CommunityDailyReport]?
     /// Cumulative UI interaction counts (panel opens vs tab changes), only when opted in.
     public let interactionStats: CommunityInteractionStats?
     /// Burnrate app version string, e.g. `0.0.25` or `0.0.25-dev`.
@@ -26,17 +30,21 @@ public struct CommunitySnapshotPayload: Sendable, Codable, Equatable {
     public init(
         participantId: String,
         nickname: String?,
+        previousNickname: String? = nil,
         windowHours: Int = 24,
         spendCents: Int,
         models: [CommunityModelSpend],
+        dailyReports: [CommunityDailyReport]? = nil,
         interactionStats: CommunityInteractionStats? = nil,
         clientVersion: String? = nil
     ) {
         self.participantId = participantId
         self.nickname = nickname
+        self.previousNickname = previousNickname
         self.windowHours = windowHours
         self.spendCents = spendCents
         self.models = models
+        self.dailyReports = dailyReports
         self.interactionStats = interactionStats
         self.clientVersion = clientVersion
     }

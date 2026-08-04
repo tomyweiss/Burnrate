@@ -25,6 +25,21 @@ import Testing
     #expect(CompetitionRank.rank(of: 50, among: all) == 4)
 }
 
+@Test func eventFetchStartExpandsTodayWindow() {
+    let now = Date(timeIntervalSince1970: 1_700_010_000)
+    let todayStart = Calendar.current.startOfDay(for: now)
+    let fetchStart = CommunityPayloadBuilder.eventFetchStart(displayWindowStart: todayStart, now: now)
+    let rollingStart = now.addingTimeInterval(-48 * 3600)
+    #expect(fetchStart == rollingStart)
+}
+
+@Test func eventFetchStartKeepsLongerWindows() {
+    let now = Date(timeIntervalSince1970: 1_700_010_000)
+    let weekStart = now.addingTimeInterval(-7 * 24 * 3600)
+    let fetchStart = CommunityPayloadBuilder.eventFetchStart(displayWindowStart: weekStart, now: now)
+    #expect(fetchStart == weekStart)
+}
+
 @Test func payloadBuilderRolling24h() {
     let now = Date(timeIntervalSince1970: 1_700_000_000)
     let start = now.addingTimeInterval(-12 * 3600)
@@ -93,6 +108,17 @@ import Testing
     #expect(CursorDisplayName.sanitize("Ada") == "Ada")
 }
 
+@Test func payloadBuilderIncludesPreviousNickname() {
+    let payload = CommunityPayloadBuilder.build(
+        participantId: "test-uuid",
+        nickname: "Tom Weiss",
+        previousNickname: "cobalt-fox",
+        events: []
+    )
+    #expect(payload.previousNickname == "cobalt-fox")
+    #expect(payload.nickname == "Tom Weiss")
+}
+
 @Test func payloadBuilderIncludesClientVersion() {
     let payload = CommunityPayloadBuilder.build(
         participantId: "test-uuid",
@@ -101,4 +127,59 @@ import Testing
         clientVersion: "0.0.25-dev"
     )
     #expect(payload.clientVersion == "0.0.25-dev")
+}
+
+@Test func payloadBuilderDailyReportsIncludeTodayAndYesterday() {
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    let today = CommunityDayFormat.utcDayString(for: now)
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    let yesterdayDate = calendar.date(byAdding: .day, value: -1, to: now)!
+    let yesterday = CommunityDayFormat.utcDayString(for: yesterdayDate)
+
+    let dayStart = CommunityDayFormat.utcDayStartMs(for: today)!
+    let events = [
+        CommunityAnalyticsEvent(
+            timestampMs: dayStart + 3_600_000,
+            model: "claude-4-sonnet",
+            costCents: 500,
+            billingKind: .usageBased,
+            tokenInput: 1000,
+            tokenOutput: 200,
+            tokenCacheRead: 50,
+            tokenCacheWrite: 10
+        ),
+    ]
+    let config = CommunityClientConfig(
+        timelinePreset: "today",
+        refreshIntervalSeconds: 60,
+        anomalyThresholdDollars: 10,
+        anomalyWindowMinutes: 10,
+        hideAmountInMenuBar: false,
+        autoCheckForUpdates: true,
+        launchAtLogin: false,
+        hiddenTabs: ["bench"],
+        customTimezone: false,
+        billingDayOfMonth: 1
+    )
+
+    let payload = CommunityPayloadBuilder.build(
+        participantId: "test-uuid",
+        nickname: "Ada",
+        events: events,
+        now: now,
+        dailyEngagement: { _ in
+            CommunityPayloadBuilder.DailyEngagement(panelOpens: 2, tabChanges: ["models": 1])
+        },
+        nicknameSource: "cursor",
+        clientConfig: config
+    )
+
+    #expect(payload.dailyReports?.count == 2)
+    #expect(payload.dailyReports?.map(\.day).contains(today) == true)
+    #expect(payload.dailyReports?.map(\.day).contains(yesterday) == true)
+    let todayReport = payload.dailyReports?.first { $0.day == today }
+    #expect(todayReport?.spendCents == 500)
+    #expect(todayReport?.panelOpens == 2)
+    #expect(todayReport?.regionBucket == CommunityDayFormat.regionBucket(now: now))
 }

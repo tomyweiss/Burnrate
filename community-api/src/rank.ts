@@ -16,9 +16,11 @@ export interface InteractionStats {
 export interface SnapshotBody {
   participantId: string;
   nickname?: string | null;
+  previousNickname?: string | null;
   windowHours?: number;
   spendCents: number;
   models: ModelSpend[];
+  dailyReports?: unknown;
   interactionStats?: InteractionStats;
   clientVersion?: string;
 }
