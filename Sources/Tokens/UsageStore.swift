@@ -12,7 +12,7 @@ final class UsageStore {
     private(set) var isSpikeActive = false
     private(set) var notificationFeedback: String?
     private(set) var isShowingCachedData = false
-    private(set) var communityCostEvents: [CommunityCostEvent] = []
+    private(set) var communityAnalyticsEvents: [CommunityAnalyticsEvent] = []
 
     private(set) var spendSummary: SpendSummary?
 
@@ -22,6 +22,7 @@ final class UsageStore {
     private weak var communityStore: CommunityStore?
     private var pollTask: Task<Void, Never>?
     private var rates: SpendRates = .unavailable
+    let refreshMetrics = RefreshMetricsTracker()
 
     /// Pricing only moves when the billing cycle rolls over, and calibrating costs
     /// a full-cycle event fetch, so it runs far less often than the usage poll.
@@ -95,12 +96,18 @@ final class UsageStore {
         isLoading = true
         defer { isLoading = false }
 
+        refreshMetrics.recordAttempt()
+
         do {
             let credentials = try TokenProvider.loadSessionCredentials()
             let now = Date()
             let window = settings.usageWindow
             let range = window.dateRange(now: now)
-            let startMs = Int64(range.start.timeIntervalSince1970 * 1000)
+            let fetchStart = CommunityPayloadBuilder.eventFetchStart(
+                displayWindowStart: range.start,
+                now: now
+            )
+            let startMs = Int64(fetchStart.timeIntervalSince1970 * 1000)
             let endMs = Int64(range.end.timeIntervalSince1970 * 1000)
 
             let events = try await api.fetchUsageEvents(
@@ -125,7 +132,7 @@ final class UsageStore {
                 )
             }.value
             snapshot = next
-            communityCostEvents = Self.communityCostEvents(from: events, now: now, rates: activeRates)
+            communityAnalyticsEvents = Self.communityAnalyticsEvents(from: events, now: now, rates: activeRates)
             lastError = nil
             isShowingCachedData = false
             hasCompletedFetch = true
@@ -141,6 +148,7 @@ final class UsageStore {
         } catch {
             lastError = NetworkMessages.userMessage(for: error, cachedDataAvailable: isShowingCachedData)
             hasCompletedFetch = true
+            refreshMetrics.recordFailure()
             FailureReporter.report(error: error, source: .usage)
             // Keep last good snapshot and amount visible.
         }
@@ -215,25 +223,40 @@ final class UsageStore {
             eventCount: cachedSnapshot.eventCount,
             fetchedAt: cache.fetchedAt
         )
-        communityCostEvents = Self.communityCostEvents(from: cache.events, now: now, rates: rates)
+        communityAnalyticsEvents = Self.communityAnalyticsEvents(from: cache.events, now: now, rates: rates)
         hasCompletedFetch = true
         isShowingCachedData = true
     }
 
-    static func communityCostEvents(
+    static func communityAnalyticsEvents(
         from events: [UsageEvent],
         now: Date = Date(),
         rates: SpendRates = .unavailable
-    ) -> [CommunityCostEvent] {
-        let cutoffMs = now.addingTimeInterval(-24 * 60 * 60).timeIntervalSince1970 * 1000
+    ) -> [CommunityAnalyticsEvent] {
+        let cutoffMs = now.addingTimeInterval(-Double(CommunityPayloadBuilder.analyticsFetchHours) * 3600)
+            .timeIntervalSince1970 * 1000
         return events.compactMap { event in
             guard event.timestampMs >= cutoffMs else { return nil }
             let model = event.model?.isEmpty == false ? event.model! : "unknown"
-            return CommunityCostEvent(
+            return CommunityAnalyticsEvent(
                 timestampMs: event.timestampMs,
                 model: model,
-                costCents: event.costCents(using: rates)
+                costCents: event.costCents(using: rates),
+                billingKind: mapBillingKind(event.billingKind),
+                tokenInput: event.inputTokens,
+                tokenOutput: event.outputTokens,
+                tokenCacheRead: event.cacheReadTokens,
+                tokenCacheWrite: event.cacheWriteTokens
             )
+        }
+    }
+
+    private static func mapBillingKind(_ kind: BillingKind) -> CommunityBillingKind {
+        switch kind {
+        case .included: return .included
+        case .usageBased: return .usageBased
+        case .errored: return .errored
+        case .unknown: return .unknown
         }
     }
 }

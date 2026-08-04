@@ -1,5 +1,6 @@
 import Foundation
 import ServiceManagement
+import TokensCore
 
 @Observable
 final class SettingsStore {
@@ -22,6 +23,8 @@ final class SettingsStore {
         static let communityParticipantId = "communityParticipantId"
         static let communityNickname = "communityNickname"
         static let communityNicknameSource = "communityNicknameSource"
+        static let communityNicknameMigratedToCursorDefault = "communityNicknameMigratedToCursorDefault"
+        static let communityPendingPreviousNickname = "communityPendingPreviousNickname"
         static let visibleUsageTabs = "visibleUsageTabs"
     }
 
@@ -230,6 +233,30 @@ final class SettingsStore {
         }
     }
 
+    /// One-time migration from the old random default to Cursor display names.
+    var communityNicknameMigratedToCursorDefault: Bool {
+        didSet {
+            defaults.set(
+                communityNicknameMigratedToCursorDefault,
+                forKey: Keys.communityNicknameMigratedToCursorDefault
+            )
+        }
+    }
+
+    /// Old random nickname awaiting server reconciliation after a rename.
+    var communityPendingPreviousNickname: String? {
+        didSet {
+            if let communityPendingPreviousNickname {
+                defaults.set(
+                    communityPendingPreviousNickname,
+                    forKey: Keys.communityPendingPreviousNickname
+                )
+            } else {
+                defaults.removeObject(forKey: Keys.communityPendingPreviousNickname)
+            }
+        }
+    }
+
     private(set) var visibleUsageTabRawValues: [String] {
         didSet {
             let validated = Self.validatedVisibleTabRawValues(visibleUsageTabRawValues)
@@ -357,8 +384,14 @@ final class SettingsStore {
            let source = CommunityNicknameSource(rawValue: sourceRaw) {
             communityNicknameSource = source
         } else {
-            communityNicknameSource = .random
+            communityNicknameSource = .cursor
         }
+        communityNicknameMigratedToCursorDefault = defaults.bool(
+            forKey: Keys.communityNicknameMigratedToCursorDefault
+        )
+        communityPendingPreviousNickname = defaults.string(
+            forKey: Keys.communityPendingPreviousNickname
+        )
 
         if let savedTabs = defaults.stringArray(forKey: Keys.visibleUsageTabs) {
             visibleUsageTabRawValues = Self.validatedVisibleTabRawValues(savedTabs)
@@ -403,5 +436,26 @@ final class SettingsStore {
                 launchAtLogin = actual
             }
         }
+    }
+
+    /// Allow-listed settings snapshot for community analytics uploads.
+    func communityClientConfig() -> CommunityClientConfig {
+        let hiddenTabs = UsageTab.allCases
+            .filter { !visibleUsageTabs.contains($0) }
+            .map(\.rawValue)
+            .sorted()
+        let customTimezone = usageTimezoneIdentifier != nil
+        return CommunityClientConfig(
+            timelinePreset: usageTimelinePreset.rawValue,
+            refreshIntervalSeconds: Int(refreshIntervalSeconds),
+            anomalyThresholdDollars: Int(anomalyThresholdDollars),
+            anomalyWindowMinutes: anomalyWindowMinutes,
+            hideAmountInMenuBar: hideAmountInMenuBar,
+            autoCheckForUpdates: autoCheckForUpdates,
+            launchAtLogin: launchAtLogin,
+            hiddenTabs: hiddenTabs,
+            customTimezone: customTimezone,
+            billingDayOfMonth: billingDayOfMonth
+        )
     }
 }

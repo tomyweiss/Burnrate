@@ -1,21 +1,22 @@
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import {
-  deleteParticipant,
+  deleteParticipantWithOptOut,
   fetchFreshParticipants,
   insertFailureLog,
+  maybeCloseCohortRollups,
   participantExistsFresh,
+  upsertDailyReport,
   upsertParticipant,
   type ParticipantRow,
 } from "./db.js";
+import { validateAndNormalizeSnapshot } from "./snapshot-validation.js";
 import { normalizeFailure, validateFailure, type FailureBody } from "./failure-log.js";
 import {
   MIN_COHORT,
   STALE_HOURS,
-  WINDOW_HOURS,
   buildRankResponse,
   isValidUUID,
-  validateInteractionStats,
-  validateClientVersion,
   type SnapshotBody,
 } from "./rank.js";
 
@@ -24,6 +25,7 @@ type RateKey = string;
 const rateLimits = new Map<RateKey, { count: number; resetAt: number }>();
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 60;
+const SNAPSHOT_BODY_LIMIT = 64 * 1024;
 
 function rateLimitKey(ip: string, participantId?: string): RateKey {
   return participantId ? `${ip}:${participantId}` : ip;
@@ -57,45 +59,18 @@ function toParticipants(rows: ParticipantRow[]) {
   }));
 }
 
-function validateSnapshot(body: SnapshotBody): string | null {
-  if (!body.participantId || !isValidUUID(body.participantId)) {
-    return "Invalid participantId";
-  }
-  if (typeof body.spendCents !== "number" || body.spendCents < 0) {
-    return "Invalid spendCents";
-  }
-  if (body.windowHours !== undefined && body.windowHours !== WINDOW_HOURS) {
-    return "windowHours must be 24";
-  }
-  if (!Array.isArray(body.models)) {
-    return "models must be an array";
-  }
-  for (const model of body.models) {
-    if (!model.name || typeof model.spendCents !== "number" || model.spendCents < 0) {
-      return "Invalid model entry";
-    }
-  }
-  if (body.nickname != null && typeof body.nickname !== "string") {
-    return "Invalid nickname";
-  }
-  if (body.nickname && body.nickname.length > 64) {
-    return "nickname too long";
-  }
-  if (body.interactionStats !== undefined) {
-    const interactionError = validateInteractionStats(body.interactionStats);
-    if (interactionError) return interactionError;
-  }
-  if (body.clientVersion !== undefined) {
-    const versionError = validateClientVersion(body.clientVersion);
-    if (versionError) return versionError;
-  }
-  return null;
-}
-
 export function createApp() {
   const app = new Hono();
 
-  app.get("/health", (c) => c.json({ ok: true, v: 4 }));
+  app.use(
+    "/v1/community/snapshot",
+    bodyLimit({
+      maxSize: SNAPSHOT_BODY_LIMIT,
+      onError: (c) => c.json({ error: "Request body too large" }, 413),
+    })
+  );
+
+  app.get("/health", (c) => c.json({ ok: true, v: 5 }));
 
   app.get("/ready", async (c) => {
     if (!process.env.DATABASE_URL) {
@@ -120,26 +95,34 @@ export function createApp() {
       return c.json({ error: "Invalid JSON" }, 400);
     }
 
-    const validationError = validateSnapshot(body);
-    if (validationError) {
-      return c.json({ error: validationError }, 400);
+    const normalized = validateAndNormalizeSnapshot(body);
+    if ("error" in normalized) {
+      return c.json({ error: normalized.error }, 400);
     }
 
-    if (!checkRateLimit(rateLimitKey(ip, body.participantId))) {
+    if (!checkRateLimit(rateLimitKey(ip, normalized.snapshot.participantId))) {
       return c.json({ error: "Rate limit exceeded" }, 429);
     }
 
-    const nickname = body.nickname?.trim() || null;
+    const { snapshot } = normalized;
+
     await upsertParticipant(
-      body.participantId,
-      nickname,
-      Math.round(body.spendCents),
-      body.models.map((m) => ({ name: m.name, spendCents: Math.round(m.spendCents) })),
+      snapshot.participantId,
+      snapshot.nickname,
+      snapshot.spendCents,
+      snapshot.models,
       {
-        interactionStats: body.interactionStats ?? null,
-        clientVersion: body.clientVersion ?? null,
+        interactionStats: snapshot.interactionStats,
+        clientVersion: snapshot.clientVersion,
+        previousNickname: snapshot.previousNickname,
       }
     );
+
+    for (const report of snapshot.dailyReports) {
+      await upsertDailyReport(snapshot.participantId, report, snapshot.clientVersion);
+    }
+
+    await maybeCloseCohortRollups();
 
     return c.json({ ok: true });
   });
@@ -186,7 +169,7 @@ export function createApp() {
       return c.json({ error: "Rate limit exceeded" }, 429);
     }
 
-    const deleted = await deleteParticipant(body.participantId);
+    const deleted = await deleteParticipantWithOptOut(body.participantId);
     return c.json({ ok: true, deleted });
   });
 
