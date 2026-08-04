@@ -2,6 +2,8 @@ export const STALE_HOURS = 36;
 /** Always compute ranks when the requester is present (no minimum cohort). */
 export const MIN_COHORT = 1;
 export const WINDOW_HOURS = 24;
+/** Max leaderboard rows returned by GET /v1/community/rank. */
+export const LEADERBOARD_LIMIT = 30;
 
 export interface ModelSpend {
   name: string;
@@ -113,12 +115,10 @@ export function buildRankResponse(
   const requesterIndex = sortedDesc.findIndex((p) => p.id === requesterId);
   const requesterRank = ranks[requesterIndex];
 
-  const nearStart = Math.max(0, requesterIndex - 2);
-  const nearEnd = Math.min(sortedDesc.length, requesterIndex + 3);
   const leaderboardNear: LeaderboardEntry[] = sortedDesc
-    .slice(nearStart, nearEnd)
-    .map((p, offset) => ({
-      rank: ranks[nearStart + offset],
+    .slice(0, LEADERBOARD_LIMIT)
+    .map((p, index) => ({
+      rank: ranks[index],
       nickname: p.nickname,
       spendCents: p.spendCents,
       isYou: p.id === requesterId,

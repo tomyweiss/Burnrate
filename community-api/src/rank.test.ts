@@ -38,13 +38,27 @@ describe("buildRankResponse", () => {
     expect(res?.participantCount).toBe(3);
   });
 
-  it("returns rank and neighbors for a larger cohort", () => {
+  it("returns rank and full leaderboard for a larger cohort", () => {
     const res = buildRankResponse(participants, "c");
     expect(res?.notEnoughParticipants).toBe(false);
     expect(res?.rank).toBe(2);
     expect(res?.participantCount).toBe(5);
+    expect(res?.leaderboardNear).toHaveLength(5);
     expect(res?.leaderboardNear.some((e) => e.isYou)).toBe(true);
     expect(res?.leaderboardNear.every((e) => !("participantId" in e))).toBe(true);
+  });
+
+  it("caps leaderboard at 30 entries", () => {
+    const large = Array.from({ length: 40 }, (_, index) => ({
+      id: `id-${index}`,
+      nickname: `user-${index}`,
+      spendCents: 1000 - index,
+    }));
+    const res = buildRankResponse(large, "id-35");
+    expect(res?.leaderboardNear).toHaveLength(30);
+    expect(res?.leaderboardNear[0].rank).toBe(1);
+    expect(res?.leaderboardNear[29].rank).toBe(30);
+    expect(res?.leaderboardNear.some((e) => e.isYou)).toBe(false);
   });
 
   it("returns null when requester missing", () => {

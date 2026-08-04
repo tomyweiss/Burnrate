@@ -70,6 +70,29 @@ struct CommunityView: View {
     // MARK: - Sharing
 
     private var sharingContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            sharingHeader
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
+
+            if let rank = community.rank, !rank.notEnoughParticipants {
+                leaderboardList(rank)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else {
+                Spacer(minLength: 0)
+            }
+
+            sharingFooterButton
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    @ViewBuilder
+    private var sharingHeader: some View {
         VStack(alignment: .leading, spacing: 16) {
             nicknameRow
 
@@ -83,7 +106,6 @@ struct CommunityView: View {
                 }
                 heroStats(rank)
                 distributionBar(rank)
-                nearYouList(rank)
             } else if community.isLoading {
                 ProgressView()
                     .frame(maxWidth: .infinity, minHeight: 120)
@@ -93,22 +115,19 @@ struct CommunityView: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 80)
             }
-
-            Spacer(minLength: 0)
-
-            Button {
-                Task { await community.disableSharing() }
-            } label: {
-                Text("Sharing on · tap to stop")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.plain)
-            .padding(.bottom, 8)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 4)
+    }
+
+    private var sharingFooterButton: some View {
+        Button {
+            Task { await community.disableSharing() }
+        } label: {
+            Text("Sharing on · tap to stop")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
     }
 
     private var nicknameRow: some View {
@@ -239,20 +258,34 @@ struct CommunityView: View {
         .padding(.top, 4)
     }
 
-    private func nearYouList(_ rank: CommunityRankResponse) -> some View {
+    private func leaderboardList(_ rank: CommunityRankResponse) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("NEAR YOU")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            ForEach(rank.leaderboardNear.indices, id: \.self) { index in
-                let entry = rank.leaderboardNear[index]
-                nearYouRow(entry)
+            HStack {
+                Text("LEADERBOARD")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if rank.participantCount > rank.leaderboardNear.count {
+                    Text("Top \(rank.leaderboardNear.count) of \(rank.participantCount)")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
+
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(rank.leaderboardNear.indices, id: \.self) { index in
+                        leaderboardRow(rank.leaderboardNear[index])
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private func nearYouRow(_ entry: CommunityLeaderboardEntry) -> some View {
+    private func leaderboardRow(_ entry: CommunityLeaderboardEntry) -> some View {
         let name = entry.nickname?.trimmingCharacters(in: .whitespacesAndNewlines)
         let displayName = (name?.isEmpty == false) ? name! : "Anonymous"
 

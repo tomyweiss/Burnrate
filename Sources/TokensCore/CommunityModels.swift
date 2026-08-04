@@ -70,7 +70,7 @@ public struct CommunityInteractionStats: Sendable, Codable, Equatable {
     }
 }
 
-/// One row in the near-you leaderboard.
+/// One row in the community leaderboard (up to 30 returned by the API).
 public struct CommunityLeaderboardEntry: Sendable, Codable, Equatable {
     public let rank: Int
     public let nickname: String?
