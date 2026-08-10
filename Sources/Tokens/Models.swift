@@ -1,4 +1,5 @@
 import Foundation
+import TokensCore
 
 struct UsageEventsResponse: Codable, Sendable {
     let totalUsageEventsCount: Int?
@@ -200,7 +201,7 @@ struct SessionUsage: Identifiable, Sendable, Hashable {
 
     var displayName: String {
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !trimmed.isEmpty { return trimmed }
+        if !trimmed.isEmpty { return DisplayText.sanitize(trimmed) }
         let short = conversationId.count > 8
             ? String(conversationId.prefix(8))
             : conversationId
@@ -320,7 +321,12 @@ struct PromptUsage: Identifiable, Sendable, Hashable {
             .split(separator: "\n", omittingEmptySubsequences: true)
             .first
             .map(String.init) ?? text
-        return firstLine.trimmingCharacters(in: .whitespaces)
+        return DisplayText.sanitize(firstLine, collapseWhitespace: true)
+    }
+
+    /// Full prompt text with terminal prompt glyphs removed for display.
+    var displayText: String {
+        DisplayText.sanitize(text)
     }
 }
 

@@ -42,7 +42,7 @@ enum ListSearch {
 
     static func prompt(_ prompt: PromptUsage, query: String) -> Bool {
         matches(query, in: [
-            prompt.text,
+            prompt.displayText,
             prompt.headline,
             prompt.sessionName,
             prompt.conversationId,
