@@ -31,21 +31,17 @@ actor CommunityClient {
     }
 
     func fetchRank(participantId: String, membershipSecret: String) async throws -> CommunityRankResponse {
-        var components = URLComponents(
-            url: baseURL.appendingPathComponent("v1/community/rank"),
-            resolvingAgainstBaseURL: false
-        )
-        // Query param is required: some paths drop custom headers, while POST body auth works.
-        components?.queryItems = [
-            URLQueryItem(name: "participantId", value: participantId),
-            URLQueryItem(name: "membershipSecret", value: membershipSecret),
-        ]
-        guard let url = components?.url else { throw CommunityError.invalidURL }
-
+        let url = baseURL.appendingPathComponent("v1/community/rank")
         var request = URLRequest(url: url)
-        request.httpMethod = "GET"
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(clientVersion, forHTTPHeaderField: "clientVersion")
         request.setValue(membershipSecret, forHTTPHeaderField: "X-Membership-Secret")
+        let body = [
+            "participantId": participantId,
+            "membershipSecret": membershipSecret,
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await session.data(for: request)
         if let http = response as? HTTPURLResponse, http.statusCode == 403 {

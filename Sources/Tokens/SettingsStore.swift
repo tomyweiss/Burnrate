@@ -21,8 +21,10 @@ final class SettingsStore {
         static let hideArchivedSessions = "hideArchivedSessions"
         static let blurSensitiveContent = "blurSensitiveContent"
         static let shareCommunityUsage = "shareCommunityUsage"
+        static let sendDiagnostics = "sendDiagnostics"
         static let communityParticipantId = "communityParticipantId"
         static let communityMembershipSecret = "communityMembershipSecret"
+        static let keychainMembershipSecretAccount = "communityMembershipSecret"
         static let communityPendingPreviousNickname = "communityPendingPreviousNickname"
         /// Legacy keys cleared on load (random/anonymous nicknames removed).
         static let communityNickname = "communityNickname"
@@ -208,6 +210,11 @@ final class SettingsStore {
         didSet { defaults.set(shareCommunityUsage, forKey: Keys.shareCommunityUsage) }
     }
 
+    /// Opt-in anonymous error reports to the community API (default off).
+    var sendDiagnostics: Bool {
+        didSet { defaults.set(sendDiagnostics, forKey: Keys.sendDiagnostics) }
+    }
+
     /// Anonymous participant UUID; generated on first opt-in.
     var communityParticipantId: String? {
         didSet {
@@ -223,9 +230,9 @@ final class SettingsStore {
     var communityMembershipSecret: String? {
         didSet {
             if let communityMembershipSecret {
-                defaults.set(communityMembershipSecret, forKey: Keys.communityMembershipSecret)
+                saveMembershipSecretToKeychain(communityMembershipSecret)
             } else {
-                defaults.removeObject(forKey: Keys.communityMembershipSecret)
+                deleteMembershipSecretFromKeychain()
             }
         }
     }
@@ -393,8 +400,13 @@ final class SettingsStore {
         usageTimezoneIdentifier = defaults.string(forKey: Keys.usageTimezoneIdentifier)
 
         shareCommunityUsage = defaults.bool(forKey: Keys.shareCommunityUsage)
+        sendDiagnostics = defaults.bool(forKey: Keys.sendDiagnostics)
         communityParticipantId = defaults.string(forKey: Keys.communityParticipantId)
-        communityMembershipSecret = defaults.string(forKey: Keys.communityMembershipSecret)
+        communityMembershipSecret = Self.loadMembershipSecret(
+            defaults: defaults,
+            keychainAccount: Keys.keychainMembershipSecretAccount,
+            legacyDefaultsKey: Keys.communityMembershipSecret
+        )
         communityPendingPreviousNickname = defaults.string(
             forKey: Keys.communityPendingPreviousNickname
         )
@@ -443,6 +455,83 @@ final class SettingsStore {
                 launchAtLogin = actual
             }
         }
+    }
+
+    private static func loadMembershipSecret(
+        defaults: UserDefaults,
+        keychainAccount: String,
+        legacyDefaultsKey: String
+    ) -> String? {
+        if let fromKeychain = readMembershipSecretFromKeychain(account: keychainAccount) {
+            return fromKeychain
+        }
+        if let legacy = defaults.string(forKey: legacyDefaultsKey) {
+            _ = saveMembershipSecretToKeychain(legacy, account: keychainAccount)
+            defaults.removeObject(forKey: legacyDefaultsKey)
+            return legacy
+        }
+        return nil
+    }
+
+    private static func keychainServiceName() -> String {
+        Bundle.main.bundleIdentifier ?? "com.burnrate.tokens"
+    }
+
+    @discardableResult
+    private static func saveMembershipSecretToKeychain(
+        _ secret: String,
+        account: String = Keys.keychainMembershipSecretAccount
+    ) -> Bool {
+        guard let data = secret.data(using: .utf8) else { return false }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainServiceName(),
+            kSecAttrAccount as String: account,
+        ]
+        let attributes: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+        ]
+        let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if status == errSecSuccess { return true }
+        if status == errSecItemNotFound {
+            var addQuery = query
+            addQuery[kSecValueData as String] = data
+            addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            return SecItemAdd(addQuery as CFDictionary, nil) == errSecSuccess
+        }
+        return false
+    }
+
+    private func saveMembershipSecretToKeychain(_ secret: String) {
+        _ = Self.saveMembershipSecretToKeychain(secret)
+    }
+
+    private static func readMembershipSecretFromKeychain(account: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainServiceName(),
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        guard status == errSecSuccess,
+              let data = item as? Data,
+              let secret = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        return secret
+    }
+
+    private func deleteMembershipSecretFromKeychain() {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.keychainServiceName(),
+            kSecAttrAccount as String: Keys.keychainMembershipSecretAccount,
+        ]
+        SecItemDelete(query as CFDictionary)
     }
 
     /// Allow-listed settings snapshot for community analytics uploads.

@@ -23,7 +23,7 @@ let package = Package(
         ),
         .testTarget(
             name: "TokensTests",
-            dependencies: ["TokensCore"],
+            dependencies: ["TokensCore", "Tokens"],
             path: "Tests/TokensTests"
         )
     ]

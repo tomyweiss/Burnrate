@@ -15,6 +15,7 @@ struct TokensApp: App {
         }
 
         let settings = SettingsStore()
+        FailureReporter.isEnabled = { settings.sendDiagnostics }
         let interactionTracker = InteractionTracker()
         let store = UsageStore(settings: settings)
         let community = CommunityStore(settings: settings, interactionTracker: interactionTracker)
