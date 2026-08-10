@@ -105,7 +105,11 @@ final class CommunityStore {
         defer { isLoading = false }
 
         do {
-            rank = try await client.fetchRank(participantId: participantId)
+            let membershipSecret = settings.ensureCommunityMembershipSecret()
+            rank = try await client.fetchRank(
+                participantId: participantId,
+                membershipSecret: membershipSecret
+            )
             rankIsStale = false
             lastError = nil
             if let rank {

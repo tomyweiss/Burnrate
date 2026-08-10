@@ -30,7 +30,7 @@ actor CommunityClient {
         try validate(response)
     }
 
-    func fetchRank(participantId: String) async throws -> CommunityRankResponse {
+    func fetchRank(participantId: String, membershipSecret: String) async throws -> CommunityRankResponse {
         var components = URLComponents(
             url: baseURL.appendingPathComponent("v1/community/rank"),
             resolvingAgainstBaseURL: false
@@ -41,6 +41,7 @@ actor CommunityClient {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue(clientVersion, forHTTPHeaderField: "clientVersion")
+        request.setValue(membershipSecret, forHTTPHeaderField: "X-Membership-Secret")
 
         let (data, response) = try await session.data(for: request)
         if let http = response as? HTTPURLResponse, http.statusCode == 403 {
