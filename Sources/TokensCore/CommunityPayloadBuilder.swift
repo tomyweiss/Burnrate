@@ -37,6 +37,7 @@ public enum CommunityPayloadBuilder {
     /// Build rolling 24h snapshot plus UTC daily reports for today and yesterday.
     public static func build(
         participantId: String,
+        membershipSecret: String,
         nickname: String?,
         previousNickname: String? = nil,
         events: [CommunityAnalyticsEvent],
@@ -79,6 +80,7 @@ public enum CommunityPayloadBuilder {
 
         return CommunitySnapshotPayload(
             participantId: participantId,
+            membershipSecret: membershipSecret,
             nickname: nickname,
             previousNickname: previousNickname,
             windowHours: windowHours,
@@ -93,6 +95,7 @@ public enum CommunityPayloadBuilder {
     /// Backward-compatible build from legacy cost-only events.
     public static func build(
         participantId: String,
+        membershipSecret: String,
         nickname: String?,
         previousNickname: String? = nil,
         events: [CommunityCostEvent],
@@ -122,6 +125,7 @@ public enum CommunityPayloadBuilder {
         )
         return build(
             participantId: participantId,
+            membershipSecret: membershipSecret,
             nickname: nickname,
             previousNickname: previousNickname,
             events: analyticsEvents,

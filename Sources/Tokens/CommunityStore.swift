@@ -73,12 +73,17 @@ final class CommunityStore {
         settings.shareCommunityUsage = false
         settings.communityPendingPreviousNickname = nil
         if let participantId = settings.communityParticipantId {
+            let membershipSecret = settings.ensureCommunityMembershipSecret()
             do {
-                try await client.deleteParticipant(participantId: participantId)
+                try await client.deleteParticipant(
+                    participantId: participantId,
+                    membershipSecret: membershipSecret
+                )
             } catch {
                 // Best-effort delete; local opt-out still applies.
             }
         }
+        settings.communityMembershipSecret = nil
         rank = nil
         lastError = nil
         rankIsStale = false
@@ -192,9 +197,11 @@ final class CommunityStore {
             throw CommunityError.apiMessage("No recent usage data to share yet.")
         }
 
+        let membershipSecret = settings.ensureCommunityMembershipSecret()
         let now = Date()
         return CommunityPayloadBuilder.build(
             participantId: participantId,
+            membershipSecret: membershipSecret,
             nickname: nickname,
             previousNickname: settings.communityPendingPreviousNickname,
             events: events,
