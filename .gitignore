@@ -10,6 +10,9 @@ dist/
 # Community API — kept locally / deployed from private workspace; not in public repo
 community-api/
 
+# Maintainer scripts (release/package/dev) — local only
+scripts/
+
 # Local agent design/plan notes (not shared via repo)
 docs/superpowers/**
 !docs/superpowers/specs/

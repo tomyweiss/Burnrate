@@ -33,6 +33,13 @@ chats, and whether you're in the middle of a spike.
 
 ## Install
 
+Download the latest `Burnrate-*.zip` from
+[Releases](https://github.com/tomyweiss/Burnrate/releases), unzip, and move
+`Burnrate.app` to `/Applications`.
+
+Or build from source (requires local maintainer `scripts/` — not shipped in the
+public repo):
+
 ```bash
 git clone https://github.com/tomyweiss/Burnrate.git
 cd Burnrate
@@ -172,6 +179,9 @@ Package layout: Swift package target `Tokens` (internal name), shipped as **Burn
 
 <details>
 <summary><strong>Cutting a release (maintainers)</strong></summary>
+
+Maintainer packaging/release helpers live in a local `scripts/` directory (not
+in the public repo). Keep your own copy beside the checkout.
 
 Requires [minisign](https://jedisct1.github.io/minisign/) and the release
 signing secret key at `~/.config/burnrate/burnrate.key` (or set
