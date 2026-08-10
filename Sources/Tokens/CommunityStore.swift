@@ -26,7 +26,6 @@ final class CommunityStore {
         self.interactionTracker = interactionTracker
         self.client = client
         refreshCursorDisplayName()
-        normalizeNicknameSource()
         restoreCachedRankIfAvailable()
     }
 
@@ -36,15 +35,11 @@ final class CommunityStore {
 
     var isSharing: Bool { settings.shareCommunityUsage }
 
-    var nicknameSource: CommunityNicknameSource {
-        settings.communityNicknameSource
-    }
-
     var displayNickname: String {
-        resolvedUploadNickname() ?? "Anonymous"
+        cursorDisplayName ?? "Unknown"
     }
 
-    var canUseCursorName: Bool {
+    var canEnableSharing: Bool {
         cursorDisplayName != nil
     }
 
@@ -52,54 +47,25 @@ final class CommunityStore {
         cursorDisplayName = TokenProvider.loadCursorDisplayName()
     }
 
-    /// Keeps the stored nickname source consistent with what's available locally.
-    private func normalizeNicknameSource() {
-        refreshCursorDisplayName()
-
-        guard settings.communityNicknameSource == .cursor, cursorDisplayName == nil else { return }
-
-        settings.communityNicknameSource = .random
-        if settings.communityNickname == nil {
-            settings.communityNickname = NicknameGenerator.random()
-        }
-    }
-
-    /// One-time upgrade: move users still on the old random default to their Cursor name.
+    /// One-time upgrade: reconcile old random nicknames to the Cursor display name on the server.
     func migrateNicknameToCursorDefaultIfNeeded() async {
         if settings.communityPendingPreviousNickname != nil {
             await reconcilePendingNicknameIfNeeded()
-            return
-        }
-
-        guard !settings.communityNicknameMigratedToCursorDefault else { return }
-
-        refreshCursorDisplayName()
-        guard settings.communityNicknameSource == .random,
-              cursorDisplayName != nil else {
-            settings.communityNicknameMigratedToCursorDefault = true
-            return
-        }
-
-        applyCursorNicknameLocally(previousRandomNickname: settings.communityNickname)
-
-        if settings.shareCommunityUsage {
-            await reconcilePendingNicknameIfNeeded()
-        } else {
-            settings.communityNicknameMigratedToCursorDefault = true
         }
     }
 
     func enableSharing() async {
         refreshCursorDisplayName()
-        normalizeNicknameSource()
-        if settings.communityNicknameSource == .random,
-           settings.communityNickname == nil {
-            settings.communityNickname = NicknameGenerator.random()
+        guard let cursorDisplayName else {
+            lastError = "Cursor display name not found. Sign in to Cursor to share."
+            return
         }
+
         let participantId = settings.ensureCommunityParticipantId()
         settings.shareCommunityUsage = true
         lastUploadAt = nil
-        await uploadSnapshot(participantId: participantId, force: true)
+        lastError = nil
+        await uploadSnapshot(participantId: participantId, nickname: cursorDisplayName, force: true)
         await refreshRank()
     }
 
@@ -120,27 +86,6 @@ final class CommunityStore {
         interactionTracker.reset()
         usageStore?.refreshMetrics.reset()
         CommunityRankCache.clear()
-    }
-
-    func useCursorName() {
-        refreshCursorDisplayName()
-        rememberPreviousNicknameForReconciliation(from: settings.communityNicknameSource)
-        settings.communityNicknameSource = .cursor
-        uploadIfSharing()
-    }
-
-    func shuffleNickname() {
-        settings.communityNicknameSource = .random
-        settings.communityNickname = NicknameGenerator.random()
-        settings.communityPendingPreviousNickname = nil
-        uploadIfSharing()
-    }
-
-    func useAnonymous() {
-        settings.communityNicknameSource = .anonymous
-        settings.communityNickname = nil
-        settings.communityPendingPreviousNickname = nil
-        uploadIfSharing()
     }
 
     func refreshRank() async {
@@ -185,25 +130,20 @@ final class CommunityStore {
         await refreshRank()
     }
 
-    private func uploadIfSharing() {
-        if settings.shareCommunityUsage {
-            Task { await uploadSnapshotIfNeeded(force: true) }
-        }
-    }
-
     private func uploadSnapshotIfNeeded(force: Bool) async {
-        guard let participantId = settings.communityParticipantId else { return }
-        _ = await uploadSnapshot(participantId: participantId, force: force)
+        guard let participantId = settings.communityParticipantId,
+              let nickname = cursorDisplayName else { return }
+        _ = await uploadSnapshot(participantId: participantId, nickname: nickname, force: force)
     }
 
     @discardableResult
-    private func uploadSnapshot(participantId: String, force: Bool) async -> Bool {
+    private func uploadSnapshot(participantId: String, nickname: String, force: Bool) async -> Bool {
         if !force, let lastUploadAt, Date().timeIntervalSince(lastUploadAt) < uploadThrottle {
             return false
         }
 
         do {
-            let payload = try buildSnapshotPayload(participantId: participantId)
+            let payload = try buildSnapshotPayload(participantId: participantId, nickname: nickname)
             try await client.postSnapshot(payload)
             lastUploadAt = Date()
             lastError = nil
@@ -223,37 +163,17 @@ final class CommunityStore {
     private func reconcilePendingNicknameIfNeeded() async {
         guard settings.shareCommunityUsage,
               settings.communityPendingPreviousNickname != nil,
-              let participantId = settings.communityParticipantId else { return }
+              let participantId = settings.communityParticipantId,
+              let nickname = cursorDisplayName else { return }
 
-        let reconciled = await uploadSnapshot(participantId: participantId, force: true)
+        let reconciled = await uploadSnapshot(participantId: participantId, nickname: nickname, force: true)
         if reconciled {
             await refreshRank()
         }
     }
 
-    private func applyCursorNicknameLocally(previousRandomNickname: String?) {
-        settings.communityNicknameSource = .cursor
-        if let previous = normalizedNickname(previousRandomNickname) {
-            settings.communityPendingPreviousNickname = previous
-        }
-        settings.communityNickname = nil
-    }
-
-    private func rememberPreviousNicknameForReconciliation(from source: CommunityNicknameSource) {
-        guard source == .random else { return }
-        if let previous = normalizedNickname(settings.communityNickname) {
-            settings.communityPendingPreviousNickname = previous
-        }
-    }
-
     private func clearPendingNicknameReconciliation() {
         settings.communityPendingPreviousNickname = nil
-        settings.communityNicknameMigratedToCursorDefault = true
-    }
-
-    private func normalizedNickname(_ value: String?) -> String? {
-        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func restoreCachedRankIfAvailable() {
@@ -266,18 +186,7 @@ final class CommunityStore {
         rankIsStale = true
     }
 
-    private func resolvedUploadNickname() -> String? {
-        switch settings.communityNicknameSource {
-        case .cursor:
-            return cursorDisplayName
-        case .random:
-            return normalizedNickname(settings.communityNickname)
-        case .anonymous:
-            return nil
-        }
-    }
-
-    private func buildSnapshotPayload(participantId: String) throws -> CommunitySnapshotPayload {
+    private func buildSnapshotPayload(participantId: String, nickname: String) throws -> CommunitySnapshotPayload {
         let events = usageStore?.communityAnalyticsEvents ?? []
         guard !events.isEmpty else {
             throw CommunityError.apiMessage("No recent usage data to share yet.")
@@ -286,7 +195,7 @@ final class CommunityStore {
         let now = Date()
         return CommunityPayloadBuilder.build(
             participantId: participantId,
-            nickname: resolvedUploadNickname(),
+            nickname: nickname,
             previousNickname: settings.communityPendingPreviousNickname,
             events: events,
             now: now,
@@ -303,7 +212,7 @@ final class CommunityStore {
                 }
                 return engagement
             },
-            nicknameSource: settings.communityNicknameSource.rawValue,
+            nicknameSource: "cursor",
             clientConfig: settings.communityClientConfig(),
             clientVersion: AppIdentity.versionLabel
         )
