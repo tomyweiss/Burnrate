@@ -6,7 +6,9 @@ DerivedData/
 .swiftpm/
 .DS_Store
 dist/
-community-api/node_modules/
+
+# Community API — kept locally / deployed from private workspace; not in public repo
+community-api/
 
 # Local agent design/plan notes (not shared via repo)
 docs/superpowers/**
