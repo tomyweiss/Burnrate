@@ -115,39 +115,47 @@ struct UsagePanel: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text(MoneyFormat.dollars(store.snapshot.windowDollars))
-                    .font(.system(size: 34, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .contentTransition(reduceMotion ? .identity : .numericText())
-                    .animation(reduceMotion ? nil : .snappy, value: store.snapshot.windowCostCents)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(MoneyFormat.dollars(store.snapshot.windowDollars))
+                        .font(.system(size: 34, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
+                        .contentTransition(reduceMotion ? .identity : .numericText())
+                        .animation(reduceMotion ? nil : .snappy, value: store.snapshot.windowCostCents)
 
-                Spacer(minLength: 8)
-
-                if AppIdentity.isDevBuild {
-                    Text("DEV")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Capsule().fill(Color.orange))
-                        .accessibilityLabel("Development build")
-                }
-
-                communityButton
-
-                timelinePicker
-
-                // Reserve spinner space so the price doesn't reflow while refreshing.
-                Color.clear
-                    .frame(width: 16, height: 16)
-                    .overlay {
-                        if store.isLoading {
-                            ProgressView()
-                                .controlSize(.small)
+                    // Spinner beside the amount; fixed slot avoids layout shift while refreshing.
+                    Color.clear
+                        .frame(width: 16, height: 16)
+                        .overlay {
+                            if store.isLoading {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
                         }
+                        .accessibilityHidden(!store.isLoading)
+                }
+                .layoutPriority(1)
+
+                Spacer(minLength: 4)
+
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    if AppIdentity.isDevBuild {
+                        Text("DEV")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(Color.orange))
+                            .accessibilityLabel("Development build")
                     }
-                    .accessibilityHidden(!store.isLoading)
+
+                    communityButton
+
+                    timelinePicker
+                }
+                .layoutPriority(0)
             }
 
             if settings.usageTimelinePreset == .thisBilling {
