@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.41
+
+- Community sharing always uses your Cursor display name; removed random and anonymous nickname options.
+
 ## 0.0.40
 
 - Show top 30 community leaderboard entries with scrollable layout. (ad87c0a)

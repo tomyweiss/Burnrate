@@ -21,10 +21,11 @@ final class SettingsStore {
         static let blurSensitiveContent = "blurSensitiveContent"
         static let shareCommunityUsage = "shareCommunityUsage"
         static let communityParticipantId = "communityParticipantId"
+        static let communityPendingPreviousNickname = "communityPendingPreviousNickname"
+        /// Legacy keys cleared on load (random/anonymous nicknames removed).
         static let communityNickname = "communityNickname"
         static let communityNicknameSource = "communityNicknameSource"
         static let communityNicknameMigratedToCursorDefault = "communityNicknameMigratedToCursorDefault"
-        static let communityPendingPreviousNickname = "communityPendingPreviousNickname"
         static let visibleUsageTabs = "visibleUsageTabs"
     }
 
@@ -216,34 +217,7 @@ final class SettingsStore {
         }
     }
 
-    /// Optional fun nickname; `nil` displays as Anonymous.
-    var communityNickname: String? {
-        didSet {
-            if let communityNickname {
-                defaults.set(communityNickname, forKey: Keys.communityNickname)
-            } else {
-                defaults.removeObject(forKey: Keys.communityNickname)
-            }
-        }
-    }
-
-    var communityNicknameSource: CommunityNicknameSource {
-        didSet {
-            defaults.set(communityNicknameSource.rawValue, forKey: Keys.communityNicknameSource)
-        }
-    }
-
-    /// One-time migration from the old random default to Cursor display names.
-    var communityNicknameMigratedToCursorDefault: Bool {
-        didSet {
-            defaults.set(
-                communityNicknameMigratedToCursorDefault,
-                forKey: Keys.communityNicknameMigratedToCursorDefault
-            )
-        }
-    }
-
-    /// Old random nickname awaiting server reconciliation after a rename.
+    /// Old random nickname awaiting server reconciliation after upgrade to Cursor display names.
     var communityPendingPreviousNickname: String? {
         didSet {
             if let communityPendingPreviousNickname {
@@ -320,6 +294,19 @@ final class SettingsStore {
         return id
     }
 
+    /// Queue server reconciliation when upgrading from random nicknames to Cursor display names.
+    private func migrateLegacyCommunityNicknameSettings() {
+        if communityPendingPreviousNickname == nil,
+           defaults.string(forKey: Keys.communityNicknameSource) == "random",
+           let legacyNickname = defaults.string(forKey: Keys.communityNickname)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !legacyNickname.isEmpty {
+            communityPendingPreviousNickname = legacyNickname
+        }
+        defaults.removeObject(forKey: Keys.communityNickname)
+        defaults.removeObject(forKey: Keys.communityNicknameSource)
+        defaults.removeObject(forKey: Keys.communityNicknameMigratedToCursorDefault)
+    }
+
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
@@ -379,16 +366,6 @@ final class SettingsStore {
 
         shareCommunityUsage = defaults.bool(forKey: Keys.shareCommunityUsage)
         communityParticipantId = defaults.string(forKey: Keys.communityParticipantId)
-        communityNickname = defaults.string(forKey: Keys.communityNickname)
-        if let sourceRaw = defaults.string(forKey: Keys.communityNicknameSource),
-           let source = CommunityNicknameSource(rawValue: sourceRaw) {
-            communityNicknameSource = source
-        } else {
-            communityNicknameSource = .cursor
-        }
-        communityNicknameMigratedToCursorDefault = defaults.bool(
-            forKey: Keys.communityNicknameMigratedToCursorDefault
-        )
         communityPendingPreviousNickname = defaults.string(
             forKey: Keys.communityPendingPreviousNickname
         )
@@ -400,6 +377,7 @@ final class SettingsStore {
         }
 
         launchAtLogin = SMAppService.mainApp.status == .enabled
+        migrateLegacyCommunityNicknameSettings()
     }
 
     static func nearestInterval(_ value: Double) -> Double {

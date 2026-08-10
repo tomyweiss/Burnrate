@@ -37,12 +37,21 @@ struct CommunityView: View {
                 .font(.title3.weight(.semibold))
                 .padding(.top, 20)
 
-            Text("Upload anonymous 24h spend + model mix. No personal info. You only see others if you share.")
+            Text("Upload your 24h spend and model mix. Your Cursor name appears on the leaderboard. You only see others if you share.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
                 .padding(.top, 8)
+
+            if let error = community.lastError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 8)
+            }
 
             Button {
                 Task { await community.enableSharing() }
@@ -55,6 +64,7 @@ struct CommunityView: View {
                     .background(Color.orange, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
             .buttonStyle(.plain)
+            .disabled(!community.canEnableSharing)
             .padding(.horizontal, 24)
             .padding(.top, 24)
 
@@ -131,58 +141,15 @@ struct CommunityView: View {
     }
 
     private var nicknameRow: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: nicknameIcon)
-                    .font(.caption)
-                    .foregroundStyle(Color.orange)
+        HStack(spacing: 6) {
+            Image(systemName: "person.crop.circle")
+                .font(.caption)
+                .foregroundStyle(Color.orange)
 
-                Text(community.displayNickname)
-                    .font(.subheadline.weight(.medium))
+            Text(community.displayNickname)
+                .font(.subheadline.weight(.medium))
 
-                if community.nicknameSource == .random {
-                    Button {
-                        community.shuffleNickname()
-                    } label: {
-                        Image(systemName: "shuffle")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.borderless)
-                    .controlSize(.mini)
-                    .help("Shuffle nickname")
-                }
-
-                Spacer()
-            }
-
-            Picker("Display name", selection: Binding(
-                get: { community.nicknameSource },
-                set: { newSource in
-                    guard newSource != community.nicknameSource else { return }
-                    switch newSource {
-                    case .cursor: community.useCursorName()
-                    case .random: community.shuffleNickname()
-                    case .anonymous: community.useAnonymous()
-                    }
-                }
-            )) {
-                if community.canUseCursorName, let cursorName = community.cursorDisplayName {
-                    Text("Cursor · \(cursorName)").tag(CommunityNicknameSource.cursor)
-                }
-                Text("Random").tag(CommunityNicknameSource.random)
-                Text("Anonymous").tag(CommunityNicknameSource.anonymous)
-            }
-            .pickerStyle(.segmented)
-            .disabled(!community.canUseCursorName && community.nicknameSource == .cursor)
-        }
-    }
-
-    private var nicknameIcon: String {
-        switch community.nicknameSource {
-        case .cursor: "person.crop.circle"
-        case .random: "hare.fill"
-        case .anonymous: "eye.slash"
+            Spacer()
         }
     }
 
