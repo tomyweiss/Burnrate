@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import ServiceManagement
 import TokensCore
 
@@ -21,6 +22,7 @@ final class SettingsStore {
         static let blurSensitiveContent = "blurSensitiveContent"
         static let shareCommunityUsage = "shareCommunityUsage"
         static let communityParticipantId = "communityParticipantId"
+        static let communityMembershipSecret = "communityMembershipSecret"
         static let communityPendingPreviousNickname = "communityPendingPreviousNickname"
         /// Legacy keys cleared on load (random/anonymous nicknames removed).
         static let communityNickname = "communityNickname"
@@ -217,6 +219,17 @@ final class SettingsStore {
         }
     }
 
+    /// Per-device membership secret proving possession of the participant row.
+    var communityMembershipSecret: String? {
+        didSet {
+            if let communityMembershipSecret {
+                defaults.set(communityMembershipSecret, forKey: Keys.communityMembershipSecret)
+            } else {
+                defaults.removeObject(forKey: Keys.communityMembershipSecret)
+            }
+        }
+    }
+
     /// Old random nickname awaiting server reconciliation after upgrade to Cursor display names.
     var communityPendingPreviousNickname: String? {
         didSet {
@@ -294,6 +307,21 @@ final class SettingsStore {
         return id
     }
 
+    /// Ensures a membership secret exists (32 random bytes, base64url).
+    func ensureCommunityMembershipSecret() -> String {
+        if let communityMembershipSecret { return communityMembershipSecret }
+        var bytes = [UInt8](repeating: 0, count: 32)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        precondition(status == errSecSuccess, "SecRandomCopyBytes failed")
+        let secret = Data(bytes)
+            .base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        communityMembershipSecret = secret
+        return secret
+    }
+
     /// Queue server reconciliation when upgrading from random nicknames to Cursor display names.
     private func migrateLegacyCommunityNicknameSettings() {
         if communityPendingPreviousNickname == nil,
@@ -366,6 +394,7 @@ final class SettingsStore {
 
         shareCommunityUsage = defaults.bool(forKey: Keys.shareCommunityUsage)
         communityParticipantId = defaults.string(forKey: Keys.communityParticipantId)
+        communityMembershipSecret = defaults.string(forKey: Keys.communityMembershipSecret)
         communityPendingPreviousNickname = defaults.string(
             forKey: Keys.communityPendingPreviousNickname
         )

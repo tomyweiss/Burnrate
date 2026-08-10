@@ -55,13 +55,16 @@ actor CommunityClient {
         }
     }
 
-    func deleteParticipant(participantId: String) async throws {
+    func deleteParticipant(participantId: String, membershipSecret: String) async throws {
         let url = baseURL.appendingPathComponent("v1/community/me")
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(clientVersion, forHTTPHeaderField: "clientVersion")
-        let body = ["participantId": participantId]
+        let body = [
+            "participantId": participantId,
+            "membershipSecret": membershipSecret,
+        ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (_, response) = try await session.data(for: request)

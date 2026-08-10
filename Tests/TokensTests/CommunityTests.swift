@@ -62,6 +62,7 @@ import Testing
 
     let payload = CommunityPayloadBuilder.build(
         participantId: "test-uuid",
+        membershipSecret: String(repeating: "s", count: 32),
         nickname: "cobalt-fox",
         events: events,
         now: now
@@ -100,6 +101,7 @@ import Testing
     let stats = CommunityInteractionStats(panelOpens: 3, tabChanges: ["sessions": 5])
     let payload = CommunityPayloadBuilder.build(
         participantId: "test-uuid",
+        membershipSecret: String(repeating: "s", count: 32),
         nickname: nil,
         events: [],
         interactionStats: stats
@@ -120,6 +122,7 @@ import Testing
 @Test func payloadBuilderIncludesPreviousNickname() {
     let payload = CommunityPayloadBuilder.build(
         participantId: "test-uuid",
+        membershipSecret: String(repeating: "s", count: 32),
         nickname: "Tom Weiss",
         previousNickname: "cobalt-fox",
         events: []
@@ -131,6 +134,7 @@ import Testing
 @Test func payloadBuilderIncludesClientVersion() {
     let payload = CommunityPayloadBuilder.build(
         participantId: "test-uuid",
+        membershipSecret: String(repeating: "s", count: 32),
         nickname: nil,
         events: [],
         clientVersion: "0.0.25-dev"
@@ -174,6 +178,7 @@ import Testing
 
     let payload = CommunityPayloadBuilder.build(
         participantId: "test-uuid",
+        membershipSecret: String(repeating: "s", count: 32),
         nickname: "Ada",
         events: events,
         now: now,

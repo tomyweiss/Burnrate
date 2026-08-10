@@ -14,6 +14,8 @@ public struct CommunityModelSpend: Sendable, Codable, Equatable {
 /// Rolling 24h aggregate uploaded to the community API.
 public struct CommunitySnapshotPayload: Sendable, Codable, Equatable {
     public let participantId: String
+    /// Per-device membership secret; proves possession of this participant row.
+    public let membershipSecret: String
     public let nickname: String?
     /// When renaming, the nickname previously stored for this participant (server reconciliation).
     public let previousNickname: String?
@@ -29,6 +31,7 @@ public struct CommunitySnapshotPayload: Sendable, Codable, Equatable {
 
     public init(
         participantId: String,
+        membershipSecret: String,
         nickname: String?,
         previousNickname: String? = nil,
         windowHours: Int = 24,
@@ -39,6 +42,7 @@ public struct CommunitySnapshotPayload: Sendable, Codable, Equatable {
         clientVersion: String? = nil
     ) {
         self.participantId = participantId
+        self.membershipSecret = membershipSecret
         self.nickname = nickname
         self.previousNickname = previousNickname
         self.windowHours = windowHours
