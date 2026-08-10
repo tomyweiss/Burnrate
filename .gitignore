@@ -14,8 +14,5 @@ docs/superpowers/**
 !docs/superpowers/specs/**
 .superpowers/
 
-# Local maintainer release helper (not shared via repo)
-scripts/release.sh
-
 # Minisign secret key — never commit
 burnrate.key

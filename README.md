@@ -178,25 +178,44 @@ signing secret key at `~/.config/burnrate/burnrate.key` (or set
 `MINISIGN_SECRET_KEY`). The matching public key is committed as
 [`burnrate.pub`](burnrate.pub) and embedded in the app.
 
-```bash
-bash scripts/release.sh
-```
+### One PR per release (changelog in the feature PR)
 
-This checks out latest `main`, patch-bumps from the newest `v*` tag, opens
-**Sources/Tokens/Resources/CHANGELOG.md** for you to review and approve (drafted
-from commits when the section is missing), commits the changelog, then tags,
-pushes, builds, signs, and uploads:
+1. **Before opening your feature PR**, check the next version:
+
+   ```bash
+   bash scripts/release.sh --next-version
+   # or: bash scripts/release.sh --dry-run
+   ```
+
+2. **Add a changelog section** at the top of
+   `Sources/Tokens/Resources/CHANGELOG.md` in the same PR:
+
+   ```markdown
+   ## 0.0.41
+
+   - Your user-facing change description (optional commit hash)
+   ```
+
+3. **Merge the feature PR** to `main`.
+
+4. **Tag and publish** (no separate changelog PR):
+
+   ```bash
+   bash scripts/release.sh --yes
+   ```
+
+This tags `main`, builds, signs, and uploads:
 
 - `Burnrate-x.y.z.zip`
 - `Burnrate-x.y.z.sha256`
 - `Burnrate-x.y.z.zip.minisig`
 
-Before releasing, commit your changes on `main`. Release notes on GitHub and
-in the in-app change log come from the approved **CHANGELOG.md** section for
-that version (falling back to auto-generated commit list if missing).
+Release notes on GitHub and in the in-app change log come from the merged
+**CHANGELOG.md** section for that version.
 
-Use `--dry-run` to preview the next version without tagging or uploading. Use
-`--yes` to skip the confirmation prompt.
+`--dry-run` previews the next version and whether the changelog is already on
+`main`. Without `--yes`, the script can still draft a changelog and open a
+fallback PR if the section was not merged in the feature PR.
 
 **Manual override** (hotfix or re-release to an existing version):
 
