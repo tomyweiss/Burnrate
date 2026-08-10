@@ -231,6 +231,9 @@ struct CommunityView: View {
                 Text("LEADERBOARD")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
+                Text("self-reported")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
                 Spacer()
                 if rank.participantCount > rank.leaderboardNear.count {
                     Text("Top \(rank.leaderboardNear.count) of \(rank.participantCount)")

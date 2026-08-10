@@ -16,7 +16,11 @@ enum UsageRefreshCache {
     private static var fileURL: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let directory = base.appendingPathComponent("Burnrate", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: NSNumber(value: 0o700)]
+        )
         return directory.appendingPathComponent(fileName)
     }
 
@@ -35,7 +39,15 @@ enum UsageRefreshCache {
             fetchedAt: fetchedAt
         )
         guard let data = try? JSONEncoder().encode(payload) else { return }
-        try? data.write(to: fileURL, options: .atomic)
+        do {
+            try data.write(to: fileURL, options: [.atomic, .completeFileProtection])
+            try FileManager.default.setAttributes(
+                [.posixPermissions: NSNumber(value: 0o600)],
+                ofItemAtPath: fileURL.path
+            )
+        } catch {
+            // Best-effort cache; offline mode degrades gracefully.
+        }
     }
 
     static func load(matching settings: SettingsStore, recentWindowMinutes: Int) -> Payload? {

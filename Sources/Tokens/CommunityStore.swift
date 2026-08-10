@@ -120,7 +120,8 @@ final class CommunityStore {
             FailureReporter.report(
                 error: error,
                 source: .community,
-                participantId: settings.communityParticipantId
+                participantId: settings.communityParticipantId,
+                membershipSecret: settings.communityMembershipSecret
             )
             if rank == nil {
                 restoreCachedRankIfAvailable()
@@ -163,7 +164,8 @@ final class CommunityStore {
             FailureReporter.report(
                 error: error,
                 source: .community,
-                participantId: participantId
+                participantId: participantId,
+                membershipSecret: settings.communityMembershipSecret
             )
             return false
         }
