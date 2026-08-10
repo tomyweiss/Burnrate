@@ -2,6 +2,15 @@ import Foundation
 import Testing
 @testable import TokensCore
 
+@Test func displayTextStripsNerdFontGlyphs() {
+    let apple = String(UnicodeScalar(0xF8FF)!)
+    let powerline = String(UnicodeScalar(0xE0B0)!)
+    let raw = "\(apple) \(powerline) ~/wo/tokens on main bash scripts/release.sh --yes"
+    let cleaned = DisplayText.sanitize(raw, collapseWhitespace: true)
+    #expect(!cleaned.contains("?"))
+    #expect(cleaned == "~/wo/tokens on main bash scripts/release.sh --yes")
+}
+
 @Test func nicknameGeneratorFormat() {
     let nickname = NicknameGenerator.random()
     #expect(nickname.contains("-"))

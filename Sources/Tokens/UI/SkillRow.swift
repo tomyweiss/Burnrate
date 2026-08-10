@@ -1,4 +1,5 @@
 import SwiftUI
+import TokensCore
 
 struct SkillRowView: View {
     let skill: SkillUsage
@@ -143,7 +144,7 @@ struct PromptRowView: View {
                 .fill(hovering ? Color.primary.opacity(0.06) : Color.clear)
         )
         .onHover { hovering = $0 }
-        .help(blurSensitiveContent ? "Prompt hidden" : prompt.text)
+        .help(blurSensitiveContent ? "Prompt hidden" : prompt.displayText)
     }
 
     @ViewBuilder
@@ -156,7 +157,7 @@ struct PromptRowView: View {
                 if prompt.createdAtMs > 0 {
                     Text(" · ")
                 }
-                Text(name)
+                Text(DisplayText.sanitize(name))
                     .privacyBlurred(blurSensitiveContent)
             }
             if let model = prompt.models.first {
