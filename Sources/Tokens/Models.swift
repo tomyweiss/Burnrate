@@ -311,22 +311,22 @@ struct PromptUsage: Identifiable, Sendable, Hashable {
 
     /// Approximate response duration: first prompt keystroke to last billed event.
     var durationSeconds: Double {
-        guard eventCount > 0, lastEventMs > createdAtMs else { return 0 }
+        // Ignore synthetic/unknown timestamps (0 or pre-2001) so missing createdAt
+        // does not yield a multi-decade duration.
+        guard eventCount > 0, createdAtMs > 1_000_000_000_000, lastEventMs > createdAtMs else {
+            return 0
+        }
         return (lastEventMs - createdAtMs) / 1000
     }
 
     /// First line of the prompt, for compact display.
     var headline: String {
-        let firstLine = text
-            .split(separator: "\n", omittingEmptySubsequences: true)
-            .first
-            .map(String.init) ?? text
-        return DisplayText.sanitize(firstLine, collapseWhitespace: true)
+        CursorPromptText.headline(text)
     }
 
     /// Full prompt text with terminal prompt glyphs removed for display.
     var displayText: String {
-        DisplayText.sanitize(text)
+        DisplayText.sanitize(CursorPromptText.visible(text))
     }
 }
 
