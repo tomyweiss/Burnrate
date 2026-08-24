@@ -47,11 +47,11 @@ struct CustomRangePicker: View {
         }
         .padding(16)
         .onChange(of: settings.customRangeStart) { _, _ in
-            Task { await store.refresh() }
+            Task { await store.refresh(reuseEventsIfPossible: true) }
             MenuBarPanelKeeper.keepOpen()
         }
         .onChange(of: settings.customRangeEnd) { _, _ in
-            Task { await store.refresh() }
+            Task { await store.refresh(reuseEventsIfPossible: true) }
             MenuBarPanelKeeper.keepOpen()
         }
     }

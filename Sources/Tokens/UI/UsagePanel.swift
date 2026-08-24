@@ -158,7 +158,7 @@ struct UsagePanel: View {
                 .layoutPriority(0)
             }
 
-            if settings.usageTimelinePreset == .thisBilling {
+            if store.snapshot.window.preset == .thisBilling {
                 Text("Since \(store.snapshot.window.sparklineStartLabel())")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -224,7 +224,7 @@ struct UsagePanel: View {
         .foregroundStyle(.secondary)
         .fixedSize()
         .onChange(of: settings.usageTimelinePreset) { _, _ in
-            Task { await store.refresh() }
+            Task { await store.refresh(reuseEventsIfPossible: true) }
             MenuBarPanelKeeper.keepOpen()
         }
     }
