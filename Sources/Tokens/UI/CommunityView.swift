@@ -5,81 +5,6 @@ struct CommunityView: View {
     @Bindable var community: CommunityStore
 
     var body: some View {
-        Group {
-            if community.isSharing {
-                sharingContent
-            } else {
-                lockedContent
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task {
-            community.refreshCursorDisplayName()
-            if community.isSharing {
-                await community.refreshRank()
-            }
-        }
-    }
-
-    // MARK: - Locked
-
-    private var lockedContent: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 24)
-
-            Image(systemName: "lock.fill")
-                .font(.system(size: 28))
-                .foregroundStyle(Color.orange)
-                .frame(width: 52, height: 52)
-                .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-            Text("Share to see the cohort")
-                .font(.title3.weight(.semibold))
-                .padding(.top, 20)
-
-            Text("Upload your 24h spend and model mix. Your Cursor name appears on the leaderboard. You only see others if you share.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
-                .padding(.top, 8)
-
-            if let error = community.lastError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-                    .padding(.top, 8)
-            }
-
-            Button {
-                Task { await community.enableSharing() }
-            } label: {
-                Text("Enable sharing")
-                    .font(.headline)
-                    .foregroundStyle(.black)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Color.orange, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .disabled(!community.canEnableSharing)
-            .padding(.horizontal, 24)
-            .padding(.top, 24)
-
-            Spacer()
-
-            Text("Turn off anytime — your data is deleted.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .padding(.bottom, 16)
-        }
-    }
-
-    // MARK: - Sharing
-
-    private var sharingContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             sharingHeader
                 .padding(.horizontal, 16)
@@ -93,12 +18,13 @@ struct CommunityView: View {
             } else {
                 Spacer(minLength: 0)
             }
-
-            sharingFooterButton
-                .padding(.horizontal, 16)
-                .padding(.bottom, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .task {
+            community.refreshCursorDisplayName()
+            await community.activateCommunity()
+            await community.refreshRank()
+        }
     }
 
     @ViewBuilder
@@ -106,7 +32,9 @@ struct CommunityView: View {
         VStack(alignment: .leading, spacing: 16) {
             nicknameRow
 
-            if let rank = community.rank, rank.notEnoughParticipants {
+            if community.needsCursorSignIn {
+                signInPrompt
+            } else if let rank = community.rank, rank.notEnoughParticipants {
                 notEnoughView(rank)
             } else if let rank = community.rank {
                 if community.rankIsStale {
@@ -128,16 +56,18 @@ struct CommunityView: View {
         }
     }
 
-    private var sharingFooterButton: some View {
-        Button {
-            Task { await community.disableSharing() }
-        } label: {
-            Text("Sharing on · tap to stop")
-                .font(.caption)
+    private var signInPrompt: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Sign in to Cursor to appear on the leaderboard.")
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
+
+            if let error = community.lastError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
         }
-        .buttonStyle(.plain)
     }
 
     private var nicknameRow: some View {
@@ -226,7 +156,8 @@ struct CommunityView: View {
     }
 
     private func leaderboardList(_ rank: CommunityRankResponse) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let entries = LeaderboardDedup.deduplicateNicknames(rank.leaderboardNear)
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("LEADERBOARD")
                     .font(.caption2.weight(.semibold))
@@ -235,8 +166,8 @@ struct CommunityView: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                 Spacer()
-                if rank.participantCount > rank.leaderboardNear.count {
-                    Text("Top \(rank.leaderboardNear.count) of \(rank.participantCount)")
+                if rank.participantCount > entries.count {
+                    Text("Top \(entries.count) of \(rank.participantCount)")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
@@ -244,8 +175,8 @@ struct CommunityView: View {
 
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(rank.leaderboardNear.indices, id: \.self) { index in
-                        leaderboardRow(rank.leaderboardNear[index])
+                    ForEach(entries.indices, id: \.self) { index in
+                        leaderboardRow(entries[index])
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

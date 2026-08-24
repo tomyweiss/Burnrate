@@ -26,6 +26,7 @@ final class SettingsStore {
         static let communityMembershipSecret = "communityMembershipSecret"
         static let keychainMembershipSecretAccount = "communityMembershipSecret"
         static let communityPendingPreviousNickname = "communityPendingPreviousNickname"
+        static let communitySupersededParticipantId = "communitySupersededParticipantId"
         /// Legacy keys cleared on load (random/anonymous nicknames removed).
         static let communityNickname = "communityNickname"
         static let communityNicknameSource = "communityNicknameSource"
@@ -205,7 +206,7 @@ final class SettingsStore {
         didSet { applyLaunchAtLogin() }
     }
 
-    /// Opt-in community usage sharing (required to view Community tab data).
+    /// Community usage sharing is always on for Burnrate users.
     var shareCommunityUsage: Bool {
         didSet { defaults.set(shareCommunityUsage, forKey: Keys.shareCommunityUsage) }
     }
@@ -215,7 +216,7 @@ final class SettingsStore {
         didSet { defaults.set(sendDiagnostics, forKey: Keys.sendDiagnostics) }
     }
 
-    /// Anonymous participant UUID; generated on first opt-in.
+    /// Anonymous participant UUID; generated on first launch.
     var communityParticipantId: String? {
         didSet {
             if let communityParticipantId {
@@ -247,6 +248,20 @@ final class SettingsStore {
                 )
             } else {
                 defaults.removeObject(forKey: Keys.communityPendingPreviousNickname)
+            }
+        }
+    }
+
+    /// Participant id replaced during credential recovery; sent once so the server can retire the old row.
+    var communitySupersededParticipantId: String? {
+        didSet {
+            if let communitySupersededParticipantId {
+                defaults.set(
+                    communitySupersededParticipantId,
+                    forKey: Keys.communitySupersededParticipantId
+                )
+            } else {
+                defaults.removeObject(forKey: Keys.communitySupersededParticipantId)
             }
         }
     }
@@ -329,6 +344,14 @@ final class SettingsStore {
         return secret
     }
 
+    /// Re-issues local community credentials when the server no longer recognizes them.
+    func resetCommunityCredentials() {
+        communitySupersededParticipantId = communityParticipantId
+        communityParticipantId = UUID().uuidString.lowercased()
+        communityMembershipSecret = nil
+        communityPendingPreviousNickname = nil
+    }
+
     /// Queue server reconciliation when upgrading from random nicknames to Cursor display names.
     private func migrateLegacyCommunityNicknameSettings() {
         if communityPendingPreviousNickname == nil,
@@ -399,7 +422,7 @@ final class SettingsStore {
 
         usageTimezoneIdentifier = defaults.string(forKey: Keys.usageTimezoneIdentifier)
 
-        shareCommunityUsage = defaults.bool(forKey: Keys.shareCommunityUsage)
+        shareCommunityUsage = true
         sendDiagnostics = defaults.bool(forKey: Keys.sendDiagnostics)
         communityParticipantId = defaults.string(forKey: Keys.communityParticipantId)
         communityMembershipSecret = Self.loadMembershipSecret(
@@ -409,6 +432,9 @@ final class SettingsStore {
         )
         communityPendingPreviousNickname = defaults.string(
             forKey: Keys.communityPendingPreviousNickname
+        )
+        communitySupersededParticipantId = defaults.string(
+            forKey: Keys.communitySupersededParticipantId
         )
 
         if let savedTabs = defaults.stringArray(forKey: Keys.visibleUsageTabs) {

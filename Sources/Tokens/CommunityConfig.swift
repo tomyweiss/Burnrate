@@ -10,6 +10,7 @@ enum CommunityError: Error, LocalizedError, Sendable {
     case invalidResponse
     case httpStatus(Int)
     case shareToViewRequired
+    case invalidMembershipSecret
     case decodingFailed
     case apiMessage(String)
 
@@ -22,7 +23,9 @@ enum CommunityError: Error, LocalizedError, Sendable {
         case .httpStatus(let code):
             "Community API returned HTTP \(code)."
         case .shareToViewRequired:
-            "Enable sharing to view the cohort."
+            "Community data is not available yet. Try again in a moment."
+        case .invalidMembershipSecret:
+            "Community credentials were reset. Try again in a moment."
         case .decodingFailed:
             "Could not decode community response."
         case .apiMessage(let message):

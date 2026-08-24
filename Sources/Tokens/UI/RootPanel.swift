@@ -57,10 +57,7 @@ struct RootPanel: View {
                         route = .changeLog(.usage)
                     },
                     onUsageTabChange: { tab in
-                        interactionTracker.recordTabChange(
-                            tab.rawValue,
-                            ifEnabled: settings.shareCommunityUsage
-                        )
+                        interactionTracker.recordTabChange(tab.rawValue)
                     }
                 )
             case .settings:
@@ -103,7 +100,7 @@ struct RootPanel: View {
         .onAppear {
             MenuBarPanelKeeper.panelDidShow()
             updates.autoCheckIfNeeded()
-            interactionTracker.recordPanelOpen(ifEnabled: settings.shareCommunityUsage)
+            interactionTracker.recordPanelOpen()
         }
         .onDisappear {
             MenuBarPanelKeeper.panelDidHide()
@@ -112,10 +109,7 @@ struct RootPanel: View {
         .onChange(of: route) { oldRoute, newRoute in
             MenuBarPanelKeeper.keepOpen()
             guard oldRoute != newRoute else { return }
-            interactionTracker.recordTabChange(
-                newRoute.interactionKey,
-                ifEnabled: settings.shareCommunityUsage
-            )
+            interactionTracker.recordTabChange(newRoute.interactionKey)
         }
         .onChange(of: settings.billingDayOfMonth) { _, _ in
             Task { await store.refresh() }
