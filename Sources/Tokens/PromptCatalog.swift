@@ -23,14 +23,17 @@ enum PromptCatalog {
     }
 
     /// Prompts per conversation id, each list sorted by creation time ascending.
-    static func lookup(conversationIds: Set<String>) -> [String: [PromptRecord]] {
+    static func lookup(
+        conversationIds: Set<String>,
+        databasePath: URL = ideDatabasePath
+    ) -> [String: [PromptRecord]] {
         guard !conversationIds.isEmpty,
-              FileManager.default.fileExists(atPath: ideDatabasePath.path)
+              FileManager.default.fileExists(atPath: databasePath.path)
         else { return [:] }
 
         var database: OpaquePointer?
         guard sqlite3_open_v2(
-            ideDatabasePath.path,
+            databasePath.path,
             &database,
             SQLITE_OPEN_READONLY,
             nil
@@ -121,19 +124,44 @@ enum PromptCatalog {
     // MARK: - Bubble scan
 
     /// Bubble keys are `bubbleId:<composerId>:<bubbleId>`; the unique index on `key`
-    /// makes a half-open range scan cheap. `json_extract` keeps large payloads inside
-    /// SQLite and only surfaces the three fields we need.
+    /// makes a half-open range scan cheap.
+    ///
+    /// Assistant bubbles dwarf user prompts (often 50×+). Extracting `$.text` from
+    /// every row is the slow path, so we first collect type-1 keys, then fetch
+    /// text only for those rows.
     private static func readPrompts(
         database: OpaquePointer?,
         conversationId: String
     ) -> [PromptRecord] {
+        let lower = "bubbleId:\(conversationId):"
+        let keys = userBubbleKeys(database: database, conversationId: conversationId)
+        guard !keys.isEmpty else { return [] }
+
+        var prompts: [PromptRecord] = []
+        let chunkSize = 200
+        var start = keys.startIndex
+        while start < keys.endIndex {
+            let end = keys.index(start, offsetBy: chunkSize, limitedBy: keys.endIndex) ?? keys.endIndex
+            prompts.append(contentsOf: promptRecords(
+                database: database,
+                conversationId: conversationId,
+                keyPrefix: lower,
+                keys: keys[start..<end]
+            ))
+            start = end
+        }
+        return prompts.sorted { $0.createdAtMs < $1.createdAtMs }
+    }
+
+    private static func userBubbleKeys(
+        database: OpaquePointer?,
+        conversationId: String
+    ) -> [String] {
         let query = """
-        SELECT key,
-               json_extract(value, '$.type'),
-               json_extract(value, '$.text'),
-               json_extract(value, '$.createdAt')
+        SELECT key
         FROM cursorDiskKV
         WHERE key >= ? AND key < ?
+          AND json_extract(value, '$.type') = 1
         """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, query, -1, &statement, nil) == SQLITE_OK else {
@@ -147,20 +175,52 @@ enum PromptCatalog {
         sqlite3_bind_text(statement, 1, lower, -1, transient)
         sqlite3_bind_text(statement, 2, upper, -1, transient)
 
+        var keys: [String] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let keyC = sqlite3_column_text(statement, 0) else { continue }
+            keys.append(String(cString: keyC))
+        }
+        return keys
+    }
+
+    private static func promptRecords(
+        database: OpaquePointer?,
+        conversationId: String,
+        keyPrefix: String,
+        keys: ArraySlice<String>
+    ) -> [PromptRecord] {
+        guard !keys.isEmpty else { return [] }
+
+        let placeholders = Array(repeating: "?", count: keys.count).joined(separator: ",")
+        let query = """
+        SELECT key,
+               json_extract(value, '$.text'),
+               json_extract(value, '$.createdAt')
+        FROM cursorDiskKV
+        WHERE key IN (\(placeholders))
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, query, -1, &statement, nil) == SQLITE_OK else {
+            return []
+        }
+        defer { sqlite3_finalize(statement) }
+
+        let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        for (offset, key) in keys.enumerated() {
+            sqlite3_bind_text(statement, Int32(offset + 1), key, -1, transient)
+        }
+
         var prompts: [PromptRecord] = []
         while sqlite3_step(statement) == SQLITE_ROW {
-            // type 1 = user message, 2 = assistant.
-            guard sqlite3_column_int(statement, 1) == 1,
-                  let textC = sqlite3_column_text(statement, 2)
-            else { continue }
+            guard let textC = sqlite3_column_text(statement, 1) else { continue }
             let text = String(cString: textC).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { continue }
 
             guard let keyC = sqlite3_column_text(statement, 0) else { continue }
             let key = String(cString: keyC)
-            let bubbleId = String(key.dropFirst(lower.count))
+            let bubbleId = String(key.dropFirst(keyPrefix.count))
 
-            guard let createdAtMs = createdAtMs(from: statement, column: 3) else { continue }
+            guard let createdAtMs = createdAtMs(from: statement, column: 2) else { continue }
 
             prompts.append(
                 PromptRecord(
@@ -172,7 +232,7 @@ enum PromptCatalog {
                 )
             )
         }
-        return prompts.sorted { $0.createdAtMs < $1.createdAtMs }
+        return prompts
     }
 
     private static func createdAtMs(from statement: OpaquePointer?, column: Int32) -> Double? {

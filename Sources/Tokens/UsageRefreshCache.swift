@@ -50,14 +50,19 @@ enum UsageRefreshCache {
         }
     }
 
-    static func load(matching settings: SettingsStore, recentWindowMinutes: Int) -> Payload? {
+    static func load(
+        matchingPresetRaw presetRaw: String,
+        timeZoneIdentifier: String,
+        billingDayOfMonth: Int,
+        recentWindowMinutes: Int
+    ) -> Payload? {
         guard let data = try? Data(contentsOf: fileURL),
               let payload = try? JSONDecoder().decode(Payload.self, from: data) else {
             return nil
         }
-        guard payload.presetRaw == settings.usageTimelinePreset.rawValue,
-              payload.timeZoneIdentifier == settings.resolvedTimeZone.identifier,
-              payload.billingDayOfMonth == settings.billingDayOfMonth,
+        guard payload.presetRaw == presetRaw,
+              payload.timeZoneIdentifier == timeZoneIdentifier,
+              payload.billingDayOfMonth == billingDayOfMonth,
               payload.recentWindowMinutes == recentWindowMinutes else {
             return nil
         }

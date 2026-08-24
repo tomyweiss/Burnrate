@@ -75,10 +75,14 @@ final class UsageStore {
     }
 
     func start() {
-        loadCachedSnapshotIfAvailable()
-        pollTask?.cancel()
+        // MenuBarExtra recreates panel content on every click; don't re-hydrate.
+        guard pollTask == nil else { return }
+        if !hasCompletedFetch {
+            isLoading = true
+        }
         pollTask = Task { [weak self] in
             await self?.anomalyMonitor?.requestAuthorizationIfNeeded()
+            await self?.hydrateFromCacheIfNeeded()
             while let self, !Task.isCancelled {
                 await self.refresh()
                 let seconds = max(15, self.settings.refreshIntervalSeconds)
@@ -192,38 +196,65 @@ final class UsageStore {
         }
     }
 
-    private func loadCachedSnapshotIfAvailable() {
+    private func hydrateFromCacheIfNeeded() async {
+        guard !hasCompletedFetch else { return }
+
         let recentWindowMinutes = settings.anomalyWindowMinutes
-        guard let cache = UsageRefreshCache.load(
-            matching: settings,
-            recentWindowMinutes: recentWindowMinutes
-        ) else {
-            return
+        let presetRaw = settings.usageTimelinePreset.rawValue
+        let timeZoneIdentifier = settings.resolvedTimeZone.identifier
+        let billingDayOfMonth = settings.billingDayOfMonth
+        let window = settings.usageWindow
+        let activeRates = rates
+        let now = Date()
+
+        struct CacheHydration: Sendable {
+            let snapshot: UsageSnapshot
+            let events: [UsageEvent]
+            let fetchedAt: Date
         }
 
-        let now = Date()
-        let window = settings.usageWindow
-        let cachedSnapshot = Aggregator.snapshot(
-            events: cache.events,
-            now: now,
-            window: window,
-            recentWindowMinutes: recentWindowMinutes,
-            rates: rates
-        )
+        let loaded = await Task.detached(priority: .userInitiated) {
+            guard let cache = UsageRefreshCache.load(
+                matchingPresetRaw: presetRaw,
+                timeZoneIdentifier: timeZoneIdentifier,
+                billingDayOfMonth: billingDayOfMonth,
+                recentWindowMinutes: recentWindowMinutes
+            ) else { return nil as CacheHydration? }
+
+            let snapshot = Aggregator.snapshot(
+                events: cache.events,
+                now: now,
+                window: window,
+                recentWindowMinutes: recentWindowMinutes,
+                rates: activeRates
+            )
+            return CacheHydration(
+                snapshot: snapshot,
+                events: cache.events,
+                fetchedAt: cache.fetchedAt
+            )
+        }.value
+
+        guard let loaded, !hasCompletedFetch else { return }
+
         snapshot = UsageSnapshot(
-            windowCostCents: cachedSnapshot.windowCostCents,
-            recentCostCents: cachedSnapshot.recentCostCents,
-            models: cachedSnapshot.models,
-            sessionsAcrossModels: cachedSnapshot.sessionsAcrossModels,
-            prompts: cachedSnapshot.prompts,
-            subagentPrompts: cachedSnapshot.subagentPrompts,
-            skills: cachedSnapshot.skills,
-            sparklineCostCents: cachedSnapshot.sparklineCostCents,
-            window: cachedSnapshot.window,
-            eventCount: cachedSnapshot.eventCount,
-            fetchedAt: cache.fetchedAt
+            windowCostCents: loaded.snapshot.windowCostCents,
+            recentCostCents: loaded.snapshot.recentCostCents,
+            models: loaded.snapshot.models,
+            sessionsAcrossModels: loaded.snapshot.sessionsAcrossModels,
+            prompts: loaded.snapshot.prompts,
+            subagentPrompts: loaded.snapshot.subagentPrompts,
+            skills: loaded.snapshot.skills,
+            sparklineCostCents: loaded.snapshot.sparklineCostCents,
+            window: loaded.snapshot.window,
+            eventCount: loaded.snapshot.eventCount,
+            fetchedAt: loaded.fetchedAt
         )
-        communityAnalyticsEvents = Self.communityAnalyticsEvents(from: cache.events, now: now, rates: rates)
+        communityAnalyticsEvents = Self.communityAnalyticsEvents(
+            from: loaded.events,
+            now: now,
+            rates: activeRates
+        )
         hasCompletedFetch = true
         isShowingCachedData = true
     }

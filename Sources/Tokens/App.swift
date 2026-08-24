@@ -22,6 +22,7 @@ struct TokensApp: App {
         store.setCommunityStore(community)
         community.setUsageStore(store)
         Task { await community.migrateNicknameToCursorDefaultIfNeeded() }
+        store.start()
         _settings = State(initialValue: settings)
         _store = State(initialValue: store)
         _updates = State(initialValue: UpdateManager(settings: settings))
