@@ -71,7 +71,7 @@ enum FailureReporter {
             switch communityError {
             case .invalidURL, .invalidResponse, .decodingFailed:
                 return .decode
-            case .httpStatus, .apiMessage, .shareToViewRequired:
+            case .httpStatus, .apiMessage, .shareToViewRequired, .invalidMembershipSecret:
                 return .api
             }
         }

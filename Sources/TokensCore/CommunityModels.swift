@@ -19,6 +19,8 @@ public struct CommunitySnapshotPayload: Sendable, Codable, Equatable {
     public let nickname: String?
     /// When renaming, the nickname previously stored for this participant (server reconciliation).
     public let previousNickname: String?
+    /// When rotating credentials, the prior participant row to retire on the server.
+    public let previousParticipantId: String?
     public let windowHours: Int
     public let spendCents: Int
     public let models: [CommunityModelSpend]
@@ -34,6 +36,7 @@ public struct CommunitySnapshotPayload: Sendable, Codable, Equatable {
         membershipSecret: String,
         nickname: String?,
         previousNickname: String? = nil,
+        previousParticipantId: String? = nil,
         windowHours: Int = 24,
         spendCents: Int,
         models: [CommunityModelSpend],
@@ -45,6 +48,7 @@ public struct CommunitySnapshotPayload: Sendable, Codable, Equatable {
         self.membershipSecret = membershipSecret
         self.nickname = nickname
         self.previousNickname = previousNickname
+        self.previousParticipantId = previousParticipantId
         self.windowHours = windowHours
         self.spendCents = spendCents
         self.models = models

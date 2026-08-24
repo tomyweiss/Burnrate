@@ -16,6 +16,7 @@ final class CommunityStore {
     private weak var usageStore: UsageStore?
     private var lastUploadAt: Date?
     private let uploadThrottle: TimeInterval = 5 * 60
+    private var didResetCommunityCredentials = false
 
     init(
         settings: SettingsStore,
@@ -25,6 +26,8 @@ final class CommunityStore {
         self.settings = settings
         self.interactionTracker = interactionTracker
         self.client = client
+        settings.shareCommunityUsage = true
+        _ = settings.ensureCommunityParticipantId()
         refreshCursorDisplayName()
         restoreCachedRankIfAvailable()
     }
@@ -33,14 +36,12 @@ final class CommunityStore {
         usageStore = store
     }
 
-    var isSharing: Bool { settings.shareCommunityUsage }
-
     var displayNickname: String {
         cursorDisplayName ?? "Unknown"
     }
 
-    var canEnableSharing: Bool {
-        cursorDisplayName != nil
+    var needsCursorSignIn: Bool {
+        cursorDisplayName == nil
     }
 
     func refreshCursorDisplayName() {
@@ -54,48 +55,23 @@ final class CommunityStore {
         }
     }
 
-    func enableSharing() async {
+    func activateCommunity() async {
+        settings.shareCommunityUsage = true
+        let participantId = settings.ensureCommunityParticipantId()
         refreshCursorDisplayName()
         guard let cursorDisplayName else {
-            lastError = "Cursor display name not found. Sign in to Cursor to share."
+            lastError = "Cursor display name not found. Sign in to Cursor to appear on the leaderboard."
             return
         }
 
-        let participantId = settings.ensureCommunityParticipantId()
-        settings.shareCommunityUsage = true
         lastUploadAt = nil
         lastError = nil
         await uploadSnapshot(participantId: participantId, nickname: cursorDisplayName, force: true)
         await refreshRank()
     }
 
-    func disableSharing() async {
-        settings.shareCommunityUsage = false
-        settings.communityPendingPreviousNickname = nil
-        if let participantId = settings.communityParticipantId {
-            let membershipSecret = settings.ensureCommunityMembershipSecret()
-            do {
-                try await client.deleteParticipant(
-                    participantId: participantId,
-                    membershipSecret: membershipSecret
-                )
-            } catch {
-                // Best-effort delete; local opt-out still applies.
-            }
-        }
-        settings.communityMembershipSecret = nil
-        rank = nil
-        lastError = nil
-        rankIsStale = false
-        lastUploadAt = nil
-        interactionTracker.reset()
-        usageStore?.refreshMetrics.reset()
-        CommunityRankCache.clear()
-    }
-
     func refreshRank() async {
-        guard settings.shareCommunityUsage,
-              let participantId = settings.communityParticipantId else {
+        guard let participantId = settings.communityParticipantId else {
             rank = nil
             rankIsStale = false
             return
@@ -116,6 +92,10 @@ final class CommunityStore {
                 CommunityRankCache.save(rank, participantId: participantId)
             }
         } catch {
+            if await resetCommunityCredentialsIfNeeded(for: error) {
+                await refreshRank()
+                return
+            }
             lastError = NetworkMessages.userMessage(for: error, cachedDataAvailable: rank != nil)
             FailureReporter.report(
                 error: error,
@@ -133,7 +113,6 @@ final class CommunityStore {
 
     /// Called after UsageStore completes a successful refresh.
     func handleUsageRefreshIfNeeded() async {
-        guard settings.shareCommunityUsage else { return }
         refreshCursorDisplayName()
         await migrateNicknameToCursorDefaultIfNeeded()
         await uploadSnapshotIfNeeded(force: false)
@@ -158,8 +137,13 @@ final class CommunityStore {
             lastUploadAt = Date()
             lastError = nil
             clearPendingNicknameReconciliation()
+            settings.communitySupersededParticipantId = nil
             return true
         } catch {
+            if await resetCommunityCredentialsIfNeeded(for: error) {
+                let participantId = settings.ensureCommunityParticipantId()
+                return await uploadSnapshot(participantId: participantId, nickname: nickname, force: force)
+            }
             lastError = NetworkMessages.userMessage(for: error, cachedDataAvailable: rank != nil)
             FailureReporter.report(
                 error: error,
@@ -172,8 +156,7 @@ final class CommunityStore {
     }
 
     private func reconcilePendingNicknameIfNeeded() async {
-        guard settings.shareCommunityUsage,
-              settings.communityPendingPreviousNickname != nil,
+        guard settings.communityPendingPreviousNickname != nil,
               let participantId = settings.communityParticipantId,
               let nickname = cursorDisplayName else { return }
 
@@ -187,9 +170,44 @@ final class CommunityStore {
         settings.communityPendingPreviousNickname = nil
     }
 
+    private func resetCommunityCredentialsIfNeeded(for error: Error) async -> Bool {
+        guard !didResetCommunityCredentials, Self.isInvalidMembershipSecret(error) else {
+            return false
+        }
+        didResetCommunityCredentials = true
+
+        let oldParticipantId = settings.communityParticipantId
+        let oldSecret = settings.communityMembershipSecret
+        settings.resetCommunityCredentials()
+
+        if let oldParticipantId, let oldSecret {
+            try? await client.deleteParticipant(
+                participantId: oldParticipantId,
+                membershipSecret: oldSecret
+            )
+        }
+
+        CommunityRankCache.clear()
+        rank = nil
+        rankIsStale = false
+        lastUploadAt = nil
+        return true
+    }
+
+    private static func isInvalidMembershipSecret(_ error: Error) -> Bool {
+        guard let communityError = error as? CommunityError else { return false }
+        switch communityError {
+        case .invalidMembershipSecret:
+            return true
+        case .apiMessage(let message):
+            return message == "Invalid membership secret"
+        default:
+            return false
+        }
+    }
+
     private func restoreCachedRankIfAvailable() {
-        guard settings.shareCommunityUsage,
-              let participantId = settings.communityParticipantId,
+        guard let participantId = settings.communityParticipantId,
               let cached = CommunityRankCache.load(participantId: participantId) else {
             return
         }
@@ -210,6 +228,7 @@ final class CommunityStore {
             membershipSecret: membershipSecret,
             nickname: nickname,
             previousNickname: settings.communityPendingPreviousNickname,
+            previousParticipantId: settings.communitySupersededParticipantId,
             events: events,
             now: now,
             interactionStats: interactionTracker.snapshot(),

@@ -1,7 +1,7 @@
 import Foundation
 import TokensCore
 
-/// Records panel opens and tab changes locally; uploaded via the opt-in Community API.
+/// Records panel opens and tab changes locally; uploaded via the Community API.
 @MainActor
 @Observable
 final class InteractionTracker {
@@ -19,8 +19,7 @@ final class InteractionTracker {
         self.dailyCounters = DayKeyedCounters(defaults: defaults, storageKey: Keys.dailyMetrics)
     }
 
-    func recordPanelOpen(ifEnabled enabled: Bool) {
-        guard enabled else { return }
+    func recordPanelOpen() {
         var stats = loadLifetime()
         stats.recordPanelOpen()
         saveLifetime(stats)
@@ -29,8 +28,7 @@ final class InteractionTracker {
         dailyCounters.mutate(forDay: day) { $0.panelOpens += 1 }
     }
 
-    func recordTabChange(_ tab: String, ifEnabled enabled: Bool) {
-        guard enabled else { return }
+    func recordTabChange(_ tab: String) {
         var stats = loadLifetime()
         stats.recordTabChange(tab)
         saveLifetime(stats)

@@ -27,7 +27,7 @@ actor CommunityClient {
         request.httpBody = try JSONEncoder().encode(payload)
 
         let (data, response) = try await session.data(for: request)
-        try validate(response, data: data)
+        try validate(response, data: data, invalidMembershipSecretMessage: "Invalid membership secret")
     }
 
     func fetchRank(participantId: String, membershipSecret: String) async throws -> CommunityRankResponse {
@@ -47,7 +47,7 @@ actor CommunityClient {
         if let http = response as? HTTPURLResponse, http.statusCode == 403 {
             throw CommunityError.shareToViewRequired
         }
-        try validate(response, data: data)
+        try validate(response, data: data, invalidMembershipSecretMessage: "Invalid membership secret")
 
         do {
             return try JSONDecoder().decode(CommunityRankResponse.self, from: data)
@@ -72,7 +72,11 @@ actor CommunityClient {
         try validate(response)
     }
 
-    private func validate(_ response: URLResponse, data: Data? = nil) throws {
+    private func validate(
+        _ response: URLResponse,
+        data: Data? = nil,
+        invalidMembershipSecretMessage: String? = nil
+    ) throws {
         guard let http = response as? HTTPURLResponse else {
             throw CommunityError.invalidResponse
         }
@@ -80,6 +84,10 @@ actor CommunityClient {
             if let data,
                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let error = json["error"] as? String {
+                if http.statusCode == 401,
+                   error == invalidMembershipSecretMessage {
+                    throw CommunityError.invalidMembershipSecret
+                }
                 throw CommunityError.apiMessage(error)
             }
             throw CommunityError.httpStatus(http.statusCode)

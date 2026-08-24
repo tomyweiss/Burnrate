@@ -11,6 +11,26 @@ import Testing
     #expect(cleaned == "~/wo/tokens on main bash scripts/release.sh --yes")
 }
 
+@Test func leaderboardDedupPrefersYou() {
+    let entries = [
+        CommunityLeaderboardEntry(rank: 4, nickname: "Tom Weiss", spendCents: 8964, isYou: false),
+        CommunityLeaderboardEntry(rank: 5, nickname: "Tom Weiss", spendCents: 9599, isYou: true),
+        CommunityLeaderboardEntry(rank: 7, nickname: "Tom Weiss", spendCents: 1797, isYou: false),
+    ]
+    let deduped = LeaderboardDedup.deduplicateNicknames(entries)
+    #expect(deduped.count == 1)
+    #expect(deduped[0].isYou)
+    #expect(deduped[0].spendCents == 9599)
+}
+
+@Test func leaderboardDedupKeepsDistinctNames() {
+    let entries = [
+        CommunityLeaderboardEntry(rank: 1, nickname: "Ada", spendCents: 100, isYou: false),
+        CommunityLeaderboardEntry(rank: 2, nickname: "Bob", spendCents: 90, isYou: false),
+    ]
+    #expect(LeaderboardDedup.deduplicateNicknames(entries).count == 2)
+}
+
 @Test func nicknameGeneratorFormat() {
     let nickname = NicknameGenerator.random()
     #expect(nickname.contains("-"))
