@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.48
+
+- Show each community leaderboard row's top 24h model and app version. (929eb4f)
+- Compact long model names by dropping the `claude-` prefix and truncating with a prefix ellipsis. (929eb4f)
+- Remove client-side leaderboard nickname dedup; the API now returns one row per participant. (929eb4f)
+
 ## 0.0.41
 
 - Community sharing always uses your Cursor display name; removed random and anonymous nickname options.
