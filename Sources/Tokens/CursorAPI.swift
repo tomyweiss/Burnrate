@@ -3,7 +3,7 @@ import Foundation
 actor CursorAPI {
     private let session: URLSession
     private let maxPages = 20
-    private let pageSize = 200
+    private let pageSize = 1000
 
     init() {
         let config = URLSessionConfiguration.ephemeral
@@ -38,7 +38,10 @@ actor CursorAPI {
             }
 
             let expected = totalCount ?? all.count
-            if all.count >= expected || events.count < pageSize {
+            if events.isEmpty || all.count >= expected {
+                break
+            }
+            if totalCount == nil, events.count < pageSize {
                 break
             }
             page += 1

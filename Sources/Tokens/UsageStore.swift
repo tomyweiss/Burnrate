@@ -21,6 +21,8 @@ final class UsageStore {
     private let settings: SettingsStore
     private weak var communityStore: CommunityStore?
     private var pollTask: Task<Void, Never>?
+    private var eventCache = EventWindowCache()
+    private var refreshGeneration = 0
     private var rates: SpendRates = .unavailable
     let refreshMetrics = RefreshMetricsTracker()
 
@@ -75,10 +77,14 @@ final class UsageStore {
     }
 
     func start() {
-        loadCachedSnapshotIfAvailable()
-        pollTask?.cancel()
+        // MenuBarExtra recreates panel content on every click; don't re-hydrate.
+        guard pollTask == nil else { return }
+        if !hasCompletedFetch {
+            isLoading = true
+        }
         pollTask = Task { [weak self] in
             await self?.anomalyMonitor?.requestAuthorizationIfNeeded()
+            await self?.hydrateFromCacheIfNeeded()
             while let self, !Task.isCancelled {
                 await self.refresh()
                 let seconds = max(15, self.settings.refreshIntervalSeconds)
@@ -92,66 +98,158 @@ final class UsageStore {
         pollTask = nil
     }
 
-    func refresh() async {
-        isLoading = true
-        defer { isLoading = false }
+    func refresh(reuseEventsIfPossible: Bool = false) async {
+        refreshGeneration += 1
+        let generation = refreshGeneration
+
+        let now = Date()
+        let window = settings.usageWindow
+        let range = window.dateRange(now: now)
+        let fetchStart = CommunityPayloadBuilder.eventFetchStart(
+            displayWindowStart: range.start,
+            now: now
+        )
+        let startMs = fetchStart.timeIntervalSince1970 * 1000
+        let endMs = range.end.timeIntervalSince1970 * 1000
+        let canReuse = reuseEventsIfPossible && eventCache.covers(startMs: startMs, endMs: endMs)
+
+        if !canReuse {
+            isLoading = true
+        }
+        defer {
+            if generation == refreshGeneration {
+                isLoading = false
+            }
+        }
 
         refreshMetrics.recordAttempt()
 
         do {
             let credentials = try TokenProvider.loadSessionCredentials()
-            let now = Date()
-            let window = settings.usageWindow
-            let range = window.dateRange(now: now)
-            let fetchStart = CommunityPayloadBuilder.eventFetchStart(
-                displayWindowStart: range.start,
-                now: now
-            )
-            let startMs = Int64(fetchStart.timeIntervalSince1970 * 1000)
-            let endMs = Int64(range.end.timeIntervalSince1970 * 1000)
 
-            let events = try await api.fetchUsageEvents(
-                credentials: credentials,
-                startMs: startMs,
-                endMs: endMs
-            )
+            let events: [UsageEvent]
+            if canReuse {
+                events = eventCache.events
+            } else {
+                events = try await api.fetchUsageEvents(
+                    credentials: credentials,
+                    startMs: Int64(startMs),
+                    endMs: Int64(endMs)
+                )
+                guard generation == refreshGeneration else { return }
+                mergeFetchedEvents(events, startMs: startMs, endMs: endMs)
+            }
 
-            await refreshSpendCalibrationIfNeeded(credentials: credentials, now: now)
-
-            // Aggregation scans local Cursor SQLite data (session + prompt
-            // catalogs); keep it off the main thread.
             let recentWindowMinutes = settings.anomalyWindowMinutes
             let activeRates = rates
-            let next = await Task.detached(priority: .userInitiated) {
+            let cachedEvents = events
+
+            let cheap = await Task.detached(priority: .userInitiated) {
                 Aggregator.snapshot(
-                    events: events,
+                    events: cachedEvents,
                     now: now,
                     window: window,
                     recentWindowMinutes: recentWindowMinutes,
-                    rates: activeRates
+                    rates: activeRates,
+                    includePrompts: false
                 )
             }.value
-            snapshot = next
-            communityAnalyticsEvents = Self.communityAnalyticsEvents(from: events, now: now, rates: activeRates)
-            lastError = nil
-            isShowingCachedData = false
-            hasCompletedFetch = true
-            isSpikeActive = next.recentCostCents >= settings.anomalyThresholdDollars * 100
-            UsageRefreshCache.save(
+            guard generation == refreshGeneration else { return }
+
+            applySnapshot(
+                cheap,
                 events: events,
+                now: now,
+                rates: activeRates,
+                fetchedAt: cheap.fetchedAt
+            )
+            isLoading = false
+
+            await refreshSpendCalibrationIfNeeded(
+                credentials: credentials,
+                now: now,
+                availableEvents: events,
+                availableStartMs: eventCache.startMs
+            )
+            guard generation == refreshGeneration else { return }
+
+            let pricedRates = rates
+            let full = await Task.detached(priority: .userInitiated) {
+                Aggregator.snapshot(
+                    events: cachedEvents,
+                    now: now,
+                    window: window,
+                    recentWindowMinutes: recentWindowMinutes,
+                    rates: pricedRates,
+                    includePrompts: true
+                )
+            }.value
+            guard generation == refreshGeneration else { return }
+
+            applySnapshot(
+                full,
+                events: events,
+                now: now,
+                rates: pricedRates,
+                fetchedAt: full.fetchedAt
+            )
+            UsageRefreshCache.save(
+                events: eventCache.events,
                 settings: settings,
                 recentWindowMinutes: recentWindowMinutes,
-                fetchedAt: next.fetchedAt
+                fetchedAt: full.fetchedAt,
+                fetchStartMs: eventCache.startMs,
+                fetchEndMs: eventCache.endMs
             )
-            await anomalyMonitor?.evaluate(snapshot: next, settings: settings)
+            await anomalyMonitor?.evaluate(snapshot: full, settings: settings)
             await communityStore?.handleUsageRefreshIfNeeded()
         } catch {
+            guard generation == refreshGeneration else { return }
             lastError = NetworkMessages.userMessage(for: error, cachedDataAvailable: isShowingCachedData)
             hasCompletedFetch = true
             refreshMetrics.recordFailure()
             FailureReporter.report(error: error, source: .usage)
-            // Keep last good snapshot and amount visible.
         }
+    }
+
+    private func mergeFetchedEvents(_ events: [UsageEvent], startMs: Double, endMs: Double) {
+        if eventCache.isEmpty || startMs <= eventCache.startMs {
+            eventCache = EventWindowCache(events: events, startMs: startMs, endMs: endMs)
+            return
+        }
+        let kept = eventCache.events.filter { $0.timestampMs < startMs }
+        eventCache = EventWindowCache(
+            events: kept + events,
+            startMs: eventCache.startMs,
+            endMs: max(eventCache.endMs, endMs)
+        )
+    }
+
+    private func applySnapshot(
+        _ next: UsageSnapshot,
+        events: [UsageEvent],
+        now: Date,
+        rates: SpendRates,
+        fetchedAt: Date
+    ) {
+        snapshot = UsageSnapshot(
+            windowCostCents: next.windowCostCents,
+            recentCostCents: next.recentCostCents,
+            models: next.models,
+            sessionsAcrossModels: next.sessionsAcrossModels,
+            prompts: next.prompts,
+            subagentPrompts: next.subagentPrompts,
+            skills: next.skills,
+            sparklineCostCents: next.sparklineCostCents,
+            window: next.window,
+            eventCount: next.eventCount,
+            fetchedAt: fetchedAt
+        )
+        communityAnalyticsEvents = Self.communityAnalyticsEvents(from: events, now: now, rates: rates)
+        lastError = nil
+        isShowingCachedData = false
+        hasCompletedFetch = true
+        isSpikeActive = next.recentCostCents >= settings.anomalyThresholdDollars * 100
     }
 
     func sendTestNotification() async {
@@ -168,7 +266,9 @@ final class UsageStore {
     /// events are refetched to work out what one request unit is worth.
     private func refreshSpendCalibrationIfNeeded(
         credentials: SessionCredentials,
-        now: Date
+        now: Date,
+        availableEvents: [UsageEvent],
+        availableStartMs: Double
     ) async {
         guard now.timeIntervalSince(rates.computedAt) > calibrationInterval else { return }
 
@@ -177,39 +277,80 @@ final class UsageStore {
             let cycleStart = summary.cycleStartMs > 0
                 ? Int64(summary.cycleStartMs)
                 : Int64(now.addingTimeInterval(-30 * 24 * 60 * 60).timeIntervalSince1970 * 1000)
-            let cycleEvents = try await api.fetchUsageEvents(
-                credentials: credentials,
-                startMs: cycleStart,
-                endMs: Int64(now.timeIntervalSince1970 * 1000)
-            )
+            let cycleEvents: [UsageEvent]
+            if availableStartMs <= Double(cycleStart) + 60_000 {
+                cycleEvents = availableEvents.filter { $0.timestampMs >= Double(cycleStart) }
+            } else {
+                cycleEvents = try await api.fetchUsageEvents(
+                    credentials: credentials,
+                    startMs: cycleStart,
+                    endMs: Int64(now.timeIntervalSince1970 * 1000)
+                )
+            }
             let calibrated = SpendRates.calibrate(summary: summary, cycleEvents: cycleEvents)
             guard calibrated.isAvailable else { return }
             rates = calibrated
             spendSummary = summary
         } catch {
-            // Falls back to Cursor's own per-event amounts; not worth surfacing.
             FailureReporter.report(error: error, source: .usage)
         }
     }
 
-    private func loadCachedSnapshotIfAvailable() {
+    private func hydrateFromCacheIfNeeded() async {
+        guard !hasCompletedFetch else { return }
+
         let recentWindowMinutes = settings.anomalyWindowMinutes
-        guard let cache = UsageRefreshCache.load(
-            matching: settings,
-            recentWindowMinutes: recentWindowMinutes
-        ) else {
-            return
+        let window = settings.usageWindow
+        let activeRates = rates
+        let now = Date()
+        let range = window.dateRange(now: now)
+        let fetchStart = CommunityPayloadBuilder.eventFetchStart(
+            displayWindowStart: range.start,
+            now: now
+        )
+        let neededStartMs = fetchStart.timeIntervalSince1970 * 1000
+        let neededEndMs = range.end.timeIntervalSince1970 * 1000
+
+        struct CacheHydration: Sendable {
+            let snapshot: UsageSnapshot?
+            let cache: EventWindowCache
+            let fetchedAt: Date
+            let events: [UsageEvent]
         }
 
-        let now = Date()
-        let window = settings.usageWindow
-        let cachedSnapshot = Aggregator.snapshot(
-            events: cache.events,
-            now: now,
-            window: window,
-            recentWindowMinutes: recentWindowMinutes,
-            rates: rates
-        )
+        let loaded = await Task.detached(priority: .userInitiated) {
+            guard let payload = UsageRefreshCache.load() else { return nil as CacheHydration? }
+            let cache = EventWindowCache(
+                events: payload.events,
+                startMs: payload.resolvedStartMs,
+                endMs: payload.resolvedEndMs
+            )
+            let snapshot: UsageSnapshot?
+            if cache.covers(startMs: neededStartMs, endMs: neededEndMs) {
+                snapshot = Aggregator.snapshot(
+                    events: payload.events,
+                    now: now,
+                    window: window,
+                    recentWindowMinutes: recentWindowMinutes,
+                    rates: activeRates,
+                    includePrompts: false
+                )
+            } else {
+                snapshot = nil
+            }
+            return CacheHydration(
+                snapshot: snapshot,
+                cache: cache,
+                fetchedAt: payload.fetchedAt,
+                events: payload.events
+            )
+        }.value
+
+        guard let loaded, !hasCompletedFetch else { return }
+
+        eventCache = loaded.cache
+        guard let cachedSnapshot = loaded.snapshot else { return }
+
         snapshot = UsageSnapshot(
             windowCostCents: cachedSnapshot.windowCostCents,
             recentCostCents: cachedSnapshot.recentCostCents,
@@ -221,9 +362,13 @@ final class UsageStore {
             sparklineCostCents: cachedSnapshot.sparklineCostCents,
             window: cachedSnapshot.window,
             eventCount: cachedSnapshot.eventCount,
-            fetchedAt: cache.fetchedAt
+            fetchedAt: loaded.fetchedAt
         )
-        communityAnalyticsEvents = Self.communityAnalyticsEvents(from: cache.events, now: now, rates: rates)
+        communityAnalyticsEvents = Self.communityAnalyticsEvents(
+            from: loaded.events,
+            now: now,
+            rates: activeRates
+        )
         hasCompletedFetch = true
         isShowingCachedData = true
     }

@@ -6,7 +6,8 @@ enum Aggregator {
         now: Date = Date(),
         window: UsageTimeWindow,
         recentWindowMinutes: Int,
-        rates: SpendRates = .unavailable
+        rates: SpendRates = .unavailable,
+        includePrompts: Bool = true
     ) -> UsageSnapshot {
         let range = window.dateRange(now: now)
         let startMs = range.start.timeIntervalSince1970 * 1000
@@ -131,15 +132,20 @@ enum Aggregator {
             }
             .sorted { $0.costCents > $1.costCents }
 
-        let (prompts, subagentPrompts, skills) = promptBreakdown(
-            events: events,
-            conversationIds: knownConversationIds,
-            parentByChild: parentByChild,
-            catalog: catalog,
-            startMs: startMs,
-            endMs: endMs,
-            rates: rates
-        )
+        let (prompts, subagentPrompts, skills): ([PromptUsage], [PromptUsage], [SkillUsage])
+        if includePrompts {
+            (prompts, subagentPrompts, skills) = promptBreakdown(
+                events: events,
+                conversationIds: knownConversationIds,
+                parentByChild: parentByChild,
+                catalog: catalog,
+                startMs: startMs,
+                endMs: endMs,
+                rates: rates
+            )
+        } else {
+            (prompts, subagentPrompts, skills) = ([], [], [])
+        }
 
         return UsageSnapshot(
             windowCostCents: windowCost,

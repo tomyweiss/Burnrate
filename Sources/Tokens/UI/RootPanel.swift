@@ -112,10 +112,10 @@ struct RootPanel: View {
             interactionTracker.recordTabChange(newRoute.interactionKey)
         }
         .onChange(of: settings.billingDayOfMonth) { _, _ in
-            Task { await store.refresh() }
+            Task { await store.refresh(reuseEventsIfPossible: true) }
         }
         .onChange(of: settings.usageTimezoneIdentifier) { _, _ in
-            Task { await store.refresh() }
+            Task { await store.refresh(reuseEventsIfPossible: true) }
         }
     }
 }

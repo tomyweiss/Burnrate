@@ -1,5 +1,22 @@
 import Foundation
 
+/// In-memory usage events plus the API window they were fetched for.
+struct EventWindowCache: Sendable, Equatable {
+    var events: [UsageEvent] = []
+    var startMs: Double = 0
+    var endMs: Double = 0
+
+    var isEmpty: Bool { events.isEmpty }
+
+    /// True when this cache already contains every event needed for `startMs...endMs`.
+    /// End is allowed to lag by `endSlackMs` so a fetch from a few minutes ago
+    /// can still satisfy a window that ends at `now`.
+    func covers(startMs: Double, endMs: Double, endSlackMs: Double = 5 * 60_000) -> Bool {
+        guard !events.isEmpty else { return false }
+        return self.startMs <= startMs + 60_000 && self.endMs >= endMs - endSlackMs
+    }
+}
+
 /// Persists the last successful usage fetch so the panel stays usable offline.
 enum UsageRefreshCache {
     struct Payload: Codable, Sendable {
@@ -9,6 +26,16 @@ enum UsageRefreshCache {
         let billingDayOfMonth: Int
         let recentWindowMinutes: Int
         let fetchedAt: Date
+        let fetchStartMs: Double?
+        let fetchEndMs: Double?
+
+        var resolvedStartMs: Double {
+            fetchStartMs ?? events.map(\.timestampMs).min() ?? 0
+        }
+
+        var resolvedEndMs: Double {
+            fetchEndMs ?? events.map(\.timestampMs).max() ?? 0
+        }
     }
 
     private static let fileName = "usage-refresh-cache.json"
@@ -28,7 +55,9 @@ enum UsageRefreshCache {
         events: [UsageEvent],
         settings: SettingsStore,
         recentWindowMinutes: Int,
-        fetchedAt: Date
+        fetchedAt: Date,
+        fetchStartMs: Double,
+        fetchEndMs: Double
     ) {
         let payload = Payload(
             events: events,
@@ -36,7 +65,9 @@ enum UsageRefreshCache {
             timeZoneIdentifier: settings.resolvedTimeZone.identifier,
             billingDayOfMonth: settings.billingDayOfMonth,
             recentWindowMinutes: recentWindowMinutes,
-            fetchedAt: fetchedAt
+            fetchedAt: fetchedAt,
+            fetchStartMs: fetchStartMs,
+            fetchEndMs: fetchEndMs
         )
         guard let data = try? JSONEncoder().encode(payload) else { return }
         do {
@@ -50,15 +81,9 @@ enum UsageRefreshCache {
         }
     }
 
-    static func load(matching settings: SettingsStore, recentWindowMinutes: Int) -> Payload? {
+    static func load() -> Payload? {
         guard let data = try? Data(contentsOf: fileURL),
               let payload = try? JSONDecoder().decode(Payload.self, from: data) else {
-            return nil
-        }
-        guard payload.presetRaw == settings.usageTimelinePreset.rawValue,
-              payload.timeZoneIdentifier == settings.resolvedTimeZone.identifier,
-              payload.billingDayOfMonth == settings.billingDayOfMonth,
-              payload.recentWindowMinutes == recentWindowMinutes else {
             return nil
         }
         return payload
