@@ -83,12 +83,23 @@ public struct CommunityLeaderboardEntry: Sendable, Codable, Equatable {
     public let rank: Int
     public let nickname: String?
     public let spendCents: Int
+    public let topModel: String?
+    public let clientVersion: String?
     public let isYou: Bool
 
-    public init(rank: Int, nickname: String?, spendCents: Int, isYou: Bool = false) {
+    public init(
+        rank: Int,
+        nickname: String?,
+        spendCents: Int,
+        topModel: String? = nil,
+        clientVersion: String? = nil,
+        isYou: Bool = false
+    ) {
         self.rank = rank
         self.nickname = nickname
         self.spendCents = spendCents
+        self.topModel = topModel
+        self.clientVersion = clientVersion
         self.isYou = isYou
     }
 }

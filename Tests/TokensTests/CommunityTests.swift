@@ -11,24 +11,11 @@ import Testing
     #expect(cleaned == "~/wo/tokens on main bash scripts/release.sh --yes")
 }
 
-@Test func leaderboardDedupPrefersYou() {
-    let entries = [
-        CommunityLeaderboardEntry(rank: 4, nickname: "Tom Weiss", spendCents: 8964, isYou: false),
-        CommunityLeaderboardEntry(rank: 5, nickname: "Tom Weiss", spendCents: 9599, isYou: true),
-        CommunityLeaderboardEntry(rank: 7, nickname: "Tom Weiss", spendCents: 1797, isYou: false),
-    ]
-    let deduped = LeaderboardDedup.deduplicateNicknames(entries)
-    #expect(deduped.count == 1)
-    #expect(deduped[0].isYou)
-    #expect(deduped[0].spendCents == 9599)
-}
-
-@Test func leaderboardDedupKeepsDistinctNames() {
-    let entries = [
-        CommunityLeaderboardEntry(rank: 1, nickname: "Ada", spendCents: 100, isYou: false),
-        CommunityLeaderboardEntry(rank: 2, nickname: "Bob", spendCents: 90, isYou: false),
-    ]
-    #expect(LeaderboardDedup.deduplicateNicknames(entries).count == 2)
+@Test func communityModelLabelUsesPrefixForLongNames() {
+    #expect(CommunityModelLabel.leaderboard("cursor-grok-4.6-high") == "cursor-grok-4.6-high")
+    #expect(CommunityModelLabel.leaderboard("claude-sonnet-4-20250514-thinking") == "sonnet-4-20250514…")
+    #expect(CommunityModelLabel.leaderboard("claude-opus-4") == "opus-4")
+    #expect(CommunityModelLabel.leaderboard("  gpt-4.1-long-variant-name  ") == "gpt-4.1-long…")
 }
 
 @Test func nicknameGeneratorFormat() {

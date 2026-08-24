@@ -156,7 +156,6 @@ struct CommunityView: View {
     }
 
     private func leaderboardList(_ rank: CommunityRankResponse) -> some View {
-        let entries = LeaderboardDedup.deduplicateNicknames(rank.leaderboardNear)
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("LEADERBOARD")
@@ -166,8 +165,8 @@ struct CommunityView: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                 Spacer()
-                if rank.participantCount > entries.count {
-                    Text("Top \(entries.count) of \(rank.participantCount)")
+                if rank.participantCount > rank.leaderboardNear.count {
+                    Text("Top \(rank.leaderboardNear.count) of \(rank.participantCount)")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
@@ -175,8 +174,8 @@ struct CommunityView: View {
 
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(entries.indices, id: \.self) { index in
-                        leaderboardRow(entries[index])
+                    ForEach(rank.leaderboardNear.indices, id: \.self) { index in
+                        leaderboardRow(rank.leaderboardNear[index])
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -189,11 +188,32 @@ struct CommunityView: View {
     private func leaderboardRow(_ entry: CommunityLeaderboardEntry) -> some View {
         let name = entry.nickname?.trimmingCharacters(in: .whitespacesAndNewlines)
         let displayName = (name?.isEmpty == false) ? name! : "Anonymous"
+        let modelLabel = CommunityModelLabel.leaderboard(entry.topModel)
+        let versionLabel = entry.clientVersion?.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        return HStack {
+        return HStack(spacing: 8) {
             Text("\(entry.rank) · \(displayName) · \(MoneyFormat.dollars(Double(entry.spendCents) / 100))")
                 .font(.subheadline)
                 .foregroundStyle(entry.isYou ? .primary : .secondary)
+                .lineLimit(1)
+
+            Spacer(minLength: 4)
+
+            HStack(spacing: 6) {
+                if let modelLabel {
+                    Text(modelLabel)
+                        .font(.caption2)
+                        .foregroundStyle(Color.orange.opacity(0.9))
+                        .lineLimit(1)
+                }
+
+                if let versionLabel, !versionLabel.isEmpty {
+                    Text(versionLabel)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .monospacedDigit()
+                }
+            }
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 8)
