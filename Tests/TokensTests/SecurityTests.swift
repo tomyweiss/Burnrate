@@ -34,9 +34,27 @@ import Testing
     let legacySecret = String(repeating: "a", count: 43)
     defaults.set(legacySecret, forKey: "communityMembershipSecret")
 
-    let store = SettingsStore(defaults: defaults)
+    let store = SettingsStore(defaults: defaults, persistMembershipSecretInKeychain: true)
     #expect(store.communityMembershipSecret == legacySecret)
     #expect(defaults.string(forKey: "communityMembershipSecret") == nil)
 
     defaults.removePersistentDomain(forName: suite)
+}
+
+@Test func settingsStoreKeepsMembershipSecretInDefaultsWhenKeychainDisabled() {
+    let suite = "com.burnrate.tests.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defaults.removePersistentDomain(forName: suite)
+    defer { defaults.removePersistentDomain(forName: suite) }
+
+    let secret = String(repeating: "b", count: 43)
+    defaults.set(secret, forKey: "communityMembershipSecret")
+
+    let store = SettingsStore(defaults: defaults, persistMembershipSecretInKeychain: false)
+    #expect(store.communityMembershipSecret == secret)
+    #expect(defaults.string(forKey: "communityMembershipSecret") == secret)
+
+    let updated = String(repeating: "c", count: 43)
+    store.communityMembershipSecret = updated
+    #expect(defaults.string(forKey: "communityMembershipSecret") == updated)
 }
