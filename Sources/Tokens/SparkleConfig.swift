@@ -9,6 +9,9 @@ enum SparkleConfig {
         string: "https://raw.githubusercontent.com/tomyweiss/Burnrate/main/appcast.xml"
     )!
 
+    /// Daily, matching Sparkle's default and Network Traffic Light.
+    static let scheduledCheckInterval: TimeInterval = 86_400
+
     /// Invalid on purpose. Tom replaces this with the output of Sparkle `generate_keys`.
     static let placeholderPublicEDKey = "REPLACE_WITH_TOMS_SPARKLE_PUBLIC_KEY"
 

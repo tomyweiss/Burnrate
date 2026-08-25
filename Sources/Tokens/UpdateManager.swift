@@ -4,7 +4,9 @@ import AppKit
 @MainActor
 @Observable
 final class UpdateManager {
-    private static let autoCheckInterval: TimeInterval = 60 * 60 // 1 hour
+    /// Used only when Sparkle has not started (placeholder key / Info.plist
+    /// missing `SUPublicEDKey`). Production Sparkle checks daily.
+    private static let minisignFallbackInterval: TimeInterval = 60 * 60
     private static let lastCheckKey = "lastUpdateCheckAt"
 
     private(set) var availableUpdate: AvailableUpdate?
@@ -14,11 +16,20 @@ final class UpdateManager {
     private(set) var lastError: String?
 
     private let settings: SettingsStore
+    private let sparkle: SparkleUpdateController
     private var autoCheckTask: Task<Void, Never>?
 
     init(settings: SettingsStore) {
         self.settings = settings
+        self.sparkle = SparkleUpdateController(startUpdater: true)
+        if sparkle.isAvailable {
+            sparkle.updateCheckInterval = SparkleConfig.scheduledCheckInterval
+            sparkle.automaticallyChecksForUpdates = settings.autoCheckForUpdates
+        }
     }
+
+    /// True when Sparkle is the live in-app updater (production + real key).
+    var usesSparkle: Bool { sparkle.isAvailable }
 
     var currentVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
@@ -31,6 +42,12 @@ final class UpdateManager {
 
     func autoCheckIfNeeded() {
         guard !isDevBuild else { return }
+        if sparkle.isAvailable {
+            sparkle.automaticallyChecksForUpdates = settings.autoCheckForUpdates
+            autoCheckTask?.cancel()
+            autoCheckTask = nil
+            return
+        }
         guard settings.autoCheckForUpdates else {
             autoCheckTask?.cancel()
             autoCheckTask = nil
@@ -44,13 +61,13 @@ final class UpdateManager {
                 guard self.settings.autoCheckForUpdates else { return }
 
                 let elapsed = Date().timeIntervalSince(self.lastCheckDate())
-                if elapsed >= Self.autoCheckInterval {
+                if elapsed >= Self.minisignFallbackInterval {
                     await self.checkForUpdates(userInitiated: false)
                 }
 
                 let remaining = max(
                     60,
-                    Self.autoCheckInterval - Date().timeIntervalSince(self.lastCheckDate())
+                    Self.minisignFallbackInterval - Date().timeIntervalSince(self.lastCheckDate())
                 )
                 try? await Task.sleep(for: .seconds(remaining))
             }
@@ -61,6 +78,14 @@ final class UpdateManager {
         if isDevBuild {
             if userInitiated {
                 statusMessage = "Updates are disabled in Burnrate-dev"
+            }
+            return
+        }
+        if sparkle.isAvailable {
+            lastError = nil
+            statusMessage = nil
+            if userInitiated {
+                sparkle.checkForUpdates()
             }
             return
         }

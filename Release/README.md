@@ -42,9 +42,14 @@ The `Tokens` binary links `Sparkle.framework`, so copy the framework into
 in Burnrate-dev — skip injecting `SUFeedURL` / `SUPublicEDKey` there; the
 in-app controller also refuses to start for `.dev` builds.
 
-## Appcast (after Sparkle is the live updater)
+## Bridge release (this version)
 
-Keep signing the **bridge** release with existing minisign. For later tags:
+Keep signing **this** GitHub Release with existing minisign (`minisign -Sm`)
+so clients still on the zip updater can install it. Copy Sparkle.framework
+into `Burnrate.app` and merge `Resources/Sparkle.plist` into Info.plist
+(including Tom's real `SUPublicEDKey`). Do not ship the placeholder key.
+
+Later tags: stop requiring `.minisig` and run:
 
 ```bash
 VERSION=x.y.z bash Release/prepare-sparkle-appcast.sh

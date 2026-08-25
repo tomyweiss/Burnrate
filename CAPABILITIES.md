@@ -79,10 +79,10 @@ No Dock icon. Auth comes from the local Cursor IDE login.
 
 ### Updates
 
-- Auto-check GitHub Releases (toggle in Settings, default on)
-- Manual check from overflow menu / Settings
-- SHA-256 + minisign verified zip replace of the running app (not notarized)
-- Sparkle is linked but **not** the live updater yet; minisign remains until the public key is Tom's and a follow-up enables Sparkle
+- Auto-check Sparkle appcast daily (toggle in Settings, default on)
+- Manual check from Settings; Sparkle prompts before install
+- Burnrate-dev: updates stay disabled
+- **This GitHub Release is still minisign-signed** so older clients can update to Sparkle
 
 ---
 

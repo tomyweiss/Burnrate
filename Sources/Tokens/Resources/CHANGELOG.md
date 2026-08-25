@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.50
+
+- Use Sparkle for in-app updates (daily check; you confirm before install). This GitHub Release is still minisign-signed so older apps can update to it. Burnrate-dev still does not auto-update.
+
 ## 0.0.48
 
 - Show each community leaderboard row's top 24h model and app version. (929eb4f)

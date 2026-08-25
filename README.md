@@ -123,27 +123,37 @@ estimate. Full behavior: [CAPABILITIES.md](CAPABILITIES.md).
 - Session names and workspace folders come from **local** Cursor composer metadata (and cloud agent cache for `bc-*` sessions)
 - No analytics; no model/API calls that consume Cursor usage
 - **Community (opt-in):** uploads anonymous rolling 24h spend + per-model costs to the Burnrate community API when you enable sharing; never session titles, prompts, or Cursor identity. Turning sharing off deletes your server row. You only see cohort data if you share.
-- Self-updates require a minisign signature matching the embedded public key (not only a SHA-256 checksum from the same release)
-- Sparkle is linked for a future updater; **minisign remains the live updater** until Tom commits a Sparkle public key and a follow-up PR enables Sparkle
+- Self-updates use Sparkle (EdDSA) in the production app after Tom's public key is in Info.plist; **this GitHub Release is still minisign-signed** so older clients can install it
+- Sparkle auto-check is **daily** (was hourly on the minisign path)
+- Burnrate-dev still does not auto-update from GitHub
 
 ## Self-updates
 
-Burnrate can update itself from [GitHub Releases](https://github.com/tomyweiss/Burnrate/releases)
-without an Apple Developer ID:
+Production **Burnrate.app** uses [Sparkle 2](https://sparkle-project.org) once Tom's
+`SUPublicEDKey` is in the packaged Info.plist:
 
-1. Checks `releases/latest` for a newer version tag
-2. Downloads `Burnrate-x.y.z.zip`, verifies `Burnrate-x.y.z.sha256`, then verifies the minisign signature (`Burnrate-x.y.z.zip.minisig`) against the embedded public key
-3. Quits, replaces the running `.app`, strips quarantine, relaunches
+1. Checks the Sparkle appcast (`appcast.xml` on `main`) once a day
+2. You confirm; Sparkle verifies the EdDSA signature and replaces the running app
+3. The app relaunches
 
-Use **⋯ → Check for Updates…** or Settings → Updates. You confirm before
-install. Builds are **not notarized**; if macOS blocks a new build,
-right-click → Open or run `xattr -dr com.apple.quarantine` on the app.
+Until that public key is packaged, the app falls back to the previous GitHub
+Releases + minisign zip path.
 
-Sparkle 2 is in the tree (see [`Release/README.md`](Release/README.md)) so
-maintainers can generate an EdDSA key pair and later switch the live updater.
-**Do not commit a Sparkle private key. The public key must be generated on
-Tom's machine** (`generate_keys`); the placeholder
-`REPLACE_WITH_TOMS_SPARKLE_PUBLIC_KEY` is invalid on purpose.
+**This version's GitHub Release is still minisign-signed** (`Burnrate-x.y.z.zip.minisig`)
+so clients that are still on the old updater can install it. Later tags are
+Sparkle-signed (see [`Release/README.md`](Release/README.md)).
+
+Use **Settings → Check for Updates…**. Builds are **not notarized**; if macOS
+blocks a new build, right-click → Open or run `xattr -dr com.apple.quarantine`
+on the app.
+
+Burnrate-dev never auto-updates from GitHub (that would overwrite a local
+contributor build with `Burnrate.app`).
+
+**Do not commit a Sparkle private key.** Tom generates the pair with
+`generate_keys` on his Mac. The placeholder
+`REPLACE_WITH_TOMS_SPARKLE_PUBLIC_KEY` is invalid on purpose — do not merge
+this PR without replacing it.
 
 ## Limitations
 
@@ -198,8 +208,9 @@ signing secret key at `~/.config/burnrate/burnrate.key` (or set
 Sparkle packaging helpers (framework embed, appcast) live in
 [`Release/`](Release/README.md). After Tom runs Sparkle `generate_keys` once,
 merge the public key into [`Resources/Sparkle.plist`](Resources/Sparkle.plist)
-and inject those keys from local `scripts/package.sh`. Keep using minisign for
-releases until Sparkle is enabled in a follow-up.
+and inject those keys from local `scripts/package.sh`. **Keep using minisign
+for this bridge release** so older clients can still install it. Next tags
+use Sparkle `generate_appcast` / `sign_update` instead of `minisign -Sm`.
 
 ### One PR per release (changelog in the feature PR)
 

@@ -146,7 +146,7 @@ struct SettingsPanel: View {
 
                 Section("Updates") {
                     if updates.isDevBuild {
-                        Text("Self-updates are disabled in Burnrate-dev. Reinstall with scripts/package.sh --dev.")
+                        Text("Updates are disabled in Burnrate-dev. Reinstall with scripts/package.sh --dev.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
@@ -162,7 +162,11 @@ struct SettingsPanel: View {
                         }
                         .disabled(updates.isChecking || updates.isInstalling)
 
-                        if let update = updates.availableUpdate {
+                        if updates.usesSparkle {
+                            Text("Checks once a day. You’ll confirm before installing.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else if let update = updates.availableUpdate {
                             Text("Version \(update.version) is available.")
                                 .font(.caption)
                             if ReleaseNotesView.hasContent(update.notes) {
