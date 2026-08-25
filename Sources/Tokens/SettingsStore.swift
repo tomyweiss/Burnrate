@@ -224,10 +224,16 @@ final class SettingsStore {
     /// Per-device membership secret proving possession of the participant row.
     var communityMembershipSecret: String? {
         didSet {
-            if let communityMembershipSecret {
-                saveMembershipSecretToKeychain(communityMembershipSecret)
+            if persistMembershipSecretInKeychain {
+                if let communityMembershipSecret {
+                    saveMembershipSecretToKeychain(communityMembershipSecret)
+                } else {
+                    deleteMembershipSecretFromKeychain()
+                }
+            } else if let communityMembershipSecret {
+                defaults.set(communityMembershipSecret, forKey: Keys.communityMembershipSecret)
             } else {
-                deleteMembershipSecretFromKeychain()
+                defaults.removeObject(forKey: Keys.communityMembershipSecret)
             }
         }
     }
@@ -360,9 +366,16 @@ final class SettingsStore {
     }
 
     private let defaults: UserDefaults
+    /// Release builds keep the membership secret in Keychain. Burnrate-dev skips
+    /// Keychain so ad-hoc rebuilds do not trigger ACL prompts.
+    private let persistMembershipSecretInKeychain: Bool
 
-    init(defaults: UserDefaults = .standard) {
+    init(
+        defaults: UserDefaults = .standard,
+        persistMembershipSecretInKeychain: Bool = !AppIdentity.isDevBuild
+    ) {
         self.defaults = defaults
+        self.persistMembershipSecretInKeychain = persistMembershipSecretInKeychain
 
         let refresh = defaults.object(forKey: Keys.refreshIntervalSeconds) as? Double
         refreshIntervalSeconds = Self.nearestInterval(refresh ?? 60)
@@ -420,6 +433,7 @@ final class SettingsStore {
         communityParticipantId = defaults.string(forKey: Keys.communityParticipantId)
         communityMembershipSecret = Self.loadMembershipSecret(
             defaults: defaults,
+            persistInKeychain: persistMembershipSecretInKeychain,
             keychainAccount: Keys.keychainMembershipSecretAccount,
             legacyDefaultsKey: Keys.communityMembershipSecret
         )
@@ -478,18 +492,22 @@ final class SettingsStore {
 
     private static func loadMembershipSecret(
         defaults: UserDefaults,
+        persistInKeychain: Bool,
         keychainAccount: String,
         legacyDefaultsKey: String
     ) -> String? {
-        if let fromKeychain = readMembershipSecretFromKeychain(account: keychainAccount) {
-            return fromKeychain
+        if persistInKeychain {
+            if let fromKeychain = readMembershipSecretFromKeychain(account: keychainAccount) {
+                return fromKeychain
+            }
+            if let legacy = defaults.string(forKey: legacyDefaultsKey) {
+                _ = saveMembershipSecretToKeychain(legacy, account: keychainAccount)
+                defaults.removeObject(forKey: legacyDefaultsKey)
+                return legacy
+            }
+            return nil
         }
-        if let legacy = defaults.string(forKey: legacyDefaultsKey) {
-            _ = saveMembershipSecretToKeychain(legacy, account: keychainAccount)
-            defaults.removeObject(forKey: legacyDefaultsKey)
-            return legacy
-        }
-        return nil
+        return defaults.string(forKey: legacyDefaultsKey)
     }
 
     private static func keychainServiceName() -> String {
