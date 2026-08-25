@@ -81,7 +81,8 @@ No Dock icon. Auth comes from the local Cursor IDE login.
 
 - Auto-check GitHub Releases (toggle in Settings, default on)
 - Manual check from overflow menu / Settings
-- SHA-256 verified zip replace of the running app (not notarized)
+- SHA-256 + minisign verified zip replace of the running app (not notarized)
+- Sparkle is linked but **not** the live updater yet; minisign remains until the public key is Tom's and a follow-up enables Sparkle
 
 ---
 

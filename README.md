@@ -124,6 +124,7 @@ estimate. Full behavior: [CAPABILITIES.md](CAPABILITIES.md).
 - No analytics; no model/API calls that consume Cursor usage
 - **Community (opt-in):** uploads anonymous rolling 24h spend + per-model costs to the Burnrate community API when you enable sharing; never session titles, prompts, or Cursor identity. Turning sharing off deletes your server row. You only see cohort data if you share.
 - Self-updates require a minisign signature matching the embedded public key (not only a SHA-256 checksum from the same release)
+- Sparkle is linked for a future updater; **minisign remains the live updater** until Tom commits a Sparkle public key and a follow-up PR enables Sparkle
 
 ## Self-updates
 
@@ -137,6 +138,12 @@ without an Apple Developer ID:
 Use **⋯ → Check for Updates…** or Settings → Updates. You confirm before
 install. Builds are **not notarized**; if macOS blocks a new build,
 right-click → Open or run `xattr -dr com.apple.quarantine` on the app.
+
+Sparkle 2 is in the tree (see [`Release/README.md`](Release/README.md)) so
+maintainers can generate an EdDSA key pair and later switch the live updater.
+**Do not commit a Sparkle private key. The public key must be generated on
+Tom's machine** (`generate_keys`); the placeholder
+`REPLACE_WITH_TOMS_SPARKLE_PUBLIC_KEY` is invalid on purpose.
 
 ## Limitations
 
@@ -187,6 +194,12 @@ Requires [minisign](https://jedisct1.github.io/minisign/) and the release
 signing secret key at `~/.config/burnrate/burnrate.key` (or set
 `MINISIGN_SECRET_KEY`). The matching public key is committed as
 [`burnrate.pub`](burnrate.pub) and embedded in the app.
+
+Sparkle packaging helpers (framework embed, appcast) live in
+[`Release/`](Release/README.md). After Tom runs Sparkle `generate_keys` once,
+merge the public key into [`Resources/Sparkle.plist`](Resources/Sparkle.plist)
+and inject those keys from local `scripts/package.sh`. Keep using minisign for
+releases until Sparkle is enabled in a follow-up.
 
 ### One PR per release (changelog in the feature PR)
 
