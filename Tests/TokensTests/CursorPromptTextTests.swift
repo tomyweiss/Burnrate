@@ -64,4 +64,5 @@ import Testing
     let fromTag = CursorPromptText.resolvedCreatedAtMs(createdAt: "", text: text)
     #expect(fromTag != nil)
     #expect(CursorPromptText.resolvedCreatedAtMs(createdAt: nil, text: "plain") == nil)
+    #expect(CursorPromptText.resolvedCreatedAtMs(createdAt: "1000", text: "plain") == 1000)
 }

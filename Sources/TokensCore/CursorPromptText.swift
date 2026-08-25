@@ -81,11 +81,10 @@ public enum CursorPromptText {
             ?? (try? Date(text, strategy: isoPlain)) {
             return date.timeIntervalSince1970 * 1000
         }
-        if let ms = Double(text), ms > 1_000_000_000_000 {
+        // SQLite json_extract may yield epoch ms as a number (including small
+        // fixture values). Match the previous catalog parser: any Double > 0.
+        if let ms = Double(text), ms > 0 {
             return ms
-        }
-        if let seconds = Double(text), seconds > 1_000_000_000, seconds < 1_000_000_000_000 {
-            return seconds * 1000
         }
         return nil
     }
