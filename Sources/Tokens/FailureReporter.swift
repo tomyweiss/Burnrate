@@ -18,8 +18,8 @@ enum FailureReporter {
         case unknown
     }
 
-    /// Assigned at app startup; defaults to disabled until wired.
-    nonisolated(unsafe) static var isEnabled: () -> Bool = { false }
+    /// Assigned at app startup; defaults to on. Tests can disable.
+    nonisolated(unsafe) static var isEnabled: () -> Bool = { true }
 
     static func report(
         source: Source,

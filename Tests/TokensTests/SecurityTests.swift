@@ -17,9 +17,9 @@ import Testing
     #expect(output.contains("WorkosCursorSessionToken=[REDACTED]"))
 }
 
-@Test func failureReporterDisabledByDefault() async {
+@Test func failureReporterCanBeDisabled() async {
     FailureReporter.isEnabled = { false }
-    defer { FailureReporter.isEnabled = { false } }
+    defer { FailureReporter.isEnabled = { true } }
 
     // Should return immediately without network; no assertion on side effects.
     FailureReporter.report(source: .app, category: .unknown, message: "test")
