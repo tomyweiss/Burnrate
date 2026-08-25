@@ -1,14 +1,16 @@
 import Foundation
 import Sparkle
 
-/// Thin Sparkle wrapper. PR 1 does not start the updater; minisign stays live.
+/// Thin Sparkle wrapper. Starts only for production builds that have Tom's
+/// real `SUPublicEDKey` in Info.plist — never for Burnrate-dev, never for the
+/// placeholder key.
 @MainActor
 final class SparkleUpdateController {
     private let updaterController: SPUStandardUpdaterController?
 
-    /// - Parameter startUpdater: Production enablement (PR 2). Always false for
-    ///   Burnrate-dev and while `SUPublicEDKey` is still the placeholder.
-    init(startUpdater: Bool = false) {
+    /// - Parameter startUpdater: Production enablement. Still false for
+    ///   Burnrate-dev and while `SUPublicEDKey` is the placeholder.
+    init(startUpdater: Bool) {
         let shouldStart = startUpdater
             && !AppIdentity.isDevBuild
             && !SparkleConfig.isPlaceholderPublicKey
@@ -28,6 +30,11 @@ final class SparkleUpdateController {
     var automaticallyChecksForUpdates: Bool {
         get { updaterController?.updater.automaticallyChecksForUpdates ?? false }
         set { updaterController?.updater.automaticallyChecksForUpdates = newValue }
+    }
+
+    var updateCheckInterval: TimeInterval {
+        get { updaterController?.updater.updateCheckInterval ?? SparkleConfig.scheduledCheckInterval }
+        set { updaterController?.updater.updateCheckInterval = newValue }
     }
 
     func checkForUpdates() {
