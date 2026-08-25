@@ -1,5 +1,6 @@
 import Foundation
 import SQLite3
+import TokensCore
 
 /// A user prompt (chat message) recovered from local Cursor composer data.
 struct PromptRecord: Sendable, Hashable {
@@ -9,6 +10,8 @@ struct PromptRecord: Sendable, Hashable {
     let createdAtMs: Double
     /// Skill names mentioned as slash commands in the prompt, e.g. `/loop` → "loop".
     let skills: [String]
+    /// Cursor `conversationTurnIndex` when present; used to order bubbles that share a timestamp.
+    let turnIndex: Int?
 }
 
 /// Reads user prompts (with timestamps and `/skill` mentions) for conversations
@@ -150,7 +153,10 @@ enum PromptCatalog {
             ))
             start = end
         }
-        return prompts.sorted { $0.createdAtMs < $1.createdAtMs }
+        return prompts.sorted {
+            if $0.createdAtMs != $1.createdAtMs { return $0.createdAtMs < $1.createdAtMs }
+            return ($0.turnIndex ?? Int.max) < ($1.turnIndex ?? Int.max)
+        }
     }
 
     private static func userBubbleKeys(
@@ -195,7 +201,9 @@ enum PromptCatalog {
         let query = """
         SELECT key,
                json_extract(value, '$.text'),
-               json_extract(value, '$.createdAt')
+               json_extract(value, '$.createdAt'),
+               json_extract(value, '$.isSimulatedMsg'),
+               json_extract(value, '$.conversationTurnIndex')
         FROM cursorDiskKV
         WHERE key IN (\(placeholders))
         """
@@ -213,14 +221,26 @@ enum PromptCatalog {
         var prompts: [PromptRecord] = []
         while sqlite3_step(statement) == SQLITE_ROW {
             guard let textC = sqlite3_column_text(statement, 1) else { continue }
-            let text = String(cString: textC).trimmingCharacters(in: .whitespacesAndNewlines)
+            let rawText = String(cString: textC).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !rawText.isEmpty else { continue }
+
+            let isSimulated = sqliteBoolean(statement, column: 3)
+            if CursorPromptText.isSynthetic(text: rawText, isSimulated: isSimulated) {
+                continue
+            }
+
+            let text = CursorPromptText.visible(rawText)
             guard !text.isEmpty else { continue }
 
             guard let keyC = sqlite3_column_text(statement, 0) else { continue }
             let key = String(cString: keyC)
             let bubbleId = String(key.dropFirst(keyPrefix.count))
 
-            guard let createdAtMs = createdAtMs(from: statement, column: 2) else { continue }
+            let createdAtMs = CursorPromptText.resolvedCreatedAtMs(
+                createdAt: columnString(statement, column: 2),
+                text: rawText
+            ) ?? 0
+            let turnIndex = sqliteOptionalInt(statement, column: 4)
 
             prompts.append(
                 PromptRecord(
@@ -228,39 +248,51 @@ enum PromptCatalog {
                     bubbleId: bubbleId,
                     text: text,
                     createdAtMs: createdAtMs,
-                    skills: skillMentions(in: text)
+                    skills: skillMentions(in: text),
+                    turnIndex: turnIndex
                 )
             )
         }
         return prompts
     }
 
-    private static func createdAtMs(from statement: OpaquePointer?, column: Int32) -> Double? {
+    private static func columnString(_ statement: OpaquePointer?, column: Int32) -> String? {
         switch sqlite3_column_type(statement, column) {
         case SQLITE_INTEGER, SQLITE_FLOAT:
             let value = sqlite3_column_double(statement, column)
-            return value > 0 ? value : nil
+            return value > 0 ? String(value) : nil
         case SQLITE_TEXT:
             guard let cString = sqlite3_column_text(statement, column) else { return nil }
-            return parseISOToMs(String(cString: cString))
+            let text = String(cString: cString).trimmingCharacters(in: .whitespacesAndNewlines)
+            return text.isEmpty ? nil : text
         default:
             return nil
         }
     }
 
-    private static let isoWithFraction = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
-    private static let isoPlain = Date.ISO8601FormatStyle()
+    private static func sqliteBoolean(_ statement: OpaquePointer?, column: Int32) -> Bool {
+        switch sqlite3_column_type(statement, column) {
+        case SQLITE_INTEGER, SQLITE_FLOAT:
+            return sqlite3_column_int(statement, column) != 0
+        case SQLITE_TEXT:
+            guard let cString = sqlite3_column_text(statement, column) else { return false }
+            let text = String(cString: cString).lowercased()
+            return text == "true" || text == "1"
+        default:
+            return false
+        }
+    }
 
-    private static func parseISOToMs(_ text: String) -> Double? {
-        if let date = (try? Date(text, strategy: isoWithFraction))
-            ?? (try? Date(text, strategy: isoPlain)) {
-            return date.timeIntervalSince1970 * 1000
+    private static func sqliteOptionalInt(_ statement: OpaquePointer?, column: Int32) -> Int? {
+        switch sqlite3_column_type(statement, column) {
+        case SQLITE_INTEGER, SQLITE_FLOAT:
+            return Int(sqlite3_column_int64(statement, column))
+        case SQLITE_TEXT:
+            guard let cString = sqlite3_column_text(statement, column) else { return nil }
+            return Int(String(cString: cString))
+        default:
+            return nil
         }
-        // Some older bubbles store epoch milliseconds as a string.
-        if let ms = Double(text), ms > 0 {
-            return ms
-        }
-        return nil
     }
 
     // MARK: - Skill detection
