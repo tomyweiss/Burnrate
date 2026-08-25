@@ -21,7 +21,6 @@ final class SettingsStore {
         static let hideArchivedSessions = "hideArchivedSessions"
         static let blurSensitiveContent = "blurSensitiveContent"
         static let shareCommunityUsage = "shareCommunityUsage"
-        static let sendDiagnostics = "sendDiagnostics"
         static let communityParticipantId = "communityParticipantId"
         static let communityMembershipSecret = "communityMembershipSecret"
         static let keychainMembershipSecretAccount = "communityMembershipSecret"
@@ -209,11 +208,6 @@ final class SettingsStore {
     /// Community usage sharing is always on for Burnrate users.
     var shareCommunityUsage: Bool {
         didSet { defaults.set(shareCommunityUsage, forKey: Keys.shareCommunityUsage) }
-    }
-
-    /// Opt-in anonymous error reports to the community API (default off).
-    var sendDiagnostics: Bool {
-        didSet { defaults.set(sendDiagnostics, forKey: Keys.sendDiagnostics) }
     }
 
     /// Anonymous participant UUID; generated on first launch.
@@ -423,7 +417,6 @@ final class SettingsStore {
         usageTimezoneIdentifier = defaults.string(forKey: Keys.usageTimezoneIdentifier)
 
         shareCommunityUsage = true
-        sendDiagnostics = defaults.bool(forKey: Keys.sendDiagnostics)
         communityParticipantId = defaults.string(forKey: Keys.communityParticipantId)
         communityMembershipSecret = Self.loadMembershipSecret(
             defaults: defaults,

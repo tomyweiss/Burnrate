@@ -16,11 +16,21 @@ struct CommunityPanel: View {
                         onBack()
                         MenuBarPanelKeeper.keepOpen()
                     } label: {
-                        Label("Usage", systemImage: "chevron.left")
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                                .font(.body.weight(.semibold))
+                            Text("Usage")
+                        }
+                        .padding(.leading, 8)
+                        .padding(.trailing, 10)
+                        .padding(.vertical, 5)
+                        .contentShape(Capsule())
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.plain)
                     .glassEffect(.regular.interactive())
+                    .clipShape(Capsule())
                     .glassEffectID("community-back", in: glassNamespace)
+                    .accessibilityLabel("Usage")
 
                     Spacer()
                 }

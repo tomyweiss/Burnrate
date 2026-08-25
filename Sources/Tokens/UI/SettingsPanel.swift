@@ -144,17 +144,6 @@ struct SettingsPanel: View {
                     }
                 }
 
-                Section("Privacy") {
-                    Toggle("Send anonymous diagnostics", isOn: $settings.sendDiagnostics)
-                        .onChange(of: settings.sendDiagnostics) { _, _ in
-                            FailureReporter.isEnabled = { settings.sendDiagnostics }
-                            MenuBarPanelKeeper.keepOpen()
-                        }
-                    Text("When enabled, Burnrate may send error summaries to help fix bugs. No prompts, code, or session content is included.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
                 Section("Updates") {
                     if updates.isDevBuild {
                         Text("Self-updates are disabled in Burnrate-dev. Reinstall with scripts/package.sh --dev.")
