@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.51
+
+- Retire minisign self-updates. New releases are Sparkle-signed only. Install the previous Sparkle bridge release first if you are still on the old zip updater.
+
 ## 0.0.50
 
 - Use Sparkle for in-app updates (daily check; you confirm before install). This GitHub Release is still minisign-signed so older apps can update to it. Burnrate-dev still does not auto-update.

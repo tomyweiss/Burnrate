@@ -156,27 +156,15 @@ struct SettingsPanel: View {
                                 MenuBarPanelKeeper.keepOpen()
                             }
 
-                        Button(updates.isChecking ? "Checking…" : "Check for Updates…") {
+                        Button("Check for Updates…") {
                             Task { await updates.checkForUpdates(userInitiated: true) }
                             MenuBarPanelKeeper.keepOpen()
                         }
-                        .disabled(updates.isChecking || updates.isInstalling)
 
                         if updates.usesSparkle {
                             Text("Checks once a day. You’ll confirm before installing.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                        } else if let update = updates.availableUpdate {
-                            Text("Version \(update.version) is available.")
-                                .font(.caption)
-                            if ReleaseNotesView.hasContent(update.notes) {
-                                ReleaseNotesView(notes: update.notes)
-                            }
-                            Button(updates.isInstalling ? "Installing…" : "Download & Install") {
-                                Task { await updates.installAvailableUpdate() }
-                                MenuBarPanelKeeper.keepOpen()
-                            }
-                            .disabled(updates.isInstalling)
                         }
 
                         if let status = updates.statusMessage {
