@@ -366,13 +366,13 @@ final class SettingsStore {
     }
 
     private let defaults: UserDefaults
-    /// Release builds keep the membership secret in Keychain. Burnrate-dev skips
-    /// Keychain so ad-hoc rebuilds do not trigger ACL prompts.
+    /// Release builds keep the membership secret in Keychain. Burnrate-dev and other
+    /// ad-hoc/local builds use UserDefaults so rebuilds do not break community auth.
     private let persistMembershipSecretInKeychain: Bool
 
     init(
         defaults: UserDefaults = .standard,
-        persistMembershipSecretInKeychain: Bool = !AppIdentity.isDevBuild
+        persistMembershipSecretInKeychain: Bool = AppIdentity.persistMembershipSecretInKeychain
     ) {
         self.defaults = defaults
         self.persistMembershipSecretInKeychain = persistMembershipSecretInKeychain
@@ -507,7 +507,14 @@ final class SettingsStore {
             }
             return nil
         }
-        return defaults.string(forKey: legacyDefaultsKey)
+        if let fromDefaults = defaults.string(forKey: legacyDefaultsKey) {
+            return fromDefaults
+        }
+        if let fromKeychain = readMembershipSecretFromKeychain(account: keychainAccount) {
+            defaults.set(fromKeychain, forKey: legacyDefaultsKey)
+            return fromKeychain
+        }
+        return nil
     }
 
     private static func keychainServiceName() -> String {
