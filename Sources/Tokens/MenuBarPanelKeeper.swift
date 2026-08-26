@@ -52,6 +52,21 @@ enum MenuBarPanelKeeper {
         }
     }
 
+    /// Sparkle update alerts sit behind floating menu bar panels unless we
+    /// temporarily hide them before the modal is shown.
+    static func hidePanelsForModalAlert() {
+        for window in panelWindows where window.isVisible {
+            window.orderOut(nil)
+        }
+    }
+
+    static func restorePanelsAfterModalAlert() {
+        for window in panelWindows where anchors[window.windowNumber] != nil {
+            window.orderFront(nil)
+            pin(window)
+        }
+    }
+
     private static func preparePanels() {
         installMoveObserverIfNeeded()
         for window in panelWindows {
