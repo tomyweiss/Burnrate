@@ -18,6 +18,7 @@ final class CommunityStore {
     private var lastUploadAt: Date?
     private let uploadThrottle: TimeInterval = 5 * 60
     private var didResetCommunityCredentials = false
+    private var rankRequestGeneration = 0
 
     init(
         settings: SettingsStore,
@@ -82,6 +83,7 @@ final class CommunityStore {
             return
         }
 
+        let generation = rankRequestGeneration
         isLoading = true
         defer { isLoading = false }
 
@@ -92,6 +94,7 @@ final class CommunityStore {
                 membershipSecret: membershipSecret,
                 window: window
             )
+            guard generation == rankRequestGeneration, window == selectedWindow else { return }
             guard response.rankWindow == window else {
                 throw CommunityError.apiMessage(
                     "Historical leaderboard is not available yet. The community API may need an update."
@@ -103,6 +106,7 @@ final class CommunityStore {
             lastError = nil
             CommunityRankCache.save(response, participantId: participantId, window: window)
         } catch {
+            guard generation == rankRequestGeneration, window == selectedWindow else { return }
             if await resetCommunityCredentialsIfNeeded(for: error) {
                 await refreshRank(for: window)
                 return
@@ -114,11 +118,7 @@ final class CommunityStore {
                 participantId: settings.communityParticipantId,
                 membershipSecret: settings.communityMembershipSecret
             )
-            if rank == nil {
-                restoreCachedRankIfAvailable(for: window)
-            } else {
-                rankIsStale = true
-            }
+            applyFailedRankFetch(for: window)
         }
     }
 
@@ -139,14 +139,28 @@ final class CommunityStore {
     }
 
     private func prepareForWindowChange(_ window: CommunityRankWindow) {
+        rankRequestGeneration += 1
         lastError = nil
         if let participantId = settings.communityParticipantId,
-           let cached = CommunityRankCache.load(participantId: participantId, window: window) {
+           let cached = CommunityRankCache.load(participantId: participantId, window: window),
+           cached.rank.rankWindow == window {
             rank = cached.rank
             rankIsStale = true
         } else {
             rank = nil
             rankIsStale = false
+        }
+    }
+
+    private func applyFailedRankFetch(for window: CommunityRankWindow) {
+        if rank?.rankWindow != window {
+            rank = nil
+            rankIsStale = false
+        }
+        if rank == nil {
+            restoreCachedRankIfAvailable(for: window)
+        } else {
+            rankIsStale = true
         }
     }
 
@@ -248,7 +262,8 @@ final class CommunityStore {
     private func restoreCachedRankIfAvailable(for window: CommunityRankWindow? = nil) {
         let window = window ?? selectedWindow
         guard let participantId = settings.communityParticipantId,
-              let cached = CommunityRankCache.load(participantId: participantId, window: window) else {
+              let cached = CommunityRankCache.load(participantId: participantId, window: window),
+              cached.rank.rankWindow == window else {
             rank = nil
             rankIsStale = false
             return

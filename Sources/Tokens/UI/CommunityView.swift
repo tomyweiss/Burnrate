@@ -60,13 +60,18 @@ struct CommunityView: View {
 
             if community.needsCursorSignIn {
                 signInPrompt
-            } else if let rank = community.rank, rank.notEnoughParticipants {
+            } else if let rank = community.rank, rank.rankWindow == community.selectedWindow, rank.notEnoughParticipants {
                 notEnoughView(rank)
-            } else if let rank = community.rank {
+            } else if let rank = community.rank, rank.rankWindow == community.selectedWindow {
                 if community.rankIsStale {
                     Text("Offline — showing cached cohort data.")
                         .font(.caption)
                         .foregroundStyle(.orange)
+                }
+                if let error = community.lastError, community.rankIsStale {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 if rank.isProvisional {
                     Text("Today’s UTC totals are still updating.")
