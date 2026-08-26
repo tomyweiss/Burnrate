@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.53
+
+- Sign releases with Developer ID so Sparkle in-app updates install successfully.
+
 ## 0.0.52
 
 - Fix Sparkle update dialogs hidden behind the floating menu bar panel.
