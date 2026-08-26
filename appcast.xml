@@ -6,6 +6,15 @@
         <description>Sparkle appcast. Maintainers: overwrite this file with generate_appcast at release time. Do not publish update items until SUPublicEDKey is Tom's real Sparkle public key.</description>
         <language>en</language>
         <item>
+            <title>0.0.53</title>
+            <pubDate>Wed, 26 Aug 2026 20:50:54 +0300</pubDate>
+            <sparkle:version>0053</sparkle:version>
+            <sparkle:shortVersionString>0.0.53</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/tomyweiss/Burnrate/releases/download/v0.0.53/Burnrate-0.0.53.zip" length="3664006" type="application/octet-stream" sparkle:edSignature="2vTMaaLlVhRh/3siCJ9CzjX2YF6wRa5pxiLZaOT83955QzTb9rA9lNtOnRYxBSz7jwK7zaLQQo1fB8WIOMyrBA=="/>
+        </item>
+        <item>
             <title>0.0.51</title>
             <pubDate>Wed, 26 Aug 2026 15:22:48 +0300</pubDate>
             <sparkle:version>0051</sparkle:version>
