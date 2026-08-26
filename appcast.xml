@@ -7,12 +7,21 @@
         <language>en</language>
         <item>
             <title>0.0.53</title>
-            <pubDate>Wed, 26 Aug 2026 20:50:54 +0300</pubDate>
+            <pubDate>Wed, 26 Aug 2026 20:52:34 +0300</pubDate>
             <sparkle:version>0053</sparkle:version>
             <sparkle:shortVersionString>0.0.53</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
             <enclosure url="https://github.com/tomyweiss/Burnrate/releases/download/v0.0.53/Burnrate-0.0.53.zip" length="3664006" type="application/octet-stream" sparkle:edSignature="2vTMaaLlVhRh/3siCJ9CzjX2YF6wRa5pxiLZaOT83955QzTb9rA9lNtOnRYxBSz7jwK7zaLQQo1fB8WIOMyrBA=="/>
+        </item>
+        <item>
+            <title>0.0.52</title>
+            <pubDate>Wed, 26 Aug 2026 20:37:27 +0300</pubDate>
+            <sparkle:version>0052</sparkle:version>
+            <sparkle:shortVersionString>0.0.52</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/tomyweiss/Burnrate/releases/download/v0.0.52/Burnrate-0.0.52.zip" length="3617955" type="application/octet-stream" sparkle:edSignature="c4ak478Nk4Nt9BxA+hkuxxdxEie7iZpU7C+EcUiM7HdrM803ZMOBvyPsA38KMal2YJ2yrnHZ3IOYJ0MYC8zqDQ=="/>
         </item>
         <item>
             <title>0.0.51</title>
