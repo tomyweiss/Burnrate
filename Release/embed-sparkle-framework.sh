@@ -21,5 +21,5 @@ mkdir -p "$APP_DIR/Contents/Frameworks"
 rm -rf "$APP_DIR/Contents/Frameworks/Sparkle.framework"
 cp -R "$FRAMEWORK_SRC" "$APP_DIR/Contents/Frameworks/Sparkle.framework"
 /usr/bin/install_name_tool -add_rpath "@executable_path/../Frameworks" "$MACOS_BIN" 2>/dev/null || true
-codesign --force --sign - "$APP_DIR/Contents/Frameworks/Sparkle.framework" >/dev/null
+# Final codesign happens in package.sh sign_app(); don't ad-hoc sign here.
 echo "Embedded Sparkle.framework into $APP_DIR"
