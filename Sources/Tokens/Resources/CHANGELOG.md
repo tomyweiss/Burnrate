@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.55
+
+- Notarize releases and fix Sparkle signing so in-app updates install successfully.
+
 ## 0.0.54
 
 - Fix By day leaderboard showing stale Live data when a historical fetch fails.
