@@ -3,6 +3,21 @@ import TokensCore
 
 struct CommunityView: View {
     @Bindable var community: CommunityStore
+    @State private var windowMode: WindowMode = .live
+
+    private enum WindowMode: String, CaseIterable, Identifiable {
+        case live
+        case day
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .live: "Live"
+            case .day: "By day"
+            }
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -10,7 +25,9 @@ struct CommunityView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 4)
 
-            if let rank = community.rank, !rank.notEnoughParticipants {
+            if let rank = community.rank,
+               rank.rankWindow == community.selectedWindow,
+               !rank.notEnoughParticipants {
                 leaderboardList(rank)
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
@@ -20,6 +37,12 @@ struct CommunityView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onAppear {
+            syncWindowModeFromStore()
+        }
+        .onChange(of: community.selectedWindow) { _, _ in
+            syncWindowModeFromStore()
+        }
         .task {
             community.refreshCursorDisplayName()
             await community.activateCommunity()
@@ -31,6 +54,9 @@ struct CommunityView: View {
     private var sharingHeader: some View {
         VStack(alignment: .leading, spacing: 16) {
             nicknameRow
+            if windowMode == .day {
+                dayNavigator
+            }
 
             if community.needsCursorSignIn {
                 signInPrompt
@@ -41,6 +67,15 @@ struct CommunityView: View {
                     Text("Offline — showing cached cohort data.")
                         .font(.caption)
                         .foregroundStyle(.orange)
+                }
+                if rank.isProvisional {
+                    Text("Today’s UTC totals are still updating.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if community.isLoading {
+                    ProgressView()
+                        .controlSize(.small)
                 }
                 heroStats(rank)
                 distributionBar(rank)
@@ -54,6 +89,68 @@ struct CommunityView: View {
                     .frame(maxWidth: .infinity, minHeight: 80)
             }
         }
+    }
+
+    private var windowModePicker: some View {
+        PillPicker(
+            selection: Binding(
+                get: { windowMode },
+                set: { newMode in
+                    windowMode = newMode
+                    MenuBarPanelKeeper.keepOpen()
+                    Task {
+                        switch newMode {
+                        case .live:
+                            await community.selectWindow(.rolling24h)
+                        case .day:
+                            await community.selectWindow(.yesterdayUTC())
+                        }
+                    }
+                }
+            ),
+            options: WindowMode.allCases.map { mode in
+                PillPicker.Option(value: mode, title: mode.title)
+            },
+            size: .compact,
+            style: .flat
+        )
+    }
+
+    private var dayNavigator: some View {
+        HStack(spacing: 8) {
+            Button {
+                MenuBarPanelKeeper.keepOpen()
+                Task { await community.stepWindow(forward: false) }
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.caption.weight(.semibold))
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!community.selectedWindow.canStepBackward || community.isLoading)
+
+            Text(community.selectedWindow.displayLabel())
+                .font(.subheadline.weight(.medium))
+                .frame(maxWidth: .infinity)
+
+            Button {
+                MenuBarPanelKeeper.keepOpen()
+                Task { await community.stepWindow(forward: true) }
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!community.selectedWindow.canStepForward || community.isLoading)
+        }
+        .foregroundStyle(.secondary)
+    }
+
+    private func syncWindowModeFromStore() {
+        windowMode = community.selectedWindow.kind == .rolling24h ? .live : .day
     }
 
     private var signInPrompt: some View {
@@ -71,22 +168,25 @@ struct CommunityView: View {
     }
 
     private var nicknameRow: some View {
-        HStack(spacing: 6) {
+        HStack(alignment: .center, spacing: 8) {
             Image(systemName: "person.crop.circle")
                 .font(.caption)
                 .foregroundStyle(Color.orange)
 
             Text(community.displayNickname)
                 .font(.subheadline.weight(.medium))
+                .lineLimit(1)
 
-            Spacer()
+            Spacer(minLength: 8)
+
+            windowModePicker
         }
     }
 
     private func heroStats(_ rank: CommunityRankResponse) -> some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("24H SPEND")
+                Text(rank.rankWindow.spendCaption())
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Text(MoneyFormat.dollars(Double(rank.yourSpendCents) / 100))
@@ -161,9 +261,15 @@ struct CommunityView: View {
                 Text("LEADERBOARD")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
-                Text("self-reported")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                if rank.rankWindow.kind == .utcDay {
+                    Text(rank.rankWindow.displayLabel())
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                } else {
+                    Text("self-reported")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
                 Spacer()
                 if rank.participantCount > rank.leaderboardNear.count {
                     Text("Top \(rank.leaderboardNear.count) of \(rank.participantCount)")

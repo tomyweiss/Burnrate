@@ -149,6 +149,36 @@ import Testing
     #expect(payload.clientVersion == "0.0.25-dev")
 }
 
+@Test func communityRankWindowStepsWithinLookback() {
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    let today = CommunityRankWindow.todayUTC(now: now)
+    #expect(today.shiftedDays(by: 1, now: now) == nil)
+    #expect(today.shiftedDays(by: -1, now: now)?.day == CommunityRankWindow.yesterdayUTC(now: now).day)
+    #expect(CommunityRankWindow.rolling24h.apiDayParameter == nil)
+    #expect(today.apiDayParameter == CommunityDayFormat.utcDayString(for: now))
+}
+
+@Test func communityRankResponseDefaultsMissingWindowFields() throws {
+    let json = """
+    {
+      "participantCount": 3,
+      "rank": 2,
+      "yourSpendCents": 80,
+      "medianSpendCents": 70,
+      "p25SpendCents": 50,
+      "p75SpendCents": 90,
+      "maxSpendCents": 100,
+      "leaderboardNear": [],
+      "notEnoughParticipants": false
+    }
+  """.data(using: .utf8)!
+    let response = try JSONDecoder().decode(CommunityRankResponse.self, from: json)
+    #expect(response.window == "rolling24h")
+    #expect(response.day == nil)
+    #expect(response.isProvisional == false)
+    #expect(response.rankWindow == .rolling24h)
+}
+
 @Test func payloadBuilderDailyReportsIncludeTodayAndYesterday() {
     let now = Date(timeIntervalSince1970: 1_700_000_000)
     let today = CommunityDayFormat.utcDayString(for: now)
