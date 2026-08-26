@@ -104,8 +104,115 @@ public struct CommunityLeaderboardEntry: Sendable, Codable, Equatable {
     }
 }
 
+/// Which community leaderboard window to display.
+public struct CommunityRankWindow: Sendable, Hashable, Codable {
+    public enum Kind: String, Sendable, Codable {
+        case rolling24h
+        case utcDay
+    }
+
+    public let kind: Kind
+    /// UTC calendar day (`YYYY-MM-DD`) when `kind` is `.utcDay`.
+    public let day: String?
+
+    public static let rolling24h = CommunityRankWindow(kind: .rolling24h, day: nil)
+
+    public static func utcDay(_ day: String) -> CommunityRankWindow {
+        CommunityRankWindow(kind: .utcDay, day: day)
+    }
+
+    public init(kind: Kind, day: String?) {
+        self.kind = kind
+        self.day = day
+    }
+
+    public var apiDayParameter: String? {
+        kind == .utcDay ? day : nil
+    }
+}
+
+extension CommunityRankWindow {
+    public static let maxDayLookback = 90
+
+    public static func todayUTC(now: Date = Date()) -> CommunityRankWindow {
+        .utcDay(CommunityDayFormat.utcDayString(for: now))
+    }
+
+    public static func yesterdayUTC(now: Date = Date()) -> CommunityRankWindow {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: now) ?? now
+        return .utcDay(CommunityDayFormat.utcDayString(for: yesterday))
+    }
+
+    public func shiftedDays(by offset: Int, now: Date = Date()) -> CommunityRankWindow? {
+        guard kind == .utcDay, let day, let dayStartMs = CommunityDayFormat.utcDayStartMs(for: day) else {
+            return nil
+        }
+        let shifted = Date(timeIntervalSince1970: dayStartMs / 1000 + Double(offset) * 86_400)
+        let shiftedDay = CommunityDayFormat.utcDayString(for: shifted)
+        let today = CommunityDayFormat.utcDayString(for: now)
+        guard shiftedDay <= today else { return nil }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        guard let minDate = calendar.date(byAdding: .day, value: -Self.maxDayLookback, to: now) else {
+            return nil
+        }
+        let minDay = CommunityDayFormat.utcDayString(for: minDate)
+        guard shiftedDay >= minDay else { return nil }
+        return .utcDay(shiftedDay)
+    }
+
+    public var canStepBackward: Bool {
+        shiftedDays(by: -1) != nil
+    }
+
+    public var canStepForward: Bool {
+        shiftedDays(by: 1) != nil
+    }
+
+    public func displayLabel(now: Date = Date()) -> String {
+        switch kind {
+        case .rolling24h:
+            return "Live"
+        case .utcDay:
+            guard let day, let dayStartMs = CommunityDayFormat.utcDayStartMs(for: day) else {
+                return "Day"
+            }
+            let date = Date(timeIntervalSince1970: dayStartMs / 1000)
+            let formatter = DateFormatter()
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            formatter.dateFormat = "MMM d"
+            let label = formatter.string(from: date)
+            if day == CommunityDayFormat.utcDayString(for: now) {
+                return "Today · \(label)"
+            }
+            if day == CommunityRankWindow.yesterdayUTC(now: now).day {
+                return "Yesterday · \(label)"
+            }
+            return label
+        }
+    }
+
+    public func spendCaption(now: Date = Date()) -> String {
+        switch kind {
+        case .rolling24h:
+            return "24H SPEND"
+        case .utcDay:
+            if day == CommunityDayFormat.utcDayString(for: now) {
+                return "TODAY SPEND"
+            }
+            return "DAY SPEND"
+        }
+    }
+}
+
 /// Rank response from GET /v1/community/rank.
 public struct CommunityRankResponse: Sendable, Codable, Equatable {
+    public let window: String
+    public let day: String?
+    public let isProvisional: Bool
     public let participantCount: Int
     public let rank: Int?
     public let yourSpendCents: Int
@@ -117,6 +224,9 @@ public struct CommunityRankResponse: Sendable, Codable, Equatable {
     public let notEnoughParticipants: Bool
 
     public init(
+        window: String = "rolling24h",
+        day: String? = nil,
+        isProvisional: Bool = false,
         participantCount: Int,
         rank: Int?,
         yourSpendCents: Int,
@@ -127,6 +237,9 @@ public struct CommunityRankResponse: Sendable, Codable, Equatable {
         leaderboardNear: [CommunityLeaderboardEntry],
         notEnoughParticipants: Bool = false
     ) {
+        self.window = window
+        self.day = day
+        self.isProvisional = isProvisional
         self.participantCount = participantCount
         self.rank = rank
         self.yourSpendCents = yourSpendCents
@@ -136,6 +249,51 @@ public struct CommunityRankResponse: Sendable, Codable, Equatable {
         self.maxSpendCents = maxSpendCents
         self.leaderboardNear = leaderboardNear
         self.notEnoughParticipants = notEnoughParticipants
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        window = try container.decodeIfPresent(String.self, forKey: .window) ?? "rolling24h"
+        day = try container.decodeIfPresent(String.self, forKey: .day)
+        isProvisional = try container.decodeIfPresent(Bool.self, forKey: .isProvisional) ?? false
+        participantCount = try container.decode(Int.self, forKey: .participantCount)
+        rank = try container.decodeIfPresent(Int.self, forKey: .rank)
+        yourSpendCents = try container.decode(Int.self, forKey: .yourSpendCents)
+        medianSpendCents = try container.decodeIfPresent(Int.self, forKey: .medianSpendCents)
+        p25SpendCents = try container.decodeIfPresent(Int.self, forKey: .p25SpendCents)
+        p75SpendCents = try container.decodeIfPresent(Int.self, forKey: .p75SpendCents)
+        maxSpendCents = try container.decodeIfPresent(Int.self, forKey: .maxSpendCents)
+        leaderboardNear = try container.decode([CommunityLeaderboardEntry].self, forKey: .leaderboardNear)
+        notEnoughParticipants = try container.decodeIfPresent(Bool.self, forKey: .notEnoughParticipants) ?? false
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(window, forKey: .window)
+        try container.encodeIfPresent(day, forKey: .day)
+        try container.encode(isProvisional, forKey: .isProvisional)
+        try container.encode(participantCount, forKey: .participantCount)
+        try container.encodeIfPresent(rank, forKey: .rank)
+        try container.encode(yourSpendCents, forKey: .yourSpendCents)
+        try container.encodeIfPresent(medianSpendCents, forKey: .medianSpendCents)
+        try container.encodeIfPresent(p25SpendCents, forKey: .p25SpendCents)
+        try container.encodeIfPresent(p75SpendCents, forKey: .p75SpendCents)
+        try container.encodeIfPresent(maxSpendCents, forKey: .maxSpendCents)
+        try container.encode(leaderboardNear, forKey: .leaderboardNear)
+        try container.encode(notEnoughParticipants, forKey: .notEnoughParticipants)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case window, day, isProvisional, participantCount, rank, yourSpendCents
+        case medianSpendCents, p25SpendCents, p75SpendCents, maxSpendCents
+        case leaderboardNear, notEnoughParticipants
+    }
+
+    public var rankWindow: CommunityRankWindow {
+        if window == "utcDay", let day {
+            return .utcDay(day)
+        }
+        return .rolling24h
     }
 }
 

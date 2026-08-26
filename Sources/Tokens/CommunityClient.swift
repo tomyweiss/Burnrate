@@ -30,17 +30,24 @@ actor CommunityClient {
         try validate(response, data: data, invalidMembershipSecretMessage: "Invalid membership secret")
     }
 
-    func fetchRank(participantId: String, membershipSecret: String) async throws -> CommunityRankResponse {
+    func fetchRank(
+        participantId: String,
+        membershipSecret: String,
+        window: CommunityRankWindow = .rolling24h
+    ) async throws -> CommunityRankResponse {
         let url = baseURL.appendingPathComponent("v1/community/rank")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(clientVersion, forHTTPHeaderField: "clientVersion")
         request.setValue(membershipSecret, forHTTPHeaderField: "X-Membership-Secret")
-        let body = [
+        var body: [String: String] = [
             "participantId": participantId,
             "membershipSecret": membershipSecret,
         ]
+        if let day = window.apiDayParameter {
+            body["day"] = day
+        }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await session.data(for: request)

@@ -9,6 +9,7 @@ final class CommunityStore {
     private(set) var lastError: String?
     private(set) var rankIsStale = false
     private(set) var cursorDisplayName: String?
+    var selectedWindow: CommunityRankWindow = .rolling24h
 
     private let settings: SettingsStore
     private let client: CommunityClient
@@ -71,6 +72,10 @@ final class CommunityStore {
     }
 
     func refreshRank() async {
+        await refreshRank(for: selectedWindow)
+    }
+
+    func refreshRank(for window: CommunityRankWindow) async {
         guard let participantId = settings.communityParticipantId else {
             rank = nil
             rankIsStale = false
@@ -82,18 +87,24 @@ final class CommunityStore {
 
         do {
             let membershipSecret = settings.ensureCommunityMembershipSecret()
-            rank = try await client.fetchRank(
+            let response = try await client.fetchRank(
                 participantId: participantId,
-                membershipSecret: membershipSecret
+                membershipSecret: membershipSecret,
+                window: window
             )
+            guard response.rankWindow == window else {
+                throw CommunityError.apiMessage(
+                    "Historical leaderboard is not available yet. The community API may need an update."
+                )
+            }
+            rank = response
+            selectedWindow = window
             rankIsStale = false
             lastError = nil
-            if let rank {
-                CommunityRankCache.save(rank, participantId: participantId)
-            }
+            CommunityRankCache.save(response, participantId: participantId, window: window)
         } catch {
             if await resetCommunityCredentialsIfNeeded(for: error) {
-                await refreshRank()
+                await refreshRank(for: window)
                 return
             }
             lastError = NetworkMessages.userMessage(for: error, cachedDataAvailable: rank != nil)
@@ -104,10 +115,38 @@ final class CommunityStore {
                 membershipSecret: settings.communityMembershipSecret
             )
             if rank == nil {
-                restoreCachedRankIfAvailable()
+                restoreCachedRankIfAvailable(for: window)
             } else {
                 rankIsStale = true
             }
+        }
+    }
+
+    func selectWindow(_ window: CommunityRankWindow) async {
+        guard window != selectedWindow else {
+            await refreshRank(for: window)
+            return
+        }
+        selectedWindow = window
+        prepareForWindowChange(window)
+        await refreshRank(for: window)
+    }
+
+    func stepWindow(forward: Bool) async {
+        let offset = forward ? 1 : -1
+        guard let next = selectedWindow.shiftedDays(by: offset) else { return }
+        await selectWindow(next)
+    }
+
+    private func prepareForWindowChange(_ window: CommunityRankWindow) {
+        lastError = nil
+        if let participantId = settings.communityParticipantId,
+           let cached = CommunityRankCache.load(participantId: participantId, window: window) {
+            rank = cached.rank
+            rankIsStale = true
+        } else {
+            rank = nil
+            rankIsStale = false
         }
     }
 
@@ -206,9 +245,12 @@ final class CommunityStore {
         }
     }
 
-    private func restoreCachedRankIfAvailable() {
+    private func restoreCachedRankIfAvailable(for window: CommunityRankWindow? = nil) {
+        let window = window ?? selectedWindow
         guard let participantId = settings.communityParticipantId,
-              let cached = CommunityRankCache.load(participantId: participantId) else {
+              let cached = CommunityRankCache.load(participantId: participantId, window: window) else {
+            rank = nil
+            rankIsStale = false
             return
         }
         rank = cached.rank
