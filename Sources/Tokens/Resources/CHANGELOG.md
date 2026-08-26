@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.54
+
+- Fix By day leaderboard showing stale Live data when a historical fetch fails.
+- Fix community API auth for swift run and other ad-hoc local builds.
+
 ## 0.0.53
 
 - Sign releases with Developer ID so Sparkle in-app updates install successfully.
