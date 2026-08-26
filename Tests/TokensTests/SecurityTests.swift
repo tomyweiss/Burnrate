@@ -58,3 +58,9 @@ import Testing
     store.communityMembershipSecret = updated
     #expect(defaults.string(forKey: "communityMembershipSecret") == updated)
 }
+
+@Test func debugBuildsSkipMembershipKeychain() {
+    #if DEBUG
+    #expect(!AppIdentity.persistMembershipSecretInKeychain)
+    #endif
+}
