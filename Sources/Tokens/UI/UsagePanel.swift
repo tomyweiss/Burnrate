@@ -41,7 +41,6 @@ enum CostMetric: String, CaseIterable, Identifiable {
 struct UsagePanel: View {
     @Bindable var store: UsageStore
     @Bindable var settings: SettingsStore
-    @Bindable var updates: UpdateManager
     var glassNamespace: Namespace.ID
     var onOpenSettings: () -> Void
     var onOpenCommunity: () -> Void
@@ -81,12 +80,6 @@ struct UsagePanel: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 14)
                     .padding(.bottom, 10)
-
-                if let update = updates.availableUpdate {
-                    updateBanner(update)
-                        .padding(.horizontal, 12)
-                        .padding(.bottom, 8)
-                }
 
                 content
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -788,34 +781,6 @@ struct UsagePanel: View {
             }
             .help("getdrift.ai")
         }
-    }
-
-    private func updateBanner(_ update: AvailableUpdate) -> some View {
-        HStack(alignment: .center, spacing: 10) {
-            Image(systemName: "arrow.down.circle.fill")
-                .foregroundStyle(.blue)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Update \(update.version) available")
-                    .font(.caption.weight(.semibold))
-                Button("View change log") {
-                    openChangeLog(version: update.version, releaseNotes: update.notes)
-                }
-                .buttonStyle(.plain)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.blue)
-                .help("See what's new in version \(update.version)")
-            }
-            Spacer(minLength: 8)
-            Button(updates.isInstalling ? "Installing…" : "Install") {
-                Task { await updates.installAvailableUpdate() }
-                MenuBarPanelKeeper.keepOpen()
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-            .disabled(updates.isInstalling)
-        }
-        .padding(10)
-        .background(.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private func footerIcon(_ systemName: String) -> some View {

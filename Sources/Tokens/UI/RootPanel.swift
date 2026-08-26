@@ -47,7 +47,6 @@ struct RootPanel: View {
                 UsagePanel(
                     store: store,
                     settings: settings,
-                    updates: updates,
                     glassNamespace: glassNamespace,
                     onOpenSettings: { route = .settings },
                     onOpenCommunity: { route = .community },

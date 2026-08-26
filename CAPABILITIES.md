@@ -82,7 +82,7 @@ No Dock icon. Auth comes from the local Cursor IDE login.
 - Auto-check Sparkle appcast daily (toggle in Settings, default on)
 - Manual check from Settings; Sparkle prompts before install
 - Burnrate-dev: updates stay disabled
-- **This GitHub Release is still minisign-signed** so older clients can update to Sparkle
+- Sparkle-signed zips only; minisign is no longer used for new tags
 
 ---
 
