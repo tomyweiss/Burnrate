@@ -158,7 +158,6 @@ struct SettingsPanel: View {
 
                         Button("Check for Updates…") {
                             Task { await updates.checkForUpdates(userInitiated: true) }
-                            MenuBarPanelKeeper.keepOpen()
                         }
 
                         if updates.usesSparkle {

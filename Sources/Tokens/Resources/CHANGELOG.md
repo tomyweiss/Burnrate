@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.52
+
+- Fix Sparkle update dialogs hidden behind the floating menu bar panel.
+
 ## 0.0.51
 
 - Retire minisign self-updates. New releases are Sparkle-signed only. Install the previous Sparkle bridge release first if you are still on the old zip updater.

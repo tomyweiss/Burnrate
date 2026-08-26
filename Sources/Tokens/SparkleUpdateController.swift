@@ -1,5 +1,32 @@
+import AppKit
 import Foundation
 import Sparkle
+
+/// Hides floating menu bar panels before Sparkle shows its modal alerts.
+private final class SparkleUserDriverDelegate: NSObject, SPUStandardUserDriverDelegate {
+    func standardUserDriverWillShowModalAlert() {
+        runOnMain {
+            NSApp.activate(ignoringOtherApps: true)
+            MenuBarPanelKeeper.hidePanelsForModalAlert()
+        }
+    }
+
+    func standardUserDriverDidShowModalAlert() {
+        runOnMain {
+            MenuBarPanelKeeper.restorePanelsAfterModalAlert()
+        }
+    }
+
+    private func runOnMain(_ work: @MainActor () -> Void) {
+        if Thread.isMainThread {
+            MainActor.assumeIsolated(work)
+        } else {
+            DispatchQueue.main.sync {
+                MainActor.assumeIsolated(work)
+            }
+        }
+    }
+}
 
 /// Thin Sparkle wrapper. Starts only for production builds that have Tom's
 /// real `SUPublicEDKey` in Info.plist — never for Burnrate-dev, never for the
@@ -7,6 +34,7 @@ import Sparkle
 @MainActor
 final class SparkleUpdateController {
     private let updaterController: SPUStandardUpdaterController?
+    private let userDriverDelegate = SparkleUserDriverDelegate()
 
     /// - Parameter startUpdater: Production enablement. Still false for
     ///   Burnrate-dev and while `SUPublicEDKey` is the placeholder.
@@ -18,7 +46,7 @@ final class SparkleUpdateController {
             updaterController = SPUStandardUpdaterController(
                 startingUpdater: true,
                 updaterDelegate: nil,
-                userDriverDelegate: nil
+                userDriverDelegate: userDriverDelegate
             )
         } else {
             updaterController = nil
@@ -38,6 +66,7 @@ final class SparkleUpdateController {
     }
 
     func checkForUpdates() {
+        NSApp.activate(ignoringOtherApps: true)
         updaterController?.checkForUpdates(nil)
     }
 }
