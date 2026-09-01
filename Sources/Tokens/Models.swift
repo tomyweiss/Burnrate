@@ -437,9 +437,9 @@ enum TokensError: Error, LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case .databaseNotFound:
-            "Cursor database not found. Is Cursor installed?"
+            "Cursor database not found. Sign in to the Cursor app or run `agent login`."
         case .tokenNotFound:
-            "No auth token found. Sign in to Cursor, then refresh."
+            "No Cursor session found. Sign in to the Cursor app or run `agent login`, then refresh."
         case .invalidToken:
             "Could not parse Cursor auth token."
         case .httpStatus(let code):

@@ -107,8 +107,7 @@ content (for demos and screen shares), test notification, and updates.
 
 ## How it works
 
-1. Loads your local Cursor session from
-   `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`
+1. Loads your local Cursor session from the desktop app (`state.vscdb`) or Agent CLI login (`~/.cursor/auth.json` / Keychain `cursor-access-token`)
 2. Polls `POST https://cursor.com/api/dashboard/get-filtered-usage-events` for events in the selected window
 3. Sums Cursor's `chargedCents` for totals, sparkline buckets, models, sessions, skills, and prompts
 4. Resolves chat titles and workspaces from local composer metadata when available
@@ -118,7 +117,7 @@ estimate. Full behavior: [CAPABILITIES.md](CAPABILITIES.md).
 
 ### Privacy & security
 
-- Reads `cursorAuth/accessToken` from Cursor's local SQLite DB on each refresh — **never written** to Burnrate's own storage or Keychain
+- Reads `cursorAuth/accessToken` from Cursor's local SQLite DB, or the Agent CLI login token, on each refresh — **never written** to Burnrate's own storage or Keychain
 - Fetches usage over HTTPS from Cursor's dashboard endpoints using that session
 - Session names and workspace folders come from **local** Cursor composer metadata (and cloud agent cache for `bc-*` sessions)
 - No analytics; no model/API calls that consume Cursor usage

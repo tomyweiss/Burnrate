@@ -67,7 +67,7 @@ No Dock icon. Auth comes from the local Cursor IDE login.
 
 ### Auth & data
 
-- Token from Cursor `state.vscdb` (not stored by Burnrate)
+- Token from Cursor `state.vscdb`, Agent CLI `~/.cursor/auth.json`, or the CLI Keychain login (not stored by Burnrate)
 - Costs from `chargedCents` on dashboard usage events (network)
 - Session names / workspaces from local composer metadata
 
@@ -89,7 +89,7 @@ No Dock icon. Auth comes from the local Cursor IDE login.
 ## Limitations
 
 - Undocumented Cursor API
-- Requires Cursor signed in on this Mac
+- Requires Cursor signed in on this Mac (app or `agent login`)
 - Default timeline is Today (local midnight in chosen timezone)
 - Longer windows may hit API pagination limits (~4000 events)
 - Costs are Cursor-reported charges, not a formal invoice
