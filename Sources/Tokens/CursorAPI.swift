@@ -181,7 +181,9 @@ actor CursorAPI {
         }
 
         if http.statusCode == 401 {
-            throw TokensError.apiMessage("Not authenticated. Sign in to Cursor and try again.")
+            throw TokensError.apiMessage(
+                "Not authenticated. Sign in to the Cursor app or run `agent login`, then refresh."
+            )
         }
         guard (200..<300).contains(http.statusCode) else {
             if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
