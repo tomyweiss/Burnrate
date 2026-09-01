@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.56
+
+- Load spend from Agent CLI login (`agent login`) without opening the Cursor app.
+
 ## 0.0.55
 
 - Notarize releases and fix Sparkle signing so in-app updates install successfully.
