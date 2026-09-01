@@ -109,6 +109,8 @@ public struct CommunityDailyReport: Sendable, Codable, Equatable {
     public let refreshFailures: Int
     public let nicknameSource: String
     public let clientConfig: CommunityClientConfig
+    /// Present when the client uploads skill analytics; omitted by older app versions.
+    public let skills: [CommunitySkillSpend]?
 
     public init(
         day: String,
@@ -132,7 +134,8 @@ public struct CommunityDailyReport: Sendable, Codable, Equatable {
         refreshAttempts: Int,
         refreshFailures: Int,
         nicknameSource: String,
-        clientConfig: CommunityClientConfig
+        clientConfig: CommunityClientConfig,
+        skills: [CommunitySkillSpend]? = nil
     ) {
         self.day = day
         self.spendCents = spendCents
@@ -156,6 +159,7 @@ public struct CommunityDailyReport: Sendable, Codable, Equatable {
         self.refreshFailures = refreshFailures
         self.nicknameSource = nicknameSource
         self.clientConfig = clientConfig
+        self.skills = skills
     }
 }
 

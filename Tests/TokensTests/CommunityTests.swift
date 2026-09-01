@@ -234,3 +234,69 @@ import Testing
     #expect(todayReport?.panelOpens == 2)
     #expect(todayReport?.regionBucket == CommunityDayFormat.regionBucket(now: now))
 }
+
+@Test func communitySkillCapNormalizesAndMergesDuplicates() {
+    let capped = CommunitySkillCap.cap([
+        (name: "/Cmd-Fast-PR", invocationCount: 2, spendCents: 100),
+        (name: "cmd-fast-pr", invocationCount: 1, spendCents: 50),
+    ])
+    #expect(capped.count == 1)
+    #expect(capped[0].name == "cmd-fast-pr")
+    #expect(capped[0].invocationCount == 3)
+    #expect(capped[0].spendCents == 150)
+}
+
+@Test func communitySkillCapFoldsOverflowIntoOther() {
+    let skills = (0..<(CommunitySkillCap.maxSkills + 3)).map { index in
+        (name: "skill-\(index)", invocationCount: 1, spendCents: CommunitySkillCap.maxSkills + 3 - index)
+    }
+    let capped = CommunitySkillCap.cap(skills)
+    #expect(capped.count == CommunitySkillCap.maxSkills + 1)
+    let other = capped.first { $0.name == CommunitySkillCap.otherBucketName }
+    #expect(other?.invocationCount == 3)
+    #expect(other?.spendCents == 6)
+}
+
+@Test func payloadBuilderOmitsSkillsWithoutDailySkillsCallback() {
+    let payload = CommunityPayloadBuilder.build(
+        participantId: "test-uuid",
+        membershipSecret: String(repeating: "s", count: 32),
+        nickname: nil,
+        events: []
+    )
+    #expect(payload.dailyReports?.allSatisfy { $0.skills == nil } == true)
+}
+
+@Test func payloadBuilderIncludesDailySkillsWhenProvided() {
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    let today = CommunityDayFormat.utcDayString(for: now)
+    let config = CommunityClientConfig(
+        timelinePreset: "today",
+        refreshIntervalSeconds: 60,
+        anomalyThresholdDollars: 10,
+        anomalyWindowMinutes: 10,
+        hideAmountInMenuBar: false,
+        autoCheckForUpdates: true,
+        launchAtLogin: false,
+        hiddenTabs: [],
+        customTimezone: false,
+        billingDayOfMonth: 1
+    )
+    let payload = CommunityPayloadBuilder.build(
+        participantId: "test-uuid",
+        membershipSecret: String(repeating: "s", count: 32),
+        nickname: nil,
+        events: [],
+        now: now,
+        dailySkills: { day in
+            guard day == today else { return [] }
+            return [CommunitySkillSpend(name: "cmd-fast-pr", invocationCount: 4, spendCents: 900)]
+        },
+        nicknameSource: "cursor",
+        clientConfig: config
+    )
+    let todayReport = payload.dailyReports?.first { $0.day == today }
+    #expect(todayReport?.skills == [
+        CommunitySkillSpend(name: "cmd-fast-pr", invocationCount: 4, spendCents: 900),
+    ])
+}

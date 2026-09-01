@@ -301,6 +301,9 @@ final class CommunityStore {
                 }
                 return engagement
             },
+            dailySkills: { [self] day in
+                usageStore?.communityDailySkills[day] ?? []
+            },
             nicknameSource: "cursor",
             clientConfig: settings.communityClientConfig(),
             clientVersion: AppIdentity.versionLabel

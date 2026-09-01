@@ -45,6 +45,7 @@ public enum CommunityPayloadBuilder {
         now: Date = Date(),
         interactionStats: CommunityInteractionStats? = nil,
         dailyEngagement: (String) -> DailyEngagement = { _ in DailyEngagement() },
+        dailySkills: ((String) -> [CommunitySkillSpend])? = nil,
         nicknameSource: String,
         clientConfig: CommunityClientConfig,
         clientVersion: String? = nil
@@ -73,6 +74,7 @@ public enum CommunityPayloadBuilder {
                 events: events,
                 now: now,
                 engagement: dailyEngagement(day),
+                skills: dailySkills?(day),
                 regionBucket: regionBucket,
                 nicknameSource: nicknameSource,
                 clientConfig: clientConfig
@@ -144,6 +146,7 @@ public enum CommunityPayloadBuilder {
         events: [CommunityAnalyticsEvent],
         now: Date,
         engagement: DailyEngagement,
+        skills: [CommunitySkillSpend]?,
         regionBucket: CommunityRegionBucket,
         nicknameSource: String,
         clientConfig: CommunityClientConfig
@@ -152,6 +155,7 @@ public enum CommunityPayloadBuilder {
             return emptyDailyReport(
                 day: day,
                 engagement: engagement,
+                skills: skills,
                 regionBucket: regionBucket,
                 nicknameSource: nicknameSource,
                 clientConfig: clientConfig
@@ -245,7 +249,8 @@ public enum CommunityPayloadBuilder {
             refreshAttempts: engagement.refreshAttempts,
             refreshFailures: engagement.refreshFailures,
             nicknameSource: nicknameSource,
-            clientConfig: clientConfig
+            clientConfig: clientConfig,
+            skills: skills
         )
     }
 
@@ -259,6 +264,7 @@ public enum CommunityPayloadBuilder {
     private static func emptyDailyReport(
         day: String,
         engagement: DailyEngagement,
+        skills: [CommunitySkillSpend]?,
         regionBucket: CommunityRegionBucket,
         nicknameSource: String,
         clientConfig: CommunityClientConfig
@@ -285,7 +291,8 @@ public enum CommunityPayloadBuilder {
             refreshAttempts: engagement.refreshAttempts,
             refreshFailures: engagement.refreshFailures,
             nicknameSource: nicknameSource,
-            clientConfig: clientConfig
+            clientConfig: clientConfig,
+            skills: skills
         )
     }
 }
