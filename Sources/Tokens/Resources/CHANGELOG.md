@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.57
+
+- Community sharing uploads per-UTC-day slash-command invocation counts and spend (operator Postgres only; no UI change).
+
 ## 0.0.56
 
 - Load spend from Agent CLI login (`agent login`) without opening the Cursor app.

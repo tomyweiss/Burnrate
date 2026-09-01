@@ -13,6 +13,7 @@ final class UsageStore {
     private(set) var notificationFeedback: String?
     private(set) var isShowingCachedData = false
     private(set) var communityAnalyticsEvents: [CommunityAnalyticsEvent] = []
+    private(set) var communityDailySkills: [String: [CommunitySkillSpend]] = [:]
 
     private(set) var spendSummary: SpendSummary?
 
@@ -246,6 +247,7 @@ final class UsageStore {
             fetchedAt: fetchedAt
         )
         communityAnalyticsEvents = Self.communityAnalyticsEvents(from: events, now: now, rates: rates)
+        communityDailySkills = Aggregator.communityDailySkills(events: events, now: now, rates: rates)
         lastError = nil
         isShowingCachedData = false
         hasCompletedFetch = true
@@ -366,6 +368,11 @@ final class UsageStore {
         )
         communityAnalyticsEvents = Self.communityAnalyticsEvents(
             from: loaded.events,
+            now: now,
+            rates: activeRates
+        )
+        communityDailySkills = Aggregator.communityDailySkills(
+            events: loaded.events,
             now: now,
             rates: activeRates
         )

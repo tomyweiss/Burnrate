@@ -1,4 +1,5 @@
 import Foundation
+import TokensCore
 
 enum Aggregator {
     static func snapshot(
@@ -160,6 +161,68 @@ enum Aggregator {
             eventCount: filteredEventCount,
             fetchedAt: now
         )
+    }
+
+    /// UTC-day skill rollups for community analytics uploads (48h fetch window).
+    static func communityDailySkills(
+        events: [UsageEvent],
+        now: Date = Date(),
+        rates: SpendRates = .unavailable
+    ) -> [String: [CommunitySkillSpend]] {
+        let startMs = now.addingTimeInterval(-Double(CommunityPayloadBuilder.analyticsFetchHours) * 3600)
+            .timeIntervalSince1970 * 1000
+        let endMs = now.timeIntervalSince1970 * 1000
+
+        var bySession: [String: CrossSessionAccumulator] = [:]
+        for event in events {
+            let ts = event.timestampMs
+            guard ts >= startMs, ts <= endMs else { continue }
+            bySession[event.sessionKey] = CrossSessionAccumulator()
+        }
+
+        var knownConversationIds = Set(bySession.keys).filter { $0 != "unknown-session" }
+        var parentByChild = PromptCatalog.subagentParents(conversationIds: knownConversationIds)
+        let discoveredParents = Set(parentByChild.values)
+        let missingParents = discoveredParents.subtracting(knownConversationIds)
+        if !missingParents.isEmpty {
+            knownConversationIds.formUnion(missingParents)
+            parentByChild = PromptCatalog.subagentParents(conversationIds: knownConversationIds)
+            knownConversationIds.formUnion(parentByChild.values)
+        }
+
+        guard !knownConversationIds.isEmpty else { return [:] }
+
+        let catalog = SessionCatalog.lookup(conversationIds: knownConversationIds)
+        let (prompts, _, _) = promptBreakdown(
+            events: events,
+            conversationIds: knownConversationIds,
+            parentByChild: parentByChild,
+            catalog: catalog,
+            startMs: startMs,
+            endMs: endMs,
+            rates: rates
+        )
+
+        var rawByDay: [String: [(name: String, invocationCount: Int, spendCents: Int)]] = [:]
+        for prompt in prompts {
+            guard !prompt.skills.isEmpty else { continue }
+            let day = CommunityDayFormat.utcDayString(
+                for: Date(timeIntervalSince1970: prompt.createdAtMs / 1000)
+            )
+            for skill in prompt.skills {
+                rawByDay[day, default: []].append((
+                    name: skill,
+                    invocationCount: 1,
+                    spendCents: Int(prompt.costCents.rounded())
+                ))
+            }
+        }
+
+        var result: [String: [CommunitySkillSpend]] = [:]
+        for (day, skills) in rawByDay {
+            result[day] = CommunitySkillCap.cap(skills)
+        }
+        return result
     }
 
     // MARK: - Session hierarchy

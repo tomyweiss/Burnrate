@@ -197,7 +197,7 @@ So the priority order below is lifecycle first, engagement second, spend depth t
 | **Tier 1** | Daily row existence, `first_seen_at`, panel opens, tab changes, `client_version`, opt-out events | Answers Q1–Q7. This is the "is the app alive" tier and is the reason to ship |
 | **Tier 2** | Daily spend, model breakdown, event/errored counts, billing-kind split, token counters | Answers Q10–Q12. Cheap to add once the row exists |
 | **Tier 3** | Allow-listed `client_config`, refresh attempt/failure counters, hour-of-day activity buckets | Answers Q8–Q9. Useful, but each needs new client plumbing |
-| **Deferred** | Per-session or per-prompt counts, skill invocation counts, dwell time per tab | Higher privacy cost or higher client complexity than current value justifies. See [Deferred signals](#deferred-signals-and-why) |
+| **Deferred** | Per-session or per-prompt counts, dwell time per tab | Higher privacy cost or higher client complexity than current value justifies. See [Deferred signals](#deferred-signals-and-why) |
 
 ### Goals
 
@@ -526,8 +526,9 @@ Daily history lives **only** in `participant_daily_stats`.
 | Opt-out tallies | `optout_events` | **No** | Yes |
 | Cohort rollups | `daily_cohort_rollup` | **No** | Yes |
 | Failure logs | `failure_logs` | **No** | Yes |
+| Daily skill invocations | `participant_daily_skills` | **No** | Yes |
 
-**Security rule:** No new GET routes. Rank handler must not JOIN or read `participant_daily_stats`, `optout_events`, `daily_cohort_rollup`, or `failure_logs`.
+**Security rule:** No new GET routes. Rank handler must not JOIN or read `participant_daily_stats`, `participant_daily_skills`, `optout_events`, `daily_cohort_rollup`, or `failure_logs`.
 
 ### Why no admin API
 
@@ -585,13 +586,34 @@ Signals that were considered and are deliberately **not** in this design:
 
 | Signal | Available locally? | Why deferred |
 |--------|--------------------|--------------|
-| Skill / slash-command invocation counts | Yes (`UsageSnapshot.skills`) | Skill names can be user-authored and are effectively free text — a direct violation of the counts-not-content principle. Could return later as a count of *built-in* skills only, against a fixed allow-list |
 | Session and prompt counts per day | Yes (`sessionsAcrossModels`, `prompts`) | Low cardinality and genuinely interesting ("how many concurrent agents do heavy users run"), but derived from the local prompt/session catalog, which is the most PII-adjacent code path in the app. Not worth touching until the Tier 1 questions are answered |
 | Subagent usage ratio | Yes | Same reasoning as above; revisit once session counts are cleared |
 | Dwell time per tab | No — would need new instrumentation | Requires timers and foreground/background tracking; meaningfully more client complexity than counting tab changes, for a marginal gain over Q6 |
 | Spike/anomaly trigger counts | Partially (`isSpikeActive` is in-memory) | Would tell us whether the alerting feature works at all. Cheap once a daily counter exists — a good Tier 3 follow-up, not part of the first cut |
 | Full 24-slot hour histogram | Yes | Rejected on fingerprinting grounds; replaced by `peakHourUtc` + `activeHourCount` |
 | Raw usage-event stream | Yes | Never. Violates the aggregates-only principle outright |
+
+### Skill invocation counts (shipped 2026-09-01)
+
+Operator-only table `participant_daily_skills` stores UTC calendar-day rows per device:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `participant_id` | UUID | Anonymous device id (FK → `participants`, cascade on opt-out) |
+| `day` | date | UTC calendar day |
+| `skill` | text | Normalized slash-command name (lowercase, no leading `/`) |
+| `invocation_count` | int | Prompts that mentioned the skill that day |
+| `spend_cents` | int | Spend attributed to those prompts (can double-count across skills) |
+
+Uploaded via `dailyReports[].skills` on the existing snapshot POST when **Share usage** is on. Never returned by rank APIs. Skill names are free text by design (operator query only). Capped at 50 skills/day per device; overflow folded into reserved name `other`. Older clients omit `skills` and leave existing rows untouched.
+
+```sql
+SELECT day, skill, SUM(invocation_count), SUM(spend_cents)
+FROM participant_daily_skills
+WHERE skill IN ('fast-pr', 'cmd-fast-pr')
+GROUP BY day, skill
+ORDER BY day;
+```
 
 ---
 
