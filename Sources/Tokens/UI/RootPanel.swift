@@ -93,6 +93,7 @@ struct RootPanel: View {
             }
         }
         .frame(width: panelWidth, height: panelHeight)
+        .panelSurfaceBackground()
         .environment(\.blurSensitiveContent, settings.blurSensitiveContent)
         .animation(.snappy, value: panelTabRaw)
         .animation(.snappy, value: route)
