@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.58
+
+- Add a frosted panel background so the menu bar window stays readable on busy wallpapers. (04e3e3b)
+
 ## 0.0.57
 
 - Community sharing uploads per-UTC-day slash-command invocation counts and spend (operator Postgres only; no UI change).
