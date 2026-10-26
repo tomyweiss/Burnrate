@@ -591,7 +591,7 @@ enum TokensError: Error, LocalizedError, Sendable {
         case .tokenNotFound:
             "No Cursor session found. Sign in to the Cursor app or run `agent login`, then refresh."
         case .safeStorageLocked:
-            "Cursor's session is encrypted. Allow Burnrate to read \"Cursor Safe Storage\" in Keychain, then refresh."
+            "Cursor's session is encrypted. Choose Always Allow when Burnrate asks for \"Cursor Safe Storage\" in Keychain, then refresh."
         case .invalidToken:
             "Could not parse Cursor auth token."
         case .httpStatus(let code):

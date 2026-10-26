@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.60.5
+
+- Keychain guidance for encrypted Cursor logins says to choose Always Allow, so the "Cursor Safe Storage" prompt stops returning on every launch.
+
 ## 0.60.4
 
 - Spend loads again when Cursor keeps your login locked in the Mac keychain.

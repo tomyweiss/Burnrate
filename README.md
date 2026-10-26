@@ -139,6 +139,7 @@ estimate. Full behavior: [CAPABILITIES.md](CAPABILITIES.md).
 ### Privacy & security
 
 - Reads `cursorAuth/accessToken` from Cursor's local SQLite DB, or the Agent CLI login token, on each refresh — **never written** to Burnrate's own storage or Keychain
+- When Cursor encrypts that token, Burnrate reads the "Cursor Safe Storage" Keychain password to decrypt it in memory. macOS asks once per launch unless you choose **Always Allow**; it may ask twice (app access, then team access), so choose Always Allow both times. The grant is tied to Burnrate's signing team and survives updates
 - Fetches usage over HTTPS from Cursor's dashboard endpoints using that session
 - Session names and workspace folders come from **local** Cursor composer metadata (and cloud agent cache for `bc-*` sessions)
 - No analytics; no model/API calls that consume Cursor usage
