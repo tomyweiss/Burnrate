@@ -191,7 +191,11 @@ struct SessionDetailView: View {
     @ViewBuilder
     private var promptsBody: some View {
         if prompts.isEmpty {
-            Text("No prompts recorded for this session")
+            Text(
+                session.conversationId.hasPrefix("sand-subagent-")
+                    ? "No local transcript for this Grok Bot task"
+                    : "No prompts recorded for this session"
+            )
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)

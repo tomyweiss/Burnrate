@@ -8,7 +8,8 @@ enum Aggregator {
         window: UsageTimeWindow,
         recentWindowMinutes: Int,
         rates: SpendRates = .unavailable,
-        includePrompts: Bool = true
+        includePrompts: Bool = true,
+        grokLibrary: GrokBotStore.Library = .disk
     ) -> UsageSnapshot {
         let range = window.dateRange(now: now)
         let startMs = range.start.timeIntervalSince1970 * 1000
@@ -76,7 +77,11 @@ enum Aggregator {
         }
 
         var knownConversationIds = Set(bySession.keys).filter { $0 != "unknown-session" }
-        var parentByChild = PromptCatalog.subagentParents(conversationIds: knownConversationIds)
+        var parentByChild = conversationParents(
+            conversationIds: knownConversationIds,
+            events: events,
+            library: grokLibrary
+        )
 
         // Parents discovered only via children may have no events in-window —
         // still materialize them so roots can host the hierarchy.
@@ -88,7 +93,11 @@ enum Aggregator {
             }
             knownConversationIds.formUnion(missingParents)
             // Re-scan so we also pick up siblings listed on the parent composer.
-            parentByChild = PromptCatalog.subagentParents(conversationIds: knownConversationIds)
+            parentByChild = conversationParents(
+                conversationIds: knownConversationIds,
+                events: events,
+                library: grokLibrary
+            )
             for parentId in Set(parentByChild.values) where bySession[parentId] == nil {
                 bySession[parentId] = CrossSessionAccumulator()
                 knownConversationIds.insert(parentId)
@@ -97,7 +106,10 @@ enum Aggregator {
 
         let childrenByParent = childrenByParentMap(parentByChild)
 
-        let catalog = SessionCatalog.lookup(conversationIds: knownConversationIds)
+        let catalog = SessionCatalog.lookup(
+            conversationIds: knownConversationIds,
+            grokNames: grokLibrary.names
+        )
 
         let hierarchicalSessions = buildHierarchicalSessions(
             bySession: bySession,
@@ -142,7 +154,8 @@ enum Aggregator {
                 catalog: catalog,
                 startMs: startMs,
                 endMs: endMs,
-                rates: rates
+                rates: rates,
+                library: grokLibrary
             )
         } else {
             (prompts, subagentPrompts, skills) = ([], [], [])
@@ -167,7 +180,8 @@ enum Aggregator {
     static func communityDailySkills(
         events: [UsageEvent],
         now: Date = Date(),
-        rates: SpendRates = .unavailable
+        rates: SpendRates = .unavailable,
+        grokLibrary: GrokBotStore.Library = .disk
     ) -> [String: [CommunitySkillSpend]] {
         let startMs = now.addingTimeInterval(-Double(CommunityPayloadBuilder.analyticsFetchHours) * 3600)
             .timeIntervalSince1970 * 1000
@@ -181,18 +195,29 @@ enum Aggregator {
         }
 
         var knownConversationIds = Set(bySession.keys).filter { $0 != "unknown-session" }
-        var parentByChild = PromptCatalog.subagentParents(conversationIds: knownConversationIds)
+        var parentByChild = conversationParents(
+            conversationIds: knownConversationIds,
+            events: events,
+            library: grokLibrary
+        )
         let discoveredParents = Set(parentByChild.values)
         let missingParents = discoveredParents.subtracting(knownConversationIds)
         if !missingParents.isEmpty {
             knownConversationIds.formUnion(missingParents)
-            parentByChild = PromptCatalog.subagentParents(conversationIds: knownConversationIds)
+            parentByChild = conversationParents(
+                conversationIds: knownConversationIds,
+                events: events,
+                library: grokLibrary
+            )
             knownConversationIds.formUnion(parentByChild.values)
         }
 
         guard !knownConversationIds.isEmpty else { return [:] }
 
-        let catalog = SessionCatalog.lookup(conversationIds: knownConversationIds)
+        let catalog = SessionCatalog.lookup(
+            conversationIds: knownConversationIds,
+            grokNames: grokLibrary.names
+        )
         let (prompts, _, _) = promptBreakdown(
             events: events,
             conversationIds: knownConversationIds,
@@ -200,7 +225,8 @@ enum Aggregator {
             catalog: catalog,
             startMs: startMs,
             endMs: endMs,
-            rates: rates
+            rates: rates,
+            library: grokLibrary
         )
 
         var rawByDay: [String: [(name: String, invocationCount: Int, spendCents: Int)]] = [:]
@@ -223,6 +249,36 @@ enum Aggregator {
             result[day] = CommunitySkillCap.cap(skills)
         }
         return result
+    }
+
+    /// Cursor composer links, plus Grok Bot transcript links, plus a time join
+    /// for `sand-subagent-…` charges that never land in the local transcript.
+    private static func conversationParents(
+        conversationIds: Set<String>,
+        events: [UsageEvent],
+        library: GrokBotStore.Library
+    ) -> [String: String] {
+        var parents = PromptCatalog.subagentParents(conversationIds: conversationIds)
+        for (child, parent) in library.subagentParents where parents[child] == nil {
+            parents[child] = parent
+        }
+
+        var agentIds = Set(library.names.keys)
+        for event in events {
+            let id = event.sessionKey
+            guard !id.hasPrefix("sand-subagent-"),
+                  event.model?.hasPrefix("grok-bot") == true
+            else { continue }
+            agentIds.insert(id)
+        }
+        let linked = GrokBotTranscript.linkSubagents(
+            events: events.map { (conversationId: $0.sessionKey, timestampMs: $0.timestampMs) },
+            agentIds: agentIds
+        )
+        for (child, parent) in linked where parents[child] == nil && child != parent {
+            parents[child] = parent
+        }
+        return parents
     }
 
     // MARK: - Session hierarchy
@@ -390,7 +446,8 @@ enum Aggregator {
         catalog: [String: SessionMeta],
         startMs: Double,
         endMs: Double,
-        rates: SpendRates
+        rates: SpendRates,
+        library: GrokBotStore.Library
     ) -> (prompts: [PromptUsage], subagentPrompts: [PromptUsage], skills: [SkillUsage]) {
         func effectiveConversationId(_ id: String) -> String {
             rootConversationId(id, parentByChild: parentByChild)
@@ -401,7 +458,10 @@ enum Aggregator {
             .subtracting(parentByChild.keys)
             .union(parentByChild.values)
         let promptConversationIds = rootIds.union(parentByChild.keys)
-        let promptsByConversation = PromptCatalog.lookup(conversationIds: promptConversationIds)
+        let promptsByConversation = PromptCatalog.lookup(
+            conversationIds: promptConversationIds,
+            extraPrompts: library.prompts
+        )
         guard !promptsByConversation.isEmpty else { return ([], [], []) }
 
         // Allow small clock skew between local bubble timestamps and server event

@@ -28,28 +28,38 @@ enum PromptCatalog {
     /// Prompts per conversation id, each list sorted by creation time ascending.
     static func lookup(
         conversationIds: Set<String>,
-        databasePath: URL = ideDatabasePath
+        databasePath: URL = ideDatabasePath,
+        extraPrompts: [String: [PromptRecord]] = [:]
     ) -> [String: [PromptRecord]] {
-        guard !conversationIds.isEmpty,
-              FileManager.default.fileExists(atPath: databasePath.path)
-        else { return [:] }
-
-        var database: OpaquePointer?
-        guard sqlite3_open_v2(
-            databasePath.path,
-            &database,
-            SQLITE_OPEN_READONLY,
-            nil
-        ) == SQLITE_OK else {
-            return [:]
-        }
-        defer { sqlite3_close(database) }
+        guard !conversationIds.isEmpty else { return [:] }
 
         var result: [String: [PromptRecord]] = [:]
-        for conversationId in conversationIds {
-            let prompts = readPrompts(database: database, conversationId: conversationId)
-            if !prompts.isEmpty {
-                result[conversationId] = prompts
+        if FileManager.default.fileExists(atPath: databasePath.path) {
+            var database: OpaquePointer?
+            if sqlite3_open_v2(
+                databasePath.path,
+                &database,
+                SQLITE_OPEN_READONLY,
+                nil
+            ) == SQLITE_OK {
+                defer { sqlite3_close(database) }
+                for conversationId in conversationIds {
+                    let prompts = readPrompts(database: database, conversationId: conversationId)
+                    if !prompts.isEmpty {
+                        result[conversationId] = prompts
+                    }
+                }
+            }
+        }
+
+        for (conversationId, prompts) in extraPrompts {
+            guard conversationIds.contains(conversationId), result[conversationId] == nil else { continue }
+            let sorted = prompts.sorted {
+                if $0.createdAtMs != $1.createdAtMs { return $0.createdAtMs < $1.createdAtMs }
+                return $0.bubbleId < $1.bubbleId
+            }
+            if !sorted.isEmpty {
+                result[conversationId] = sorted
             }
         }
         return result

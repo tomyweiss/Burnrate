@@ -34,6 +34,7 @@ struct SessionMeta: Sendable, Hashable {
     var displayName: String {
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !trimmed.isEmpty { return trimmed }
+        if conversationId.hasPrefix("sand-subagent-") { return "Grok Bot task" }
         let short = conversationId.count > 8
             ? String(conversationId.prefix(8))
             : conversationId
@@ -88,7 +89,10 @@ enum SessionCatalog {
 
     /// Resolve titles/workspaces for the given conversation IDs from local Cursor state.
     /// Checks the desktop IDE database, CLI store.db files, then cloud agent repository cache.
-    static func lookup(conversationIds: Set<String>) -> [String: SessionMeta] {
+    static func lookup(
+        conversationIds: Set<String>,
+        grokNames: [String: String] = [:]
+    ) -> [String: SessionMeta] {
         guard !conversationIds.isEmpty else { return [:] }
 
         var result = lookupIDE(conversationIds: conversationIds)
@@ -123,6 +127,24 @@ enum SessionCatalog {
 
         for id in conversationIds where result[id] == nil {
             result[id] = SessionMeta(conversationId: id)
+        }
+
+        for id in conversationIds {
+            let grokName = grokNames[id]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !grokName.isEmpty else { continue }
+            let existing = result[id] ?? SessionMeta(conversationId: id)
+            let current = existing.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard current.isEmpty else { continue }
+            result[id] = SessionMeta(
+                conversationId: id,
+                name: grokName,
+                workspaceName: existing.workspaceName,
+                workspaceFSPath: existing.workspaceFSPath,
+                isCloud: existing.isCloud,
+                isArchived: existing.isArchived,
+                repoName: existing.repoName,
+                branchName: existing.branchName
+            )
         }
 
         // Ensure bc-* ids are marked cloud even when Cursor has not cached metadata yet.
