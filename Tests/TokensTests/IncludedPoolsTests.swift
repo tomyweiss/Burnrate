@@ -165,3 +165,67 @@ private func parseCycleSpend(_ json: String) -> CycleSpend? {
     #expect(IncludedPools.percent(in: "You've hit your usage limit") == nil)
     #expect(parseUsageSummary("{}") == nil)
 }
+
+private func parseGrokBot(_ json: String) -> GrokBotUsage? {
+    let data = Data(json.utf8)
+    let object = try? JSONSerialization.jsonObject(with: data)
+    return (object as? [String: Any]).flatMap(GrokBotUsage.parse(json:))
+}
+
+@Test func grokBotReadsWeeklyPercentAndReset() {
+    let usage = parseGrokBot("""
+    {
+      "usagePercent": 10.205850487540628,
+      "hasNonZeroIncludedLimit": true,
+      "hasAvailableUsage": true,
+      "includedLimitZero": false,
+      "usesPooledEnterpriseAllowance": false,
+      "nextResetTimestampUtc": "2026-10-22T10:27:36.178Z",
+      "grokPlanLabel": "Grok Bot Plan"
+    }
+    """)
+
+    #expect(usage?.percentUsed == 10.205850487540628)
+    #expect(IncludedPools.displayPercent(10.205850487540628) == 10)
+    let utc = TimeZone(secondsFromGMT: 0)!
+    #expect(usage?.resetCaption(timeZone: utc) == "Oct 22")
+    #expect(usage?.meterCaption(timeZone: utc) == "10% · resets Oct 22")
+}
+
+@Test func grokBotReadsMillisecondReset() {
+    let usage = parseGrokBot("""
+    {
+      "usagePercent": 0,
+      "hasNonZeroIncludedLimit": true,
+      "nextResetTimestampUtc": 1792664856178
+    }
+    """)
+
+    #expect(usage?.percentUsed == 0)
+    #expect(usage?.meterCaption(timeZone: TimeZone(secondsFromGMT: 0)!) == "0% · resets Oct 22")
+}
+
+@Test func grokBotKeepsPercentWhenResetIsMissing() {
+    let usage = parseGrokBot("""
+    {
+      "usagePercent": 42.2,
+      "hasNonZeroIncludedLimit": true
+    }
+    """)
+
+    #expect(usage?.percentUsed == 42.2)
+    #expect(usage?.resetsAt == nil)
+    #expect(usage?.meterCaption() == "42%")
+}
+
+@Test func grokBotHidesAccountsWithoutAnAllowance() {
+    #expect(parseGrokBot(#"{"usagePercent": 0, "hasNonZeroIncludedLimit": false}"#) == nil)
+    #expect(parseGrokBot(#"{"usagePercent": 12}"#) == nil)
+    #expect(parseGrokBot(#"""
+    {"usagePercent": 12, "hasNonZeroIncludedLimit": true, "includedLimitZero": true}
+    """#) == nil)
+    #expect(parseGrokBot(#"""
+    {"usagePercent": 12, "hasNonZeroIncludedLimit": true, "usesPooledEnterpriseAllowance": true}
+    """#) == nil)
+    #expect(parseGrokBot(#"{"hasNonZeroIncludedLimit": true}"#) == nil)
+}

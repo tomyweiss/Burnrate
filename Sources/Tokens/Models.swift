@@ -176,6 +176,70 @@ struct IncludedPools: Sendable, Hashable {
     }
 }
 
+/// Weekly included usage for Grok Bot, from `POST /api/dashboard/get-sand-usage-status`.
+///
+/// Nil when the account has no personal allowance. A missing percent is not
+/// zero: an account with nothing included must not draw a full bar.
+struct GrokBotUsage: Sendable, Hashable {
+    let percentUsed: Double
+    let resetsAt: Date?
+
+    func resetCaption(timeZone: TimeZone = .current) -> String? {
+        guard let resetsAt else { return nil }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "MMM d"
+        return formatter.string(from: resetsAt)
+    }
+
+    func meterCaption(timeZone: TimeZone = .current) -> String {
+        let percent = "\(IncludedPools.displayPercent(percentUsed))%"
+        guard let reset = resetCaption(timeZone: timeZone) else { return percent }
+        return "\(percent) · resets \(reset)"
+    }
+
+    static func parse(json: [String: Any]) -> GrokBotUsage? {
+        if isTrue(json["usesPooledEnterpriseAllowance"]) || isTrue(json["includedLimitZero"]) {
+            return nil
+        }
+        guard isTrue(json["hasNonZeroIncludedLimit"]),
+              let percent = finitePercent(json["usagePercent"])
+        else {
+            return nil
+        }
+        return GrokBotUsage(percentUsed: percent, resetsAt: resetDate(json["nextResetTimestampUtc"]))
+    }
+
+    private static func isTrue(_ value: Any?) -> Bool {
+        (value as? Bool) == true
+    }
+
+    private static func finitePercent(_ value: Any?) -> Double? {
+        guard let number = value as? NSNumber else { return nil }
+        let double = number.doubleValue
+        guard double.isFinite, double >= 0 else { return nil }
+        return double
+    }
+
+    /// ISO-8601 strings, or a finite number of milliseconds (seconds when the
+    /// magnitude is too small to be a modern millisecond timestamp).
+    private static func resetDate(_ value: Any?) -> Date? {
+        if let string = value as? String {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = formatter.date(from: string) { return date }
+            formatter.formatOptions = [.withInternetDateTime]
+            return formatter.date(from: string)
+        }
+        guard let number = value as? NSNumber else { return nil }
+        let raw = number.doubleValue
+        guard raw.isFinite, raw > 0 else { return nil }
+        let seconds = raw >= 10_000_000_000 ? raw / 1000 : raw
+        return Date(timeIntervalSince1970: seconds)
+    }
+}
+
 /// On-demand and included dollar totals for the current billing cycle, in cents.
 ///
 /// Parsed from `GET /api/usage-summary`. Team spend (`SpendSummary`) is preferred

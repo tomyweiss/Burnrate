@@ -14,6 +14,7 @@ final class SettingsStore {
         static let statusBarShowsWindowSpend = "statusBarShowsWindowSpend"
         static let statusBarShowsCursorModels = "statusBarShowsCursorModels"
         static let statusBarShowsOtherModels = "statusBarShowsOtherModels"
+        static let statusBarShowsGrokBot = "statusBarShowsGrokBot"
         static let autoCheckForUpdates = "autoCheckForUpdates"
         static let usageTimelinePreset = "usageTimelinePreset"
         static let billingDayOfMonth = "billingDayOfMonth"
@@ -97,9 +98,14 @@ final class SettingsStore {
         didSet { defaults.set(statusBarShowsOtherModels, forKey: Keys.statusBarShowsOtherModels) }
     }
 
+    var statusBarShowsGrokBot: Bool {
+        didSet { defaults.set(statusBarShowsGrokBot, forKey: Keys.statusBarShowsGrokBot) }
+    }
+
     /// True when the status bar shows no figures. Replaces the old hide-amount toggle.
     var hideAmountInMenuBar: Bool {
-        !statusBarShowsWindowSpend && !statusBarShowsCursorModels && !statusBarShowsOtherModels
+        !statusBarShowsWindowSpend && !statusBarShowsCursorModels
+            && !statusBarShowsOtherModels && !statusBarShowsGrokBot
     }
 
     var showLocationSubtitle: Bool {
@@ -434,6 +440,7 @@ final class SettingsStore {
         statusBarShowsWindowSpend = statusBar.spend
         statusBarShowsCursorModels = statusBar.cursor
         statusBarShowsOtherModels = statusBar.other
+        statusBarShowsGrokBot = defaults.bool(forKey: Keys.statusBarShowsGrokBot)
         showLocationSubtitle = defaults.bool(forKey: Keys.showLocationSubtitle)
         hideArchivedSessions = defaults.bool(forKey: Keys.hideArchivedSessions)
         blurSensitiveContent = defaults.bool(forKey: Keys.blurSensitiveContent)

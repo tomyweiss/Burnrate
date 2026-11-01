@@ -71,7 +71,11 @@ struct SettingsPanel: View {
                         .onChange(of: settings.statusBarShowsOtherModels) { _, _ in
                             MenuBarPanelKeeper.keepOpen()
                         }
-                    Text("Choose what appears next to the flame. The panel header shows those figures. Turning all three off leaves the flame alone while the panel still shows window spend.")
+                    Toggle("Grok Bot", isOn: $settings.statusBarShowsGrokBot)
+                        .onChange(of: settings.statusBarShowsGrokBot) { _, _ in
+                            MenuBarPanelKeeper.keepOpen()
+                        }
+                    Text("Choose what appears next to the flame. The panel header shows those figures. Turning all of them off leaves the flame alone while the panel still shows window spend.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
