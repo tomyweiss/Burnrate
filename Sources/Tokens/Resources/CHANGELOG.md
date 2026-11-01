@@ -2,6 +2,7 @@
 
 ## 0.60.5
 
+- Show the weekly Grok Bot allowance as a third included-pool ring, with the date it resets. Settings can add it to the status bar; it reads GB when another percent is showing.
 - Keychain guidance for encrypted Cursor logins says to choose Always Allow, so the "Cursor Safe Storage" prompt stops returning on every launch.
 
 ## 0.60.4

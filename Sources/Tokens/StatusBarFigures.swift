@@ -5,27 +5,33 @@ enum StatusBarFigures {
         var showsWindowSpend: Bool
         var showsCursorModels: Bool
         var showsOtherModels: Bool
+        var showsGrokBot: Bool
         var windowDollars: Double
         var spendIsPlaceholder: Bool
         var cursorModelsPercent: Double?
         var otherModelsPercent: Double?
+        var grokBotPercent: Double?
 
         init(
             showsWindowSpend: Bool,
             showsCursorModels: Bool = false,
             showsOtherModels: Bool = false,
+            showsGrokBot: Bool = false,
             windowDollars: Double = 12.40,
             spendIsPlaceholder: Bool = false,
             cursorModelsPercent: Double? = nil,
-            otherModelsPercent: Double? = nil
+            otherModelsPercent: Double? = nil,
+            grokBotPercent: Double? = nil
         ) {
             self.showsWindowSpend = showsWindowSpend
             self.showsCursorModels = showsCursorModels
             self.showsOtherModels = showsOtherModels
+            self.showsGrokBot = showsGrokBot
             self.windowDollars = windowDollars
             self.spendIsPlaceholder = spendIsPlaceholder
             self.cursorModelsPercent = cursorModelsPercent
             self.otherModelsPercent = otherModelsPercent
+            self.grokBotPercent = grokBotPercent
         }
     }
 
@@ -70,27 +76,36 @@ enum StatusBarFigures {
         var spend: Bool
         var cursor: Bool
         var other: Bool
+        var grok: Bool
 
-        var showsAny: Bool { spend || cursor || other }
+        var showsAny: Bool { spend || cursor || other || grok }
+
+        var percentCount: Int {
+            [cursor, other, grok].filter { $0 }.count
+        }
 
         init(_ input: Input) {
             spend = input.showsWindowSpend
             cursor = input.showsCursorModels
             other = input.showsOtherModels
+            grok = input.showsGrokBot
         }
     }
 
     private static func tokens(_ input: Input, flags: Flags) -> [String] {
         var parts: [String] = []
-        let bothPercents = flags.cursor && flags.other
+        let tagPercents = flags.percentCount > 1
         if flags.spend {
             parts.append(spendText(input))
         }
         if flags.cursor {
-            parts.append(percentToken(input.cursorModelsPercent, prefix: bothPercents ? "C" : nil))
+            parts.append(percentToken(input.cursorModelsPercent, prefix: tagPercents ? "C" : nil))
         }
         if flags.other {
-            parts.append(percentToken(input.otherModelsPercent, prefix: bothPercents ? "O" : nil))
+            parts.append(percentToken(input.otherModelsPercent, prefix: tagPercents ? "O" : nil))
+        }
+        if flags.grok {
+            parts.append(percentToken(input.grokBotPercent, prefix: tagPercents ? "GB" : nil))
         }
         return parts
     }
@@ -107,16 +122,11 @@ enum StatusBarFigures {
     }
 
     private static func poolCaption(_ flags: Flags) -> String? {
-        switch (flags.cursor, flags.other) {
-        case (true, true):
-            "Cursor models used this cycle · Other models used this cycle"
-        case (true, false):
-            "Cursor models used this cycle"
-        case (false, true):
-            "Other models used this cycle"
-        case (false, false):
-            nil
-        }
+        var parts: [String] = []
+        if flags.cursor { parts.append("Cursor models used this cycle") }
+        if flags.other { parts.append("Other models used this cycle") }
+        if flags.grok { parts.append("Grok Bot used this week") }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private static func labeled(_ input: Input, flags: Flags) -> String {
@@ -129,6 +139,9 @@ enum StatusBarFigures {
         }
         if flags.other {
             parts.append(percentAccess("Other models", input.otherModelsPercent))
+        }
+        if flags.grok {
+            parts.append(percentAccess("Grok Bot", input.grokBotPercent))
         }
         return parts.joined(separator: ", ")
     }

@@ -67,6 +67,17 @@ actor CursorAPI {
         )
     }
 
+    /// Weekly Grok Bot allowance. Nil when this account has no personal pool.
+    /// Throws only when the request itself fails.
+    func fetchGrokBotUsage(credentials: SessionCredentials) async throws -> GrokBotUsage? {
+        let status = try await postJSON(
+            credentials: credentials,
+            path: "/api/dashboard/get-sand-usage-status",
+            body: [:]
+        )
+        return GrokBotUsage.parse(json: status)
+    }
+
     /// Billing-cycle spend for the signed-in user.
     ///
     /// Request-based plans leave every per-event dollar field at zero, so these

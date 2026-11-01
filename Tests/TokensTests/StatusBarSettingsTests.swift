@@ -21,6 +21,7 @@ private func isolatedDefaults() -> (suite: String, defaults: UserDefaults) {
     #expect(store.statusBarShowsWindowSpend == true)
     #expect(store.statusBarShowsCursorModels == false)
     #expect(store.statusBarShowsOtherModels == false)
+    #expect(store.statusBarShowsGrokBot == false)
     #expect(defaults.object(forKey: "statusBarShowsWindowSpend") != nil)
     #expect(defaults.object(forKey: "statusBarShowsCursorModels") != nil)
     #expect(defaults.object(forKey: "statusBarShowsOtherModels") != nil)
@@ -63,10 +64,23 @@ private func isolatedDefaults() -> (suite: String, defaults: UserDefaults) {
     let store = makeSettings(defaults)
     store.statusBarShowsCursorModels = true
     store.statusBarShowsWindowSpend = false
+    store.statusBarShowsGrokBot = true
 
     let reloaded = makeSettings(defaults)
     #expect(reloaded.statusBarShowsWindowSpend == false)
     #expect(reloaded.statusBarShowsCursorModels == true)
     #expect(reloaded.statusBarShowsOtherModels == false)
+    #expect(reloaded.statusBarShowsGrokBot == true)
     #expect(reloaded.communityClientConfig().hideAmountInMenuBar == false)
+}
+
+@Test func statusBarGrokBotAloneCountsAsShown() {
+    let (suite, defaults) = isolatedDefaults()
+    defer { defaults.removePersistentDomain(forName: suite) }
+
+    let store = makeSettings(defaults)
+    store.statusBarShowsWindowSpend = false
+    store.statusBarShowsGrokBot = true
+
+    #expect(store.hideAmountInMenuBar == false)
 }

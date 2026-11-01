@@ -21,6 +21,9 @@ final class UsageStore {
     /// On-demand and included cents from usage-summary, used when team spend
     /// has not been calibrated yet.
     private(set) var cycleSpend: CycleSpend?
+    /// Weekly Grok Bot included usage. Nil when the account has no allowance
+    /// or the sand status has not loaded yet.
+    private(set) var grokBotUsage: GrokBotUsage?
 
     private let api = CursorAPI()
     private let anomalyMonitor: AnomalyMonitor?
@@ -79,10 +82,12 @@ final class UsageStore {
             showsWindowSpend: settings.statusBarShowsWindowSpend,
             showsCursorModels: settings.statusBarShowsCursorModels,
             showsOtherModels: settings.statusBarShowsOtherModels,
+            showsGrokBot: settings.statusBarShowsGrokBot,
             windowDollars: snapshot.windowDollars,
             spendIsPlaceholder: !hasCompletedFetch && lastError == nil,
             cursorModelsPercent: includedPools?.cursorModelsPercent,
-            otherModelsPercent: includedPools?.otherModelsPercent
+            otherModelsPercent: includedPools?.otherModelsPercent,
+            grokBotPercent: grokBotUsage?.percentUsed
         )
     }
 
@@ -290,6 +295,12 @@ final class UsageStore {
             let cycle = try await api.fetchUsageCycle(credentials: credentials)
             includedPools = cycle.pools
             cycleSpend = cycle.spend
+        } catch {
+            FailureReporter.report(error: error, source: .usage)
+        }
+
+        do {
+            grokBotUsage = try await api.fetchGrokBotUsage(credentials: credentials)
         } catch {
             FailureReporter.report(error: error, source: .usage)
         }

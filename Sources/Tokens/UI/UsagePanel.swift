@@ -50,10 +50,14 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
     let spendSummary: SpendSummary?
     /// usage-summary totals, used until team spend is available.
     let cycleSpend: CycleSpend?
+    /// Weekly Grok Bot allowance. Hidden when this account has none.
+    let grokBot: GrokBotUsage?
     /// Rendered under the spend legend; should be vertically flexible.
     @ViewBuilder let timeline: () -> Timeline
 
-    private static var ringSize: CGFloat { 100 }
+    /// Three rings stay in the allowance column. Two rings keep the larger size.
+    private var ringSize: CGFloat { grokBot == nil ? 100 : 72 }
+    private var ringSpacing: CGFloat { grokBot == nil ? 24 : 8 }
     private static var ringWidth: CGFloat { 9 }
     private static var includedTint: Color { .accentColor }
     private static var onDemandTint: Color { .orange }
@@ -74,15 +78,24 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
         VStack(alignment: .leading, spacing: 10) {
             clusterHeader("Included allowance")
 
-            HStack(alignment: .top, spacing: 24) {
+            HStack(alignment: .top, spacing: ringSpacing) {
                 percentGauge("Cursor models", percent: pools?.cursorModelsPercent)
+                    .help("Share of the Cursor models pool used this billing cycle")
                 percentGauge("Other models", percent: pools?.otherModelsPercent)
+                    .help("Share of the Other models pool used this billing cycle")
+                if let grokBot {
+                    percentGauge(
+                        "Grok Bot",
+                        percent: grokBot.percentUsed,
+                        detail: grokBot.resetCaption().map { "resets \($0)" }
+                    )
+                    .help("Share of the Grok Bot weekly included pool used")
+                }
             }
         }
-        .help("Share of each included pool used this billing cycle")
     }
 
-    private func percentGauge(_ title: String, percent: Double?) -> some View {
+    private func percentGauge(_ title: String, percent: Double?, detail: String? = nil) -> some View {
         let shown = percent.map(IncludedPools.displayPercent)
         let fill = percent == nil ? 0 : min(max(percent ?? 0, 0), 100) / 100
         let tint = percentTint(percent)
@@ -106,18 +119,35 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, ringSize < 80 ? 4 : 12)
             }
-            .frame(width: Self.ringSize, height: Self.ringSize)
+            .frame(width: ringSize, height: ringSize)
 
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+            VStack(spacing: 1) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                if let detail {
+                    Text(detail)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+            }
+            .frame(width: ringSize)
         }
+        .frame(width: ringSize)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(shown.map { "\(title), \($0) percent used" } ?? "\(title), not loaded")
+        .accessibilityLabel(gaugeAccessibility(title: title, shown: shown, detail: detail))
+    }
+
+    private func gaugeAccessibility(title: String, shown: Int?, detail: String?) -> String {
+        let base = shown.map { "\(title), \($0) percent used" } ?? "\(title), not loaded"
+        guard let detail else { return base }
+        return "\(base), \(detail)"
     }
 
     /// Orange once the pool is exhausted, because usage past that point
@@ -387,7 +417,8 @@ struct UsagePanel: View {
             IncludedPoolsGauges(
                 pools: store.includedPools,
                 spendSummary: store.spendSummary,
-                cycleSpend: store.cycleSpend
+                cycleSpend: store.cycleSpend,
+                grokBot: store.grokBotUsage
             ) {
                 SparklineView(
                     sparklineCostCents: store.snapshot.sparklineCostCents,
