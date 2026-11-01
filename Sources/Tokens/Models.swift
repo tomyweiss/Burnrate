@@ -415,6 +415,7 @@ struct SessionUsage: Identifiable, Sendable, Hashable {
     var displayName: String {
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !trimmed.isEmpty { return DisplayText.sanitize(trimmed) }
+        if conversationId.hasPrefix("sand-subagent-") { return "Grok Bot task" }
         let short = conversationId.count > 8
             ? String(conversationId.prefix(8))
             : conversationId

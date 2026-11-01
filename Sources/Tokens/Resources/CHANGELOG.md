@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.60.6
+
+- Open a Grok Bot usage row on the bot that ran it, with that bot's name and prompts. A task with no local transcript stays labeled Grok Bot task.
+
 ## 0.60.5
 
 - Show the weekly Grok Bot allowance as a third included-pool ring, with the date it resets. Settings can add it to the status bar; it reads GB when another percent is showing.
