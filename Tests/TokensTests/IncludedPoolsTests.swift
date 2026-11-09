@@ -29,8 +29,12 @@ private func parseUsageSummary(_ json: String) -> IncludedPools? {
 
     #expect(pools?.cursorModelsPercent == 98.109)
     #expect(pools?.otherModelsPercent == 100)
+    #expect(pools?.hasOtherModelsBucket == true)
     #expect(IncludedPools.displayPercent(98.109) == 98)
     #expect(IncludedPools.displayPercent(98.5128) == 99)
+    #expect(IncludedPools.displayPercent(0) == 0)
+    #expect(IncludedPools.displayPercent(0.1299) == 1)
+    #expect(IncludedPools.displayPercent(0.99) == 1)
 }
 
 @Test func includedPoolsTreatsOmittedPercentageAsZero() {
@@ -161,9 +165,55 @@ private func parseCycleSpend(_ json: String) -> CycleSpend? {
     #expect(onDemand.onDemandFraction == 1)
 }
 
+@Test func currentPeriodOmitsTheOtherModelsBucketWhenApiPercentIsAbsent() {
+    let pools = parseCurrentPeriod("""
+    {
+      "enabled": true,
+      "planUsage": {
+        "autoPercentUsed": 0.2351630670214741,
+        "totalPercentUsed": 0.2351630670214741
+      }
+    }
+    """)
+
+    #expect(pools?.cursorModelsPercent == 0.2351630670214741)
+    #expect(pools?.otherModelsPercent == nil)
+    #expect(pools?.hasOtherModelsBucket == false)
+    #expect(IncludedPools.displayPercent(pools?.cursorModelsPercent ?? -1) == 1)
+}
+
+@Test func currentPeriodKeepsAnExplicitEmptyOtherModelsBucket() {
+    let pools = parseCurrentPeriod("""
+    {
+      "planUsage": { "autoPercentUsed": 12.5, "apiPercentUsed": 0 }
+    }
+    """)
+
+    #expect(pools?.cursorModelsPercent == 12.5)
+    #expect(pools?.otherModelsPercent == 0)
+    #expect(pools?.hasOtherModelsBucket == true)
+}
+
+@Test func currentPeriodUsesTheTotalWhenAutoIsOmitted() {
+    let pools = parseCurrentPeriod("""
+    {
+      "planUsage": { "totalPercentUsed": 4 }
+    }
+    """)
+
+    #expect(pools?.cursorModelsPercent == 4)
+    #expect(pools?.hasOtherModelsBucket == false)
+}
+
 @Test func includedPoolsIgnoresALimitMessageWithoutAPercent() {
     #expect(IncludedPools.percent(in: "You've hit your usage limit") == nil)
     #expect(parseUsageSummary("{}") == nil)
+}
+
+private func parseCurrentPeriod(_ json: String) -> IncludedPools? {
+    let data = Data(json.utf8)
+    let object = try? JSONSerialization.jsonObject(with: data)
+    return (object as? [String: Any]).flatMap(IncludedPools.parseCurrentPeriod(json:))
 }
 
 private func parseGrokBot(_ json: String) -> GrokBotUsage? {
@@ -190,6 +240,20 @@ private func parseGrokBot(_ json: String) -> GrokBotUsage? {
     let utc = TimeZone(secondsFromGMT: 0)!
     #expect(usage?.resetCaption(timeZone: utc) == "Oct 22")
     #expect(usage?.meterCaption(timeZone: utc) == "10% · resets Oct 22")
+}
+
+@Test func grokBotSubOnePercentDisplaysAsOne() {
+    let usage = parseGrokBot("""
+    {
+      "usagePercent": 0.12995853703818305,
+      "hasNonZeroIncludedLimit": true,
+      "nextResetTimestampUtc": "2026-11-16T13:25:51.031Z"
+    }
+    """)
+
+    #expect(usage?.percentUsed == 0.12995853703818305)
+    let utc = TimeZone(secondsFromGMT: 0)!
+    #expect(usage?.meterCaption(timeZone: utc) == "1% · resets Nov 16")
 }
 
 @Test func grokBotReadsMillisecondReset() {

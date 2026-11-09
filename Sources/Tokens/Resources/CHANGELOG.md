@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.60.7
+
+- Included allowance follows Cursor's current billing period. The Other models ring hides when this period has no separate bucket, and usage under 1% shows as 1% so Grok Bot does not look empty.
+
 ## 0.60.6
 
 - Open a Grok Bot usage row on the bot that ran it, with that bot's name and prompts. A task with no local transcript stays labeled Grok Bot task.

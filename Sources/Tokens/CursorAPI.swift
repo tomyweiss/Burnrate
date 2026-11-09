@@ -61,10 +61,28 @@ actor CursorAPI {
     /// Throws only when the request itself fails.
     func fetchUsageCycle(credentials: SessionCredentials) async throws -> (pools: IncludedPools?, spend: CycleSpend?) {
         let summary = try await getJSON(credentials: credentials, path: "/api/usage-summary")
+        // The summary is the older monthly cycle. Cursor's plan screen reads
+        // the current period, which is the weekly pool on unified accounts and
+        // the only place an Other Models bucket is actually reported.
+        let summaryPools = IncludedPools.parse(json: summary)
         return (
-            pools: IncludedPools.parse(json: summary),
+            pools: await currentPeriodPools(credentials: credentials) ?? summaryPools,
             spend: CycleSpend.parse(json: summary)
         )
+    }
+
+    /// Nil when the current-period request fails. The caller keeps the summary.
+    private func currentPeriodPools(credentials: SessionCredentials) async -> IncludedPools? {
+        do {
+            let period = try await postJSON(
+                credentials: credentials,
+                path: "/api/dashboard/get-current-period-usage",
+                body: [:]
+            )
+            return IncludedPools.parseCurrentPeriod(json: period)
+        } catch {
+            return nil
+        }
     }
 
     /// Weekly Grok Bot allowance. Nil when this account has no personal pool.
