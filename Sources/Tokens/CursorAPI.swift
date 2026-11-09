@@ -59,30 +59,18 @@ actor CursorAPI {
     /// Pools are nil when the account is unlimited or the payload has no pool
     /// bars. Spend is nil when the payload has no on-demand or included cents.
     /// Throws only when the request itself fails.
+    ///
+    /// These rings sit beside "Spend this cycle", so they use `usage-summary`,
+    /// whose billing cycle is that spend cycle (the calendar month). The
+    /// current-period endpoint is a different window on unified accounts: a
+    /// week that just reset, with the same percent as Grok Bot. Reading it
+    /// here draws two empty rings next to a month of spend.
     func fetchUsageCycle(credentials: SessionCredentials) async throws -> (pools: IncludedPools?, spend: CycleSpend?) {
         let summary = try await getJSON(credentials: credentials, path: "/api/usage-summary")
-        // The summary is the older monthly cycle. Cursor's plan screen reads
-        // the current period, which is the weekly pool on unified accounts and
-        // the only place an Other Models bucket is actually reported.
-        let summaryPools = IncludedPools.parse(json: summary)
         return (
-            pools: await currentPeriodPools(credentials: credentials) ?? summaryPools,
+            pools: IncludedPools.parse(json: summary),
             spend: CycleSpend.parse(json: summary)
         )
-    }
-
-    /// Nil when the current-period request fails. The caller keeps the summary.
-    private func currentPeriodPools(credentials: SessionCredentials) async -> IncludedPools? {
-        do {
-            let period = try await postJSON(
-                credentials: credentials,
-                path: "/api/dashboard/get-current-period-usage",
-                body: [:]
-            )
-            return IncludedPools.parseCurrentPeriod(json: period)
-        } catch {
-            return nil
-        }
     }
 
     /// Weekly Grok Bot allowance. Nil when this account has no personal pool.

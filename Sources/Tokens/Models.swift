@@ -100,16 +100,18 @@ enum BillingKind: Sendable, Hashable {
 /// How much of each included usage pool the plan has used.
 ///
 /// Cursor reports these as percentages, not dollars. `used` / `limit` on the
-/// same payload are one combined allowance and do not match the two bars.
-/// The live numbers come from `get-current-period-usage`. That response omits
-/// `apiPercentUsed` when this period has no separate Other Models bucket.
+/// same payload are one combined allowance (`totalPercentUsed`) and do not
+/// match the two pool bars. The numbers come from `usage-summary`, the same
+/// billing cycle as spend. An omitted pool percent on that plan object is
+/// proto3 leaving out zero, so both buckets still exist.
 struct IncludedPools: Sendable, Hashable {
     /// Cursor Models pool (Grok, Composer), from `autoPercentUsed`.
     let cursorModelsPercent: Double
     /// Other Models pool (third-party models), from `apiPercentUsed`.
-    /// Nil when the current period has no separate bucket. Zero is a real empty bucket.
+    /// Nil only while the pools have not loaded. Zero is a real empty bucket.
     let otherModelsPercent: Double?
-    /// False when the live period did not report an Other Models bucket.
+    /// False when a payload reports no separate Other Models bucket.
+    /// The monthly summary always reports the bucket.
     let hasOtherModelsBucket: Bool
 
     /// Whole percent Cursor shows on the plan bars. Anything strictly between
@@ -141,27 +143,6 @@ struct IncludedPools: Sendable, Hashable {
             cursorModelsPercent: cursor,
             otherModelsPercent: other,
             hasOtherModelsBucket: true
-        )
-    }
-
-    /// `POST /api/dashboard/get-current-period-usage`, the payload Cursor's plan
-    /// screen reads. A missing `apiPercentUsed` means there is no Other Models
-    /// bucket this period, not a proto3 zero.
-    static func parseCurrentPeriod(json: [String: Any]) -> IncludedPools? {
-        guard let plan = dictionary(json["planUsage"]) else { return nil }
-        let hasApi = isPresent(plan["apiPercentUsed"])
-        if hasApi, finitePercent(plan["apiPercentUsed"]) == nil { return nil }
-        if isPresent(plan["autoPercentUsed"]), finitePercent(plan["autoPercentUsed"]) == nil { return nil }
-
-        let auto = finitePercent(plan["autoPercentUsed"])
-        let total = finitePercent(plan["totalPercentUsed"])
-        let api = finitePercent(plan["apiPercentUsed"])
-        guard auto != nil || total != nil || api != nil else { return nil }
-
-        return IncludedPools(
-            cursorModelsPercent: auto ?? total ?? 0,
-            otherModelsPercent: hasApi ? api : nil,
-            hasOtherModelsBucket: hasApi
         )
     }
 
