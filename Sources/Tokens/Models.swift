@@ -97,18 +97,26 @@ enum BillingKind: Sendable, Hashable {
     var isBillable: Bool { self != .errored }
 }
 
-/// How much of each included usage pool the plan has used this billing cycle.
+/// How much of each included usage pool the plan has used.
 ///
 /// Cursor reports these as percentages, not dollars. `used` / `limit` on the
 /// same payload are one combined allowance and do not match the two bars.
+/// The live numbers come from `get-current-period-usage`. That response omits
+/// `apiPercentUsed` when this period has no separate Other Models bucket.
 struct IncludedPools: Sendable, Hashable {
     /// Cursor Models pool (Grok, Composer), from `autoPercentUsed`.
     let cursorModelsPercent: Double
     /// Other Models pool (third-party models), from `apiPercentUsed`.
-    let otherModelsPercent: Double
+    /// Nil when the current period has no separate bucket. Zero is a real empty bucket.
+    let otherModelsPercent: Double?
+    /// False when the live period did not report an Other Models bucket.
+    let hasOtherModelsBucket: Bool
 
+    /// Whole percent Cursor shows on the plan bars. Anything strictly between
+    /// 0 and 1 is drawn as 1%, so a live pool does not read as empty.
     static func displayPercent(_ percent: Double) -> Int {
-        Int(percent.rounded())
+        if percent > 0, percent < 1 { return 1 }
+        return Int(percent.rounded())
     }
 
     /// Parses `GET /api/usage-summary`. Nil for unlimited plans and for
@@ -129,7 +137,32 @@ struct IncludedPools: Sendable, Hashable {
         else {
             return nil
         }
-        return IncludedPools(cursorModelsPercent: cursor, otherModelsPercent: other)
+        return IncludedPools(
+            cursorModelsPercent: cursor,
+            otherModelsPercent: other,
+            hasOtherModelsBucket: true
+        )
+    }
+
+    /// `POST /api/dashboard/get-current-period-usage`, the payload Cursor's plan
+    /// screen reads. A missing `apiPercentUsed` means there is no Other Models
+    /// bucket this period, not a proto3 zero.
+    static func parseCurrentPeriod(json: [String: Any]) -> IncludedPools? {
+        guard let plan = dictionary(json["planUsage"]) else { return nil }
+        let hasApi = isPresent(plan["apiPercentUsed"])
+        if hasApi, finitePercent(plan["apiPercentUsed"]) == nil { return nil }
+        if isPresent(plan["autoPercentUsed"]), finitePercent(plan["autoPercentUsed"]) == nil { return nil }
+
+        let auto = finitePercent(plan["autoPercentUsed"])
+        let total = finitePercent(plan["totalPercentUsed"])
+        let api = finitePercent(plan["apiPercentUsed"])
+        guard auto != nil || total != nil || api != nil else { return nil }
+
+        return IncludedPools(
+            cursorModelsPercent: auto ?? total ?? 0,
+            otherModelsPercent: hasApi ? api : nil,
+            hasOtherModelsBucket: hasApi
+        )
     }
 
     /// A present plan object is the individual-account shape. A missing
@@ -145,7 +178,8 @@ struct IncludedPools: Sendable, Hashable {
 
         return IncludedPools(
             cursorModelsPercent: finitePercent(plan["autoPercentUsed"]) ?? 0,
-            otherModelsPercent: finitePercent(plan["apiPercentUsed"]) ?? 0
+            otherModelsPercent: finitePercent(plan["apiPercentUsed"]) ?? 0,
+            hasOtherModelsBucket: true
         )
     }
 

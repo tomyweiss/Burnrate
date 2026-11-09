@@ -55,9 +55,22 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
     /// Rendered under the spend legend; should be vertically flexible.
     @ViewBuilder let timeline: () -> Timeline
 
-    /// Three rings stay in the allowance column. Two rings keep the larger size.
-    private var ringSize: CGFloat { grokBot == nil ? 100 : 72 }
-    private var ringSpacing: CGFloat { grokBot == nil ? 24 : 8 }
+    /// The Other Models ring stays up while pools are still loading. Once a
+    /// period reports no separate bucket, the ring comes down.
+    private var showsOtherModelsRing: Bool {
+        pools?.hasOtherModelsBucket ?? true
+    }
+
+    private var ringCount: Int {
+        var count = 1
+        if showsOtherModelsRing { count += 1 }
+        if grokBot != nil { count += 1 }
+        return count
+    }
+
+    /// Three rings stay in the allowance column. Fewer rings keep the larger size.
+    private var ringSize: CGFloat { ringCount >= 3 ? 72 : 100 }
+    private var ringSpacing: CGFloat { ringCount >= 3 ? 8 : 24 }
     private static var ringWidth: CGFloat { 9 }
     private static var includedTint: Color { .accentColor }
     private static var onDemandTint: Color { .orange }
@@ -81,8 +94,10 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
             HStack(alignment: .top, spacing: ringSpacing) {
                 percentGauge("Cursor models", percent: pools?.cursorModelsPercent)
                     .help("Share of the Cursor models pool used this billing cycle")
-                percentGauge("Other models", percent: pools?.otherModelsPercent)
-                    .help("Share of the Other models pool used this billing cycle")
+                if showsOtherModelsRing {
+                    percentGauge("Other models", percent: pools?.otherModelsPercent)
+                        .help("Share of the Other models pool used this billing cycle")
+                }
                 if let grokBot {
                     percentGauge(
                         "Grok Bot",
@@ -97,7 +112,7 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
 
     private func percentGauge(_ title: String, percent: Double?, detail: String? = nil) -> some View {
         let shown = percent.map(IncludedPools.displayPercent)
-        let fill = percent == nil ? 0 : min(max(percent ?? 0, 0), 100) / 100
+        let fill = shown.map { min(CGFloat($0), 100) / 100 } ?? 0
         let tint = percentTint(percent)
 
         return VStack(spacing: 6) {
