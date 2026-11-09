@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.60.8
+
+- Included-allowance rings follow the same monthly cycle as spend, so Cursor models no longer copies the weekly Grok Bot pool.
+
 ## 0.60.7
 
 - Included allowance follows Cursor's current billing period. The Other models ring hides when this period has no separate bucket, and usage under 1% shows as 1% so Grok Bot does not look empty.
