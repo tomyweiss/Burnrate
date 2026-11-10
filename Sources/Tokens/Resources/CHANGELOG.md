@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.60.9
+
+- Other models shows named-model usage of the shared included allowance. An API quota that stays at 0% no longer hides that spend.
+
 ## 0.60.8
 
 - Included-allowance rings follow the same monthly cycle as spend, so Cursor models no longer copies the weekly Grok Bot pool.

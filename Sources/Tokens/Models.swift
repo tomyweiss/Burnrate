@@ -99,15 +99,16 @@ enum BillingKind: Sendable, Hashable {
 
 /// How much of each included usage pool the plan has used.
 ///
-/// Cursor reports these as percentages, not dollars. `used` / `limit` on the
-/// same payload are one combined allowance (`totalPercentUsed`) and do not
-/// match the two pool bars. The numbers come from `usage-summary`, the same
-/// billing cycle as spend. An omitted pool percent on that plan object is
+/// Cursor reports these as percentages, not dollars. `totalPercentUsed` is
+/// the combined allowance (`used / limit`). Cursor models is `autoPercentUsed`.
+/// Other models is the API quota when that quota is real, and otherwise the
+/// rest of the combined allowance. The numbers come from `usage-summary`, the
+/// same billing cycle as spend. An omitted pool percent on that plan object is
 /// proto3 leaving out zero, so both buckets still exist.
 struct IncludedPools: Sendable, Hashable {
     /// Cursor Models pool (Grok, Composer), from `autoPercentUsed`.
     let cursorModelsPercent: Double
-    /// Other Models pool (third-party models), from `apiPercentUsed`.
+    /// Other Models pool (named models such as Claude).
     /// Nil only while the pools have not loaded. Zero is a real empty bucket.
     let otherModelsPercent: Double?
     /// False when a payload reports no separate Other Models bucket.
@@ -157,11 +158,29 @@ struct IncludedPools: Sendable, Hashable {
         if hasAuto, finitePercent(plan["autoPercentUsed"]) == nil { return nil }
         if hasApi, finitePercent(plan["apiPercentUsed"]) == nil { return nil }
 
+        let auto = finitePercent(plan["autoPercentUsed"]) ?? 0
+        let api = finitePercent(plan["apiPercentUsed"]) ?? 0
         return IncludedPools(
-            cursorModelsPercent: finitePercent(plan["autoPercentUsed"]) ?? 0,
-            otherModelsPercent: finitePercent(plan["apiPercentUsed"]) ?? 0,
+            cursorModelsPercent: auto,
+            otherModelsPercent: otherModelsPercent(
+                auto: auto,
+                api: api,
+                total: finitePercent(plan["totalPercentUsed"])
+            ),
             hasOtherModelsBucket: true
         )
+    }
+
+    /// Share of the included allowance used by named models.
+    ///
+    /// `apiPercentUsed` is its own quota. On a shared allowance that quota
+    /// stays 0 while named-model spend is inside `totalPercentUsed`
+    /// (`used / limit`). That leftover, after Cursor models, is this ring.
+    /// A real API quota (it can sit near 100 while the total does not) is
+    /// kept as reported.
+    static func otherModelsPercent(auto: Double, api: Double, total: Double?) -> Double {
+        guard api == 0, let total, total > auto + 0.5 else { return api }
+        return max(0, total - auto)
     }
 
     private static func dictionary(_ value: Any?) -> [String: Any]? {

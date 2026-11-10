@@ -165,11 +165,10 @@ private func parseCycleSpend(_ json: String) -> CycleSpend? {
     #expect(onDemand.onDemandFraction == 1)
 }
 
-@Test func monthlySummaryKeepsAnExplicitEmptyOtherModelsBucket() {
-    // Unified accounts also expose a weekly period whose auto percent matches
-    // Grok Bot and omits apiPercentUsed. The rings use this monthly summary,
-    // the same cycle as spend, so an explicit 0 stays a visible empty bucket
-    // and is not replaced by that weekly number.
+@Test func monthlySummaryCountsNamedModelsInsideTheSharedAllowance() {
+    // apiPercentUsed stays 0 on this plan, but totalPercentUsed is used/limit
+    // and includes named-model spend. Other models is the part of that total
+    // that is not the Cursor models pool.
     let pools = parseUsageSummary("""
     {
       "billingCycleStart": "2026-11-01T00:00:00.000Z",
@@ -189,11 +188,15 @@ private func parseCycleSpend(_ json: String) -> CycleSpend? {
     """)
 
     #expect(pools?.cursorModelsPercent == 10.726599873634804)
-    #expect(pools?.otherModelsPercent == 0)
+    #expect(pools?.otherModelsPercent == 46.96452748443 - 10.726599873634804)
     #expect(pools?.hasOtherModelsBucket == true)
-    #expect(IncludedPools.displayPercent(10.726599873634804) == 11)
-    #expect(IncludedPools.displayPercent(0) == 0)
-    #expect(IncludedPools.displayPercent(46.96452748443) == 47)
+    #expect(IncludedPools.displayPercent(pools?.cursorModelsPercent ?? -1) == 11)
+    #expect(IncludedPools.displayPercent(pools?.otherModelsPercent ?? -1) == 36)
+}
+
+@Test func otherModelsKeepsARealApiQuota() {
+    #expect(IncludedPools.otherModelsPercent(auto: 98.109, api: 100, total: 98.5128) == 100)
+    #expect(IncludedPools.otherModelsPercent(auto: 10, api: 0, total: 10.4) == 0)
 }
 
 @Test func includedPoolsIgnoresALimitMessageWithoutAPercent() {
