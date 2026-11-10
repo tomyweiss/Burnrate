@@ -79,12 +79,81 @@ struct SessionMeta: Sendable, Hashable {
     }
 }
 
+struct LocalComposer: Sendable, Hashable {
+    let meta: SessionMeta
+    let updatedAtMs: Double
+}
+
 enum SessionCatalog {
     private static var ideDatabasePath: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(
                 "Library/Application Support/Cursor/User/globalStorage/state.vscdb"
             )
+    }
+
+    /// Conversations Cursor has open locally, including ones not billed yet.
+    ///
+    /// Usage events lag the chat. A session updated inside the window still
+    /// belongs on the list when its spend has not arrived.
+    static func composersUpdated(
+        fromMs: Double,
+        toMs: Double,
+        databasePath: URL = ideDatabasePath
+    ) -> [LocalComposer] {
+        guard FileManager.default.fileExists(atPath: databasePath.path) else { return [] }
+
+        var database: OpaquePointer?
+        guard sqlite3_open_v2(
+            databasePath.path,
+            &database,
+            SQLITE_OPEN_READONLY,
+            nil
+        ) == SQLITE_OK else {
+            return []
+        }
+        defer { sqlite3_close(database) }
+
+        let query = """
+        SELECT composerId, lastUpdatedAt, isArchived, value
+        FROM composerHeaders
+        WHERE lastUpdatedAt >= ? AND lastUpdatedAt <= ? AND isSubagent = 0
+        ORDER BY lastUpdatedAt DESC
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, query, -1, &statement, nil) == SQLITE_OK else {
+            return []
+        }
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_int64(statement, 1, Int64(fromMs))
+        sqlite3_bind_int64(statement, 2, Int64(toMs))
+
+        var result: [LocalComposer] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let idC = sqlite3_column_text(statement, 0) else { continue }
+            let id = String(cString: idC)
+            guard !id.isEmpty else { continue }
+            let updatedAtMs = Double(sqlite3_column_int64(statement, 1))
+            let archivedColumn = sqlite3_column_int(statement, 2) != 0
+            let json = sqlite3_column_text(statement, 3).map { String(cString: $0) }
+            let root = json.flatMap { raw -> [String: Any]? in
+                guard let data = raw.data(using: .utf8) else { return nil }
+                return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            }
+            if boolValue(root?["isDraft"]) { continue }
+            result.append(LocalComposer(
+                meta: SessionMeta(
+                    conversationId: id,
+                    name: stringValue(root?["name"]),
+                    workspaceName: workspaceName(from: root?["workspaceIdentifier"]),
+                    workspaceFSPath: workspaceFSPath(from: root?["workspaceIdentifier"]),
+                    isCloud: id.hasPrefix("bc-"),
+                    isArchived: archivedColumn || boolValue(root?["isArchived"])
+                ),
+                updatedAtMs: updatedAtMs
+            ))
+        }
+        return result
     }
 
     /// Resolve titles/workspaces for the given conversation IDs from local Cursor state.

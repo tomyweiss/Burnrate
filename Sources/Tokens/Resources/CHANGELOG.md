@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.60.10
+
+- Team accounts see their spend again. Cursor stopped returning a team member's usage events unless the request names the team, which left today and every Feed prompt at $0.00.
+- Sessions you're working in show up right away, before Cursor bills them. Grok Bot agents that were idle in the selected window no longer appear in it.
+
 ## 0.60.9
 
 - Other models shows named-model usage of the shared included allowance. An API quota that stays at 0% no longer hides that spend.

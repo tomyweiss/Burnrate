@@ -9,6 +9,7 @@ enum Aggregator {
         recentWindowMinutes: Int,
         rates: SpendRates = .unavailable,
         includePrompts: Bool = true,
+        includeLocalComposers: Bool = true,
         grokLibrary: GrokBotStore.Library = .disk
     ) -> UsageSnapshot {
         let range = window.dateRange(now: now)
@@ -104,12 +105,25 @@ enum Aggregator {
             }
         }
 
+        let locals = includeLocalComposers
+            ? SessionCatalog.composersUpdated(fromMs: startMs, toMs: endMs)
+            : []
+        for local in locals where bySession[local.meta.conversationId] == nil {
+            var acc = CrossSessionAccumulator()
+            acc.lastTimestampMs = local.updatedAtMs
+            bySession[local.meta.conversationId] = acc
+            knownConversationIds.insert(local.meta.conversationId)
+        }
+
         let childrenByParent = childrenByParentMap(parentByChild)
 
-        let catalog = SessionCatalog.lookup(
+        var catalog = SessionCatalog.lookup(
             conversationIds: knownConversationIds,
             grokNames: grokLibrary.names
         )
+        for local in locals where catalog[local.meta.conversationId]?.name == nil {
+            catalog[local.meta.conversationId] = local.meta
+        }
 
         let hierarchicalSessions = buildHierarchicalSessions(
             bySession: bySession,
@@ -259,12 +273,15 @@ enum Aggregator {
         library: GrokBotStore.Library
     ) -> [String: String] {
         var parents = PromptCatalog.subagentParents(conversationIds: conversationIds)
-        for (child, parent) in library.subagentParents where parents[child] == nil {
+        // The Grok roster lists every historical sand task. A parent only belongs
+        // in this window when one of those tasks actually landed here.
+        for (child, parent) in library.subagentParents where parents[child] == nil && conversationIds.contains(child) {
             parents[child] = parent
         }
 
+        let windowEvents = events.filter { conversationIds.contains($0.sessionKey) }
         var agentIds = Set(library.names.keys)
-        for event in events {
+        for event in windowEvents {
             let id = event.sessionKey
             guard !id.hasPrefix("sand-subagent-"),
                   event.model?.hasPrefix("grok-bot") == true
@@ -272,10 +289,10 @@ enum Aggregator {
             agentIds.insert(id)
         }
         let linked = GrokBotTranscript.linkSubagents(
-            events: events.map { (conversationId: $0.sessionKey, timestampMs: $0.timestampMs) },
+            events: windowEvents.map { (conversationId: $0.sessionKey, timestampMs: $0.timestampMs) },
             agentIds: agentIds
         )
-        for (child, parent) in linked where parents[child] == nil && child != parent {
+        for (child, parent) in linked where parents[child] == nil && child != parent && conversationIds.contains(child) {
             parents[child] = parent
         }
         return parents
