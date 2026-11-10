@@ -4,6 +4,7 @@ actor CursorAPI {
     private let session: URLSession
     private let maxPages = 20
     private let pageSize = 1000
+    private var eventScope: (cookieValue: String, fields: [String: Any])?
 
     init() {
         let config = URLSessionConfiguration.ephemeral
@@ -19,6 +20,7 @@ actor CursorAPI {
         startMs: Int64,
         endMs: Int64
     ) async throws -> [UsageEvent] {
+        let scope = await usageEventScope(credentials: credentials)
         var all: [UsageEvent] = []
         var page = 1
         var totalCount: Int?
@@ -28,7 +30,8 @@ actor CursorAPI {
                 credentials: credentials,
                 startMs: startMs,
                 endMs: endMs,
-                page: page
+                page: page,
+                scope: scope
             )
             let events = response.usageEventsDisplay ?? []
             all.append(contentsOf: events)
@@ -178,11 +181,34 @@ actor CursorAPI {
         return object
     }
 
+    /// Team members' events are only returned when the request names the team,
+    /// and naming the team returns every member's events unless `userId` is set.
+    /// Personal accounts send neither. A failed lookup is retried next refresh.
+    private func usageEventScope(credentials: SessionCredentials) async -> [String: Any] {
+        if let eventScope, eventScope.cookieValue == credentials.cookieValue {
+            return eventScope.fields
+        }
+        do {
+            let stripe = try await getJSON(credentials: credentials, path: "/api/auth/stripe")
+            var fields: [String: Any] = [:]
+            if stripe["isTeamMember"] as? Bool == true, let teamId = stripe["teamId"] as? Int {
+                let me = try await getJSON(credentials: credentials, path: "/api/auth/me")
+                guard let userId = me["id"] as? Int else { return [:] }
+                fields = ["teamId": teamId, "userId": userId]
+            }
+            eventScope = (credentials.cookieValue, fields)
+            return fields
+        } catch {
+            return [:]
+        }
+    }
+
     private func fetchPage(
         credentials: SessionCredentials,
         startMs: Int64,
         endMs: Int64,
-        page: Int
+        page: Int,
+        scope: [String: Any]
     ) async throws -> UsageEventsResponse {
         guard let url = URL(string: "https://cursor.com/api/dashboard/get-filtered-usage-events") else {
             throw TokensError.apiMessage("Invalid API URL.")
@@ -197,12 +223,12 @@ actor CursorAPI {
             forHTTPHeaderField: "Cookie"
         )
 
-        let body: [String: Any] = [
+        let body: [String: Any] = scope.merging([
             "startDate": String(startMs),
             "endDate": String(endMs),
             "page": page,
             "pageSize": pageSize
-        ]
+        ]) { _, new in new }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await session.data(for: request)

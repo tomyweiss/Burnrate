@@ -73,7 +73,7 @@ struct SessionRowView: View {
                 }
             }
 
-            if showShareBar {
+            if showShareBar, windowCostCents > 0 {
                 ShareBar(fraction: share)
             }
 

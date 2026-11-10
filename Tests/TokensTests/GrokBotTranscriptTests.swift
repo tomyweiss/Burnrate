@@ -186,6 +186,7 @@ import Testing
         now: now,
         window: UsageTimeWindow(preset: .last24Hours, timeZone: .gmt),
         recentWindowMinutes: 60,
+        includeLocalComposers: false,
         grokLibrary: library
     )
 
@@ -200,4 +201,31 @@ import Testing
     let modelSessions = snapshot.models.first { $0.model == "grok-bot-default" }?.sessions ?? []
     #expect(modelSessions.map(\.conversationId) == [personal])
     #expect(modelSessions.first?.displayName == "Personal")
+}
+
+@Test func idleGrokAgentsStayOutOfAnEmptyWindow() {
+    let personal = "f6e32069-526e-4d34-b627-4addb1759dc7"
+    let grok = "11111111-2222-3333-4444-555555555555"
+    var links: [String: String] = [:]
+    for index in 0..<8 {
+        links["sand-subagent-00000000-0000-0000-0000-00000000000\(index)"] = personal
+    }
+    for index in 0..<6 {
+        links["sand-subagent-11111111-1111-1111-1111-11111111111\(index)"] = grok
+    }
+    let library = GrokBotStore.Library(
+        names: [personal: "Personal", grok: "Grok Bot"],
+        prompts: [:],
+        subagentParents: links
+    )
+    let snapshot = Aggregator.snapshot(
+        events: [],
+        now: Date(),
+        window: UsageTimeWindow(preset: .today, timeZone: .gmt),
+        recentWindowMinutes: 60,
+        includeLocalComposers: false,
+        grokLibrary: library
+    )
+
+    #expect(snapshot.rootSessions.isEmpty)
 }

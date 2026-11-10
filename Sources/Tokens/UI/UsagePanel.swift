@@ -577,6 +577,7 @@ struct UsagePanel: View {
             if store.hasCompletedFetch,
                store.snapshot.windowCostCents == 0,
                store.snapshot.models.isEmpty,
+               store.snapshot.rootSessions.isEmpty,
                store.lastError == nil {
                 EmptySpendView(message: store.snapshot.window.emptyStateMessage)
             } else if let skill = selectedSkill {
