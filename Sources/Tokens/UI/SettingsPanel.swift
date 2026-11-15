@@ -6,6 +6,7 @@ struct SettingsPanel: View {
     @Bindable var store: UsageStore
     var onBack: () -> Void
     var onOpenChangeLog: () -> Void
+    @Environment(ClaudeCodeStore.self) private var claudeCode
 
     var body: some View {
         settingsForm
@@ -40,6 +41,31 @@ struct SettingsPanel: View {
             Divider()
 
             Form {
+                Section("Sources") {
+                    Toggle(
+                        PanelSourceResolver.cursorSettingsLabel(signedIn: store.isCursorAvailable),
+                        isOn: $settings.cursorEnabled
+                    )
+                    .onChange(of: settings.cursorEnabled) { _, enabled in
+                        if enabled {
+                            Task { await store.refresh() }
+                        }
+                        MenuBarPanelKeeper.keepOpen()
+                    }
+
+                    Toggle(
+                        PanelSourceResolver.claudeSettingsLabel(
+                            installed: claudeCode.isInstalled,
+                            sessionCount: claudeCode.sessionCount
+                        ),
+                        isOn: $settings.claudeCodeEnabled
+                    )
+                    .onChange(of: settings.claudeCodeEnabled) { _, _ in
+                        Task { await claudeCode.refresh() }
+                        MenuBarPanelKeeper.keepOpen()
+                    }
+                }
+
                 Section("General") {
                     Picker("Poll every", selection: $settings.refreshIntervalSeconds) {
                         ForEach(SettingsStore.refreshIntervalOptions, id: \.self) { seconds in

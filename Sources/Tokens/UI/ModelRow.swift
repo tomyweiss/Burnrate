@@ -28,6 +28,8 @@ struct ModelRowView: View {
     let isExpanded: Bool
     let reduceMotion: Bool
     var showLocationSubtitle: Bool = false
+    var showsStorageBadges: Bool = true
+    var includesBranch: Bool = false
     var hideArchivedSessions: Bool = false
     var metric: CostMetric = .total
     /// Highest value of the selected per-unit metric; scales the bar in
@@ -37,6 +39,7 @@ struct ModelRowView: View {
     let onToggle: () -> Void
     var onOpenSession: ((SessionUsage) -> Void)? = nil
 
+    @Environment(\.costStyle) private var costStyle
     @State private var hovering = false
 
     private var share: Double {
@@ -79,7 +82,7 @@ struct ModelRowView: View {
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                             Spacer(minLength: 8)
-                            Text(MoneyFormat.dollars(displayDollars))
+                            Text(MoneyFormat.string(displayDollars, style: costStyle))
                                 .font(.callout.monospacedDigit().weight(.semibold))
                                 .contentTransition(.numericText())
                         }
@@ -118,6 +121,8 @@ struct ModelRowView: View {
                             showModelChips: false,
                             showShareBar: false,
                             showLocationSubtitle: showLocationSubtitle,
+                            showsStorageBadges: showsStorageBadges,
+                            includesBranch: includesBranch,
                             onOpen: onOpenSession.map { open in
                                 { open(session) }
                             }
@@ -146,15 +151,15 @@ struct ModelRowView: View {
         switch metric {
         case .total:
             if model.eventCount > 0 {
-                parts.append("avg \(MoneyFormat.dollars(model.averageCostDollars))")
-                parts.append("med \(MoneyFormat.dollars(model.medianCostDollars))")
+                parts.append("avg \(MoneyFormat.string(model.averageCostDollars, style: costStyle))")
+                parts.append("med \(MoneyFormat.string(model.medianCostDollars, style: costStyle))")
             }
         case .average:
-            parts.append("total \(MoneyFormat.dollars(model.costDollars))")
-            parts.append("med \(MoneyFormat.dollars(model.medianCostDollars))")
+            parts.append("total \(MoneyFormat.string(model.costDollars, style: costStyle))")
+            parts.append("med \(MoneyFormat.string(model.medianCostDollars, style: costStyle))")
         case .median:
-            parts.append("total \(MoneyFormat.dollars(model.costDollars))")
-            parts.append("avg \(MoneyFormat.dollars(model.averageCostDollars))")
+            parts.append("total \(MoneyFormat.string(model.costDollars, style: costStyle))")
+            parts.append("avg \(MoneyFormat.string(model.averageCostDollars, style: costStyle))")
         }
         return parts.joined(separator: " · ")
     }

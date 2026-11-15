@@ -11,6 +11,7 @@ struct SkillRowView: View {
     /// When set, the row is tappable and opens the skill detail view.
     var onOpen: (() -> Void)? = nil
 
+    @Environment(\.costStyle) private var costStyle
     @State private var hovering = false
 
     private var share: Double {
@@ -51,7 +52,7 @@ struct SkillRowView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 8)
-                Text(MoneyFormat.dollars(displayDollars))
+                Text(MoneyFormat.string(displayDollars, style: costStyle))
                     .font(.callout.monospacedDigit().weight(.semibold))
                     .contentTransition(.numericText())
                 if onOpen != nil {
@@ -83,14 +84,14 @@ struct SkillRowView: View {
         parts.append(skill.invocationCount == 1 ? "1 use" : "\(skill.invocationCount) uses")
         switch metric {
         case .total:
-            parts.append("avg \(MoneyFormat.dollars(skill.averageCostDollars))")
-            parts.append("med \(MoneyFormat.dollars(skill.medianCostDollars))")
+            parts.append("avg \(MoneyFormat.string(skill.averageCostDollars, style: costStyle))")
+            parts.append("med \(MoneyFormat.string(skill.medianCostDollars, style: costStyle))")
         case .average:
-            parts.append("total \(MoneyFormat.dollars(skill.costDollars))")
-            parts.append("med \(MoneyFormat.dollars(skill.medianCostDollars))")
+            parts.append("total \(MoneyFormat.string(skill.costDollars, style: costStyle))")
+            parts.append("med \(MoneyFormat.string(skill.medianCostDollars, style: costStyle))")
         case .median:
-            parts.append("total \(MoneyFormat.dollars(skill.costDollars))")
-            parts.append("avg \(MoneyFormat.dollars(skill.averageCostDollars))")
+            parts.append("total \(MoneyFormat.string(skill.costDollars, style: costStyle))")
+            parts.append("avg \(MoneyFormat.string(skill.averageCostDollars, style: costStyle))")
         }
         if skill.lastUsedMs > 0 {
             parts.append(RelativeTimeFormat.string(fromTimestampMs: skill.lastUsedMs))
@@ -104,6 +105,7 @@ struct PromptRowView: View {
     var showSessionName: Bool = true
 
     @Environment(\.blurSensitiveContent) private var blurSensitiveContent
+    @Environment(\.costStyle) private var costStyle
     @State private var hovering = false
 
     var body: some View {
@@ -115,7 +117,7 @@ struct PromptRowView: View {
                     .truncationMode(.tail)
                     .privacyBlurred(blurSensitiveContent)
                 Spacer(minLength: 8)
-                Text(MoneyFormat.dollars(prompt.costDollars))
+                Text(MoneyFormat.string(prompt.costDollars, style: costStyle))
                     .font(.callout.monospacedDigit().weight(.semibold))
                     .foregroundStyle(prompt.costCents > 0 ? Color.primary : Color.secondary)
                     .contentTransition(.numericText())

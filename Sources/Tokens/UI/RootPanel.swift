@@ -32,6 +32,19 @@ struct RootPanel: View {
     @State private var changeLogReleaseNotes: String?
     @Namespace private var glassNamespace
     @AppStorage("panelTab") private var panelTabRaw = UsageTab.models.rawValue
+    @AppStorage("panelSource") private var panelSourceRaw = ""
+    @Environment(ClaudeCodeStore.self) private var claudeCode
+
+    private var panelCostStyle: CostStyle {
+        let source = PanelSourceResolver.displayedSource(
+            stored: UsageSource(rawValue: panelSourceRaw),
+            cursorAvailable: store.isCursorAvailable,
+            cursorEnabled: settings.cursorEnabled,
+            claudeInstalled: claudeCode.isInstalled,
+            claudeEnabled: settings.claudeCodeEnabled
+        )
+        return source?.costStyle ?? .billed
+    }
 
     private let panelWidth: CGFloat = 540
 
@@ -95,6 +108,7 @@ struct RootPanel: View {
         .frame(width: panelWidth, height: panelHeight)
         .panelSurfaceBackground()
         .environment(\.blurSensitiveContent, settings.blurSensitiveContent)
+        .environment(\.costStyle, panelCostStyle)
         .animation(.snappy, value: panelTabRaw)
         .animation(.snappy, value: route)
         .onAppear {
@@ -113,9 +127,28 @@ struct RootPanel: View {
         }
         .onChange(of: settings.billingDayOfMonth) { _, _ in
             Task { await store.refresh(reuseEventsIfPossible: true) }
+            Task { await claudeCode.refresh() }
         }
         .onChange(of: settings.usageTimezoneIdentifier) { _, _ in
             Task { await store.refresh(reuseEventsIfPossible: true) }
+            Task { await claudeCode.refresh() }
+        }
+        .onChange(of: settings.usageTimelinePreset) { _, _ in
+            Task { await claudeCode.refresh() }
+        }
+        .onChange(of: settings.customRangeStart) { _, _ in
+            Task { await claudeCode.refresh() }
+        }
+        .onChange(of: settings.customRangeEnd) { _, _ in
+            Task { await claudeCode.refresh() }
+        }
+        .onChange(of: settings.cursorEnabled) { _, enabled in
+            if enabled {
+                Task { await store.refresh() }
+            }
+        }
+        .onChange(of: settings.claudeCodeEnabled) { _, _ in
+            Task { await claudeCode.refresh() }
         }
     }
 }

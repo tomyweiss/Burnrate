@@ -85,13 +85,13 @@ struct BenchPoint: Identifiable {
         }
     }
 
-    func rawLabel(for metric: BenchMetric) -> String {
+    func rawLabel(for metric: BenchMetric, style: CostStyle = .billed) -> String {
         switch metric {
-        case .avgPromptCost: MoneyFormat.dollarsFromCents(avgCostCents)
-        case .medPromptCost: MoneyFormat.dollarsFromCents(medianCostCents)
+        case .avgPromptCost: MoneyFormat.stringFromCents(avgCostCents, style: style)
+        case .medPromptCost: MoneyFormat.stringFromCents(medianCostCents, style: style)
         case .avgTime: DurationFormat.compact(avgDurationSeconds)
         case .promptCount: "\(promptCount)"
-        case .totalCost: MoneyFormat.dollarsFromCents(totalCostCents)
+        case .totalCost: MoneyFormat.stringFromCents(totalCostCents, style: style)
         case .tokens: TokenFormat.compact(totalTokens)
         }
     }
@@ -120,6 +120,7 @@ struct BenchView: View {
     @AppStorage("benchYMetric") private var yMetricRaw = BenchMetric.avgTime.rawValue
 
     @Environment(\.blurSensitiveContent) private var blurSensitiveContent
+    @Environment(\.costStyle) private var costStyle
     @State private var hoveredID: String?
     @State private var hoverLocation: CGPoint = .zero
 
@@ -347,10 +348,10 @@ struct BenchView: View {
                 .font(.caption.weight(.semibold))
                 .lineLimit(2)
                 .privacyBlurred(blurBenchNames)
-            Text("\(xMetric.title): \(point.rawLabel(for: xMetric))")
-            Text("\(yMetric.title): \(point.rawLabel(for: yMetric))")
+            Text("\(xMetric.title): \(point.rawLabel(for: xMetric, style: costStyle))")
+            Text("\(yMetric.title): \(point.rawLabel(for: yMetric, style: costStyle))")
             Text(
-                "\(point.promptCount) prompts · \(MoneyFormat.dollarsFromCents(point.totalCostCents)) total · \(TokenFormat.compact(point.totalTokens)) tok"
+                "\(point.promptCount) prompts · \(MoneyFormat.stringFromCents(point.totalCostCents, style: costStyle)) total · \(TokenFormat.compact(point.totalTokens)) tok"
             )
             .foregroundStyle(.secondary)
         }

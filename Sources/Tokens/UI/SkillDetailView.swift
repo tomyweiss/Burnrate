@@ -10,6 +10,7 @@ struct SkillDetailView: View {
     @State private var searchText = ""
     @State private var isSearchPresented = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.costStyle) private var costStyle
 
     private var sort: Binding<SessionPromptSort> {
         Binding(
@@ -112,7 +113,7 @@ struct SkillDetailView: View {
 
             Spacer(minLength: 8)
 
-            Text(MoneyFormat.dollars(skill.costDollars))
+            Text(MoneyFormat.string(skill.costDollars, style: costStyle))
                 .font(.callout.monospacedDigit().weight(.semibold))
                 .help("Total across all uses, including subagent work")
         }
@@ -121,8 +122,8 @@ struct SkillDetailView: View {
     private var subtitle: String {
         var parts: [String] = []
         parts.append(skill.invocationCount == 1 ? "1 use" : "\(skill.invocationCount) uses")
-        parts.append("avg \(MoneyFormat.dollars(skill.averageCostDollars))")
-        parts.append("med \(MoneyFormat.dollars(skill.medianCostDollars))")
+        parts.append("avg \(MoneyFormat.string(skill.averageCostDollars, style: costStyle))")
+        parts.append("med \(MoneyFormat.string(skill.medianCostDollars, style: costStyle))")
         return parts.joined(separator: " · ")
     }
 }

@@ -6,10 +6,15 @@ struct SessionRowView: View {
     var showModelChips: Bool = true
     var showShareBar: Bool = true
     var showLocationSubtitle: Bool = false
+    /// Archive and cloud icons. Off for Claude Code, which has neither.
+    var showsStorageBadges: Bool = true
+    /// Show workspace and git branch instead of the Cursor location line.
+    var includesBranch: Bool = false
     /// When set, the row is tappable and opens the session detail view.
     var onOpen: (() -> Void)? = nil
 
     @Environment(\.blurSensitiveContent) private var blurSensitiveContent
+    @Environment(\.costStyle) private var costStyle
     @State private var hovering = false
 
     private var share: Double {
@@ -38,13 +43,13 @@ struct SessionRowView: View {
                             .foregroundStyle(.secondary)
                             .accessibilityLabel("Subagent")
                     }
-                    if session.isArchived {
+                    if showsStorageBadges, session.isArchived {
                         Image(systemName: "archivebox")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .accessibilityLabel("Archived")
                     }
-                    if session.isCloud {
+                    if showsStorageBadges, session.isCloud {
                         Image(systemName: "cloud")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
@@ -63,7 +68,7 @@ struct SessionRowView: View {
                         .privacyBlurred(blurSensitiveContent)
                 }
                 Spacer(minLength: 8)
-                Text(MoneyFormat.dollars(session.costDollars))
+                Text(MoneyFormat.string(session.costDollars, style: costStyle))
                     .font(.callout.monospacedDigit().weight(.semibold))
                     .contentTransition(.numericText())
                 if onOpen != nil {
@@ -82,7 +87,7 @@ struct SessionRowView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
 
-            if showLocationSubtitle, let location = session.locationSubtitle {
+            if let location = locationLine {
                 Text(location)
                     .font(.caption)
                     .foregroundStyle(.tertiary)
@@ -111,6 +116,14 @@ struct SessionRowView: View {
             return "\(n) subagent\(n == 1 ? "" : "s") · Conversation \(session.conversationId)"
         }
         return "Conversation \(session.conversationId)"
+    }
+
+    private var locationLine: String? {
+        if includesBranch {
+            return session.claudeLocationSubtitle
+        }
+        guard showLocationSubtitle else { return nil }
+        return session.locationSubtitle
     }
 
     private var subtitle: String {

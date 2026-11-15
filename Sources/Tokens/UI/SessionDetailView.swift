@@ -47,6 +47,10 @@ struct SessionDetailView: View {
     let windowCostCents: Double
     let onBack: () -> Void
     var onOpenSubagent: ((SessionUsage) -> Void)? = nil
+    /// Claude Code transcript `.jsonl`. Nil keeps the Cursor location lookup.
+    var transcriptPath: String? = nil
+    /// Show workspace and git branch in the subtitle.
+    var includesBranch: Bool = false
 
     @AppStorage("sessionPromptSort") private var sortRaw = SessionPromptSort.newest.rawValue
     @State private var detailTab: SessionDetailTab = .prompts
@@ -56,6 +60,7 @@ struct SessionDetailView: View {
     @State private var didCopySourcePath = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.blurSensitiveContent) private var blurSensitiveContent
+    @Environment(\.costStyle) private var costStyle
 
     private var showsSubagentTabs: Bool { session.hasSubagents }
 
@@ -131,10 +136,19 @@ struct SessionDetailView: View {
             }
         }
         .task(id: session.conversationId) {
-            storageLocation = SessionLocationCatalog.resolve(
-                conversationId: session.conversationId,
-                parentConversationId: session.parentConversationId
-            )
+            if let transcriptPath {
+                storageLocation = SessionStorageLocation(
+                    kind: .claudeTranscript,
+                    fileURL: URL(fileURLWithPath: transcriptPath),
+                    workspacePath: nil,
+                    detail: session.isSubagent ? "Subagent transcript" : "Claude Code transcript"
+                )
+            } else {
+                storageLocation = SessionLocationCatalog.resolve(
+                    conversationId: session.conversationId,
+                    parentConversationId: session.parentConversationId
+                )
+            }
         }
     }
 
@@ -246,6 +260,8 @@ struct SessionDetailView: View {
                         showModelChips: true,
                         showShareBar: true,
                         showLocationSubtitle: false,
+                        showsStorageBadges: !includesBranch,
+                        includesBranch: includesBranch,
                         onOpen: {
                             onOpenSubagent?(child)
                         }
@@ -262,7 +278,7 @@ struct SessionDetailView: View {
     private var subagentCostSummary: some View {
         let subagentTotal = subagents.reduce(0.0) { $0 + $1.ownCostCents }
         return VStack(alignment: .leading, spacing: 4) {
-            Text("Own \(MoneyFormat.dollarsFromCents(session.ownCostCents)) · Subagents \(MoneyFormat.dollarsFromCents(subagentTotal)) · Total \(MoneyFormat.dollarsFromCents(session.costCents))")
+            Text("Own \(MoneyFormat.stringFromCents(session.ownCostCents, style: costStyle)) · Subagents \(MoneyFormat.stringFromCents(subagentTotal, style: costStyle)) · Total \(MoneyFormat.stringFromCents(session.costCents, style: costStyle))")
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
             Text(subagents.count == 1 ? "1 subagent" : "\(subagents.count) subagents")
@@ -308,7 +324,7 @@ struct SessionDetailView: View {
 
             Spacer(minLength: 8)
 
-            Text(MoneyFormat.dollarsFromCents(headerCostCents))
+            Text(MoneyFormat.stringFromCents(headerCostCents, style: costStyle))
                 .font(.callout.monospacedDigit().weight(.semibold))
                 .help(headerCostHelp)
         }
@@ -338,7 +354,7 @@ struct SessionDetailView: View {
         } else {
             parts.append(prompts.count == 1 ? "1 prompt" : "\(prompts.count) prompts")
         }
-        if let location = session.locationSubtitle {
+        if let location = includesBranch ? session.claudeLocationSubtitle : session.locationSubtitle {
             parts.append(location)
         }
         return parts.joined(separator: " · ")

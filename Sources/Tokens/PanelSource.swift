@@ -54,9 +54,12 @@ enum PanelSourceResolver {
         return nil
     }
 
+    static let placeholderBilled = "$—.——"
+    static let placeholderEstimated = "~$—.——"
+
     static func segmentTitle(source: UsageSource, windowDollars: Double, isPlaceholder: Bool) -> String {
         let amount = isPlaceholder
-            ? (source == .claudeCode ? "~$—.——" : "$—.——")
+            ? (source == .claudeCode ? placeholderEstimated : placeholderBilled)
             : MoneyFormat.string(windowDollars, style: source.costStyle)
         return "\(source.displayName)  \(amount)"
     }

@@ -190,7 +190,7 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
                 HStack(alignment: .firstTextBaseline) {
                     clusterHeader("Spend this cycle")
                     Spacer(minLength: 8)
-                    Text(split.map { MoneyFormat.dollars($0.totalCents / 100) } ?? "—")
+                    Text(split.map { MoneyFormat.string($0.totalCents / 100, style: costStyle) } ?? "—")
                         .font(.subheadline.weight(.semibold).monospacedDigit())
                         .lineLimit(1)
                 }
@@ -241,7 +241,7 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
                 .frame(width: 7, height: 7)
             Text(title)
                 .foregroundStyle(.secondary)
-            Text(cents.map { MoneyFormat.dollars($0 / 100) } ?? "—")
+            Text(cents.map { MoneyFormat.string($0 / 100, style: costStyle) } ?? "—")
                 .fontWeight(.medium)
                 .monospacedDigit()
         }
@@ -251,13 +251,15 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
 
     private var spendAccessibility: String {
         guard let split else { return "Spend this cycle, not loaded" }
-        let total = MoneyFormat.dollars(split.totalCents / 100)
-        let included = MoneyFormat.dollars(split.includedCents / 100)
-        let onDemand = MoneyFormat.dollars(split.onDemandCents / 100)
+        let total = MoneyFormat.string(split.totalCents / 100, style: costStyle)
+        let included = MoneyFormat.string(split.includedCents / 100, style: costStyle)
+        let onDemand = MoneyFormat.string(split.onDemandCents / 100, style: costStyle)
         return "Spend this cycle \(total): \(included) included, \(onDemand) on-demand"
     }
 
     // MARK: Shared
+
+    @Environment(\.costStyle) private var costStyle
 
     private func clusterHeader(_ title: String) -> some View {
         Text(title)
@@ -288,6 +290,71 @@ struct UsagePanel: View {
     @State private var isSectionSearchPresented = false
     @State private var showCustomRangePicker = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.costStyle) private var costStyle
+    @Environment(ClaudeCodeStore.self) private var claudeCode
+    @AppStorage("panelSource") private var panelSourceRaw = ""
+
+    private var storedSource: UsageSource? {
+        UsageSource(rawValue: panelSourceRaw)
+    }
+
+    private var visibleSources: [UsageSource] {
+        PanelSourceResolver.visibleSources(
+            cursorAvailable: store.isCursorAvailable,
+            cursorEnabled: settings.cursorEnabled,
+            claudeInstalled: claudeCode.isInstalled,
+            claudeEnabled: settings.claudeCodeEnabled
+        )
+    }
+
+    private var displayedSource: UsageSource? {
+        PanelSourceResolver.displayedSource(
+            stored: storedSource,
+            cursorAvailable: store.isCursorAvailable,
+            cursorEnabled: settings.cursorEnabled,
+            claudeInstalled: claudeCode.isInstalled,
+            claudeEnabled: settings.claudeCodeEnabled
+        )
+    }
+
+    private var panelSourceSelection: Binding<UsageSource> {
+        Binding(
+            get: { displayedSource ?? .cursor },
+            set: { panelSourceRaw = $0.rawValue }
+        )
+    }
+
+    private var panelSnapshot: UsageSnapshot {
+        displayedSource == .claudeCode ? claudeCode.snapshot : store.snapshot
+    }
+
+    private var panelIsLoading: Bool {
+        switch displayedSource {
+        case .claudeCode: claudeCode.isLoading
+        case .cursor: store.isLoading
+        case nil: false
+        }
+    }
+
+    private var panelHasCompletedFetch: Bool {
+        switch displayedSource {
+        case .claudeCode: claudeCode.hasCompletedFetch
+        case .cursor: store.hasCompletedFetch
+        case nil: true
+        }
+    }
+
+    private var panelLastError: String? {
+        switch displayedSource {
+        case .claudeCode: claudeCode.lastError
+        case .cursor: store.surfacedLastError
+        case nil: nil
+        }
+    }
+
+    private var showsClaudeBranch: Bool {
+        displayedSource == .claudeCode
+    }
 
     private var panelTab: Binding<UsageTab> {
         Binding(
@@ -308,7 +375,9 @@ struct UsagePanel: View {
                 .padding(.bottom, 10)
 
             Group {
-                if !store.hasCompletedFetch, store.isLoading {
+                if displayedSource == nil {
+                    NeitherSourceView()
+                } else if !panelHasCompletedFetch, panelIsLoading {
                     UsageSkeletonView()
                 } else {
                     content
@@ -330,6 +399,10 @@ struct UsagePanel: View {
         .onChange(of: settings.visibleUsageTabRawValues) { _, _ in
             panelTabRaw = settings.normalizedPanelTabSelection(panelTabRaw)
         }
+        .onChange(of: displayedSource) { _, _ in
+            sessionPath = []
+            selectedSkill = nil
+        }
     }
 
     private func openChangeLog(version: String? = nil, releaseNotes: String? = nil) {
@@ -342,6 +415,113 @@ struct UsagePanel: View {
     }
 
     private var header: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if visibleSources.count == 2 {
+                SourceSwitcher(
+                    selection: panelSourceSelection,
+                    cursorTitle: segmentTitle(for: .cursor),
+                    claudeTitle: segmentTitle(for: .claudeCode)
+                )
+                .onChange(of: panelSourceRaw) { _, _ in
+                    MenuBarPanelKeeper.keepOpen()
+                }
+            }
+
+            switch displayedSource {
+            case .claudeCode:
+                claudeHeader
+            case .cursor:
+                cursorHeader
+            case nil:
+                EmptyView()
+            }
+        }
+    }
+
+    private func segmentTitle(for source: UsageSource) -> String {
+        let snapshot = source == .claudeCode ? claudeCode.snapshot : store.snapshot
+        let isPlaceholder: Bool
+        if source == .claudeCode {
+            isPlaceholder = !claudeCode.hasCompletedFetch && claudeCode.lastError == nil
+        } else {
+            isPlaceholder = !store.hasCompletedFetch && store.lastError == nil
+        }
+        return PanelSourceResolver.segmentTitle(
+            source: source,
+            windowDollars: snapshot.windowDollars,
+            isPlaceholder: isPlaceholder
+        )
+    }
+
+    @ViewBuilder
+    private var windowChrome: some View {
+        if panelSnapshot.window.preset == .thisBilling {
+            Text("Since \(panelSnapshot.window.sparklineStartLabel())")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else if settings.usageTimelinePreset == .custom {
+            customRangeButton
+        }
+    }
+
+    private func sourceTrailingControls(showsCommunity: Bool) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            if AppIdentity.isDevBuild {
+                Text("DEV")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(Color.orange))
+                    .accessibilityLabel("Development build")
+            }
+            if showsCommunity {
+                communityButton
+            }
+            timelinePicker
+        }
+    }
+
+    private func refreshSources(reuseEventsIfPossible: Bool = false) async {
+        await store.refresh(reuseEventsIfPossible: reuseEventsIfPossible)
+        await claudeCode.refresh()
+    }
+
+    private var claudeHeader: some View {
+        let recent = claudeCode.snapshot.recentDollars
+        let indexing = claudeCode.indexingProgress
+        let stale = PanelSourceResolver.isStale(
+            hasCompletedFetch: claudeCode.hasCompletedFetch,
+            fetchedAt: claudeCode.snapshot.fetchedAt,
+            refreshIntervalSeconds: settings.refreshIntervalSeconds
+        )
+        let hero = !claudeCode.hasCompletedFetch && claudeCode.lastError == nil
+            ? PanelSourceResolver.placeholderEstimated
+            : MoneyFormat.estimated(claudeCode.snapshot.windowDollars)
+        return ClaudeCodeHeader(
+            hero: hero,
+            isLoading: claudeCode.isLoading,
+            burnText: recent > 0
+                ? "▲ \(MoneyFormat.estimated(recent)) · \(settings.anomalyWindowMinutes)m"
+                : nil,
+            burnTint: claudeCode.burnLevel.swiftUIColor,
+            sparklineCostCents: claudeCode.snapshot.sparklineCostCents,
+            window: claudeCode.snapshot.window,
+            tokenLine: ClaudeTokenLine.string(snapshot: claudeCode.snapshot),
+            unpricedCaption: ClaudeTokenLine.unpricedCaption(claudeCode.unpricedModels),
+            statusCaption: PanelSourceResolver.statusCaption(
+                indexing: indexing,
+                fetchedAt: claudeCode.snapshot.fetchedAt,
+                isShowingCachedData: false,
+                isStale: stale
+            ),
+            statusIsWarning: stale && indexing == nil,
+            windowChrome: { windowChrome },
+            trailing: { sourceTrailingControls(showsCommunity: false) }
+        )
+    }
+
+    private var cursorHeader: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 8) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -482,7 +662,7 @@ struct UsagePanel: View {
         .foregroundStyle(.secondary)
         .fixedSize()
         .onChange(of: settings.usageTimelinePreset) { _, _ in
-            Task { await store.refresh(reuseEventsIfPossible: true) }
+            Task { await refreshSources(reuseEventsIfPossible: true) }
             MenuBarPanelKeeper.keepOpen()
         }
     }
@@ -537,7 +717,7 @@ struct UsagePanel: View {
         let tint = store.burnLevel.swiftUIColor
 
         return Text(
-            "▲ \(MoneyFormat.dollars(store.snapshot.recentDollars)) · \(settings.anomalyWindowMinutes)m"
+            "▲ \(MoneyFormat.string(store.snapshot.recentDollars, style: costStyle)) · \(settings.anomalyWindowMinutes)m"
         )
         .font(.subheadline.weight(.semibold).monospacedDigit())
         .lineLimit(1)
@@ -565,27 +745,30 @@ struct UsagePanel: View {
     @ViewBuilder
     private var content: some View {
         VStack(spacing: 0) {
-            if let error = store.lastError {
+            if let error = panelLastError {
                 ErrorBanner(message: error) {
-                    Task { await store.refresh() }
+                    Task { await refreshSources() }
                     MenuBarPanelKeeper.keepOpen()
                 }
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
             }
 
-            if store.hasCompletedFetch,
-               store.snapshot.windowCostCents == 0,
-               store.snapshot.models.isEmpty,
-               store.snapshot.rootSessions.isEmpty,
-               store.lastError == nil {
-                EmptySpendView(message: store.snapshot.window.emptyStateMessage)
+            if panelHasCompletedFetch,
+               panelSnapshot.windowCostCents == 0,
+               panelSnapshot.models.isEmpty,
+               panelSnapshot.rootSessions.isEmpty,
+               panelLastError == nil {
+                EmptySpendView(
+                    message: panelSnapshot.window.emptyStateMessage(for: displayedSource ?? .cursor),
+                    source: displayedSource ?? .cursor
+                )
             } else if let skill = selectedSkill {
                 SkillDetailView(
                     // Prefer the freshest snapshot copy; fall back to the tapped one.
-                    skill: store.snapshot.skills
+                    skill: panelSnapshot.skills
                         .first { $0.skill == skill.skill } ?? skill,
-                    prompts: store.snapshot.prompts
+                    prompts: panelSnapshot.prompts
                         .filter { $0.skills.contains(skill.skill) },
                     onBack: {
                         selectedSkill = nil
@@ -593,12 +776,12 @@ struct UsagePanel: View {
                     }
                 )
             } else if let selected = sessionPath.last {
-                let session = store.snapshot.session(id: selected.conversationId) ?? selected
+                let session = panelSnapshot.session(id: selected.conversationId) ?? selected
                 SessionDetailView(
                     session: session,
-                    prompts: store.snapshot.prompts(for: session),
-                    subagents: store.snapshot.childSessions(of: session),
-                    windowCostCents: store.snapshot.windowCostCents,
+                    prompts: panelSnapshot.prompts(for: session),
+                    subagents: panelSnapshot.childSessions(of: session),
+                    windowCostCents: panelSnapshot.windowCostCents,
                     onBack: {
                         if !sessionPath.isEmpty {
                             sessionPath.removeLast()
@@ -608,13 +791,17 @@ struct UsagePanel: View {
                     onOpenSubagent: { child in
                         sessionPath.append(child)
                         MenuBarPanelKeeper.keepOpen()
-                    }
+                    },
+                    transcriptPath: showsClaudeBranch
+                        ? claudeCode.transcriptPaths[session.conversationId]
+                        : nil,
+                    includesBranch: showsClaudeBranch
                 )
             } else {
                 controlRow
 
                 if panelTab.wrappedValue == .bench {
-                    BenchView(snapshot: store.snapshot)
+                    BenchView(snapshot: panelSnapshot)
                 } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
@@ -630,10 +817,12 @@ struct UsagePanel: View {
                                 ForEach(filteredModels) { model in
                                     ModelRowView(
                                         model: model,
-                                        windowCostCents: store.snapshot.windowCostCents,
+                                        windowCostCents: panelSnapshot.windowCostCents,
                                         isExpanded: expandedModels.contains(model.id),
                                         reduceMotion: reduceMotion,
                                         showLocationSubtitle: settings.showLocationSubtitle,
+                                        showsStorageBadges: !showsClaudeBranch,
+                                        includesBranch: showsClaudeBranch,
                                         hideArchivedSessions: settings.hideArchivedSessions,
                                         metric: modelsMetric,
                                         metricMaxDollars: maxModelMetricDollars,
@@ -655,17 +844,19 @@ struct UsagePanel: View {
                                 ForEach(filteredSessions) { session in
                                     SessionRowView(
                                         session: session,
-                                        windowCostCents: store.snapshot.windowCostCents,
+                                        windowCostCents: panelSnapshot.windowCostCents,
                                         showModelChips: true,
                                         showShareBar: true,
                                         showLocationSubtitle: settings.showLocationSubtitle,
+                                        showsStorageBadges: !showsClaudeBranch,
+                                        includesBranch: showsClaudeBranch,
                                         onOpen: { openSession(session) }
                                     )
                                     Divider().opacity(0.35)
                                 }
                             }
                         case .skills:
-                            if store.snapshot.skills.isEmpty {
+                            if panelSnapshot.skills.isEmpty {
                                 tabEmptyText("No skill invocations in this window")
                             } else if filteredSkills.isEmpty {
                                 tabEmptyText(ListSearch.noMatchesMessage(sectionSearchText))
@@ -673,7 +864,7 @@ struct UsagePanel: View {
                                 ForEach(filteredSkills) { skill in
                                     SkillRowView(
                                         skill: skill,
-                                        windowCostCents: store.snapshot.windowCostCents,
+                                        windowCostCents: panelSnapshot.windowCostCents,
                                         metric: skillsMetric,
                                         metricMaxDollars: maxSkillMetricDollars,
                                         onOpen: {
@@ -685,7 +876,7 @@ struct UsagePanel: View {
                                 }
                             }
                         case .feed:
-                            if store.snapshot.prompts.isEmpty {
+                            if panelSnapshot.prompts.isEmpty {
                                 tabEmptyText("No prompts found for this window")
                             } else if filteredPrompts.isEmpty {
                                 tabEmptyText(ListSearch.noMatchesMessage(sectionSearchText))
@@ -766,7 +957,7 @@ struct UsagePanel: View {
         case .models, .sessions:
             return true
         case .skills:
-            return !store.snapshot.skills.isEmpty
+            return !panelSnapshot.skills.isEmpty
         case .feed:
             return false
         case .bench:
@@ -800,8 +991,8 @@ struct UsagePanel: View {
     }
 
     private var filteredPrompts: [PromptUsage] {
-        guard ListSearch.isActive(sectionSearchText) else { return store.snapshot.prompts }
-        return store.snapshot.prompts.filter { ListSearch.prompt($0, query: sectionSearchText) }
+        guard ListSearch.isActive(sectionSearchText) else { return panelSnapshot.prompts }
+        return panelSnapshot.prompts.filter { ListSearch.prompt($0, query: sectionSearchText) }
     }
 
     @ViewBuilder
@@ -809,7 +1000,7 @@ struct UsagePanel: View {
         switch panelTab.wrappedValue {
         case .models:
             costMetricPicker(selection: $modelsMetricRaw)
-        case .skills where !store.snapshot.skills.isEmpty:
+        case .skills where !panelSnapshot.skills.isEmpty:
             costMetricPicker(selection: $skillsMetricRaw)
         case .skills:
             EmptyView()
@@ -884,7 +1075,7 @@ struct UsagePanel: View {
     }
 
     private var displayedModels: [ModelUsage] {
-        let models = store.snapshot.models
+        let models = panelSnapshot.models
         switch modelsMetric {
         case .total:
             return models
@@ -896,7 +1087,7 @@ struct UsagePanel: View {
     }
 
     private var displayedSkills: [SkillUsage] {
-        let skills = store.snapshot.skills
+        let skills = panelSnapshot.skills
         let value: (SkillUsage) -> Double
         switch skillsMetric {
         case .total:
@@ -915,7 +1106,7 @@ struct UsagePanel: View {
 
     /// Highest value of the selected per-unit metric; scales the share bars.
     private var maxModelMetricDollars: Double {
-        let models = store.snapshot.models
+        let models = panelSnapshot.models
         switch modelsMetric {
         case .total: return 0
         case .average: return models.map(\.averageCostDollars).max() ?? 0
@@ -924,7 +1115,7 @@ struct UsagePanel: View {
     }
 
     private var maxSkillMetricDollars: Double {
-        let skills = store.snapshot.skills
+        let skills = panelSnapshot.skills
         switch skillsMetric {
         case .total: return 0
         case .average: return skills.map(\.averageCostDollars).max() ?? 0
@@ -942,7 +1133,7 @@ struct UsagePanel: View {
 
     private var visibleSessions: [SessionUsage] {
         // Roots only — subagents live under their parent in session detail.
-        var sessions = store.snapshot.rootSessions
+        var sessions = panelSnapshot.rootSessions
         if settings.hideArchivedSessions {
             sessions = sessions.filter { !$0.isArchived }
         }
@@ -959,7 +1150,7 @@ struct UsagePanel: View {
     }
 
     private func openSession(_ session: SessionUsage) {
-        let resolved = store.snapshot.session(id: session.conversationId) ?? session
+        let resolved = panelSnapshot.session(id: session.conversationId) ?? session
         panelTabRaw = UsageTab.sessions.rawValue
         sectionSearchText = ""
         isSectionSearchPresented = false
@@ -1009,13 +1200,13 @@ struct UsagePanel: View {
 
                 HStack(spacing: 8) {
                     Button {
-                        Task { await store.refresh() }
+                        Task { await refreshSources() }
                         MenuBarPanelKeeper.keepOpen()
                     } label: {
                         footerIcon("arrow.clockwise")
                     }
                     .buttonStyle(.borderless)
-                    .disabled(store.isLoading)
+                    .disabled(panelIsLoading)
                     .keyboardShortcut("r")
                     .help("Refresh")
                     .glassEffect(.regular.interactive())
