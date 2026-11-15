@@ -1,5 +1,13 @@
 import SwiftUI
 
+extension View {
+    /// Model ids stay on one line and shorten from the middle.
+    func modelDisplayName() -> some View {
+        lineLimit(1)
+            .truncationMode(.middle)
+    }
+}
+
 struct ShareBar: View {
     let fraction: Double
     /// Drawn even at 0% so model rows keep a visible sliver. Pool bars pass 0.
@@ -79,8 +87,7 @@ struct ModelRowView: View {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
                             Text(model.model)
                                 .font(.callout.weight(.medium))
-                                .lineLimit(1)
-                                .truncationMode(.middle)
+                                .modelDisplayName()
                             Spacer(minLength: 8)
                             Text(MoneyFormat.string(displayDollars, style: costStyle))
                                 .font(.callout.monospacedDigit().weight(.semibold))

@@ -39,10 +39,6 @@ enum CostMetric: String, CaseIterable, Identifiable {
     }
 }
 
-/// Two columns: the included allowance pools as rings (percent of a fixed
-/// cap) on the left; on the right the cycle's spend as one stacked bar
-/// (included vs on-demand share of the total) with `timeline` filling the
-/// remaining height so both columns end level with the rings.
 /// Ring used by the Cursor included pools and the Claude Code plan limits.
 struct PercentGauge: View {
     let title: String
@@ -115,7 +111,8 @@ struct PercentGauge: View {
     }
 }
 
-/// Blue means covered by the plan; orange means paying.
+/// Allowance rings on the left, this cycle's included vs on-demand bar on the right.
+/// The sparkline is drawn above the block. Blue is included; orange is on-demand.
 private struct IncludedPoolsGauges<Timeline: View>: View {
     /// Nil until Cursor reports the pools. The rings stay on screen either way.
     let pools: IncludedPools?
@@ -141,8 +138,8 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
         return count
     }
 
-    /// Three rings stay in the allowance column. Fewer rings keep the larger size.
-    private var ringSize: CGFloat { ringCount >= 3 ? 72 : 100 }
+    /// Three rings stay in the allowance column at 88pt. Fewer rings keep the larger size.
+    private var ringSize: CGFloat { ringCount >= 3 ? 88 : 100 }
     private var ringSpacing: CGFloat { ringCount >= 3 ? 8 : 24 }
     private static var includedTint: Color { .accentColor }
     private static var onDemandTint: Color { .orange }
@@ -402,6 +399,7 @@ struct UsagePanel: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 14)
                 .padding(.bottom, 10)
+                .fixedSize(horizontal: false, vertical: true)
 
             Group {
                 if displayedSource == nil {
@@ -412,7 +410,7 @@ struct UsagePanel: View {
                     content
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, minHeight: 220, maxHeight: .infinity, alignment: .top)
 
             footer
                 .padding(.horizontal, 12)
@@ -557,6 +555,7 @@ struct UsagePanel: View {
             weeklySonnet: claudeCode.limits?.weeklySonnet,
             extraUsage: claudeCode.limits?.extraUsage,
             limitsUnavailable: claudeCode.limitsError != nil,
+            stats: PanelStats.make(snapshot: claudeCode.snapshot, style: costStyle),
             unpricedCaption: ClaudeTokenLine.unpricedCaption(claudeCode.unpricedModels),
             statusCaption: PanelSourceResolver.statusCaption(
                 indexing: indexing,
@@ -658,19 +657,22 @@ struct UsagePanel: View {
                 customRangeButton
             }
 
+            SparklineView(
+                sparklineCostCents: store.snapshot.sparklineCostCents,
+                window: store.snapshot.window,
+                now: Date()
+            )
+
             IncludedPoolsGauges(
                 pools: store.includedPools,
                 spendSummary: store.spendSummary,
                 cycleSpend: store.cycleSpend,
                 grokBot: store.grokBotUsage
             ) {
-                SparklineView(
-                    sparklineCostCents: store.snapshot.sparklineCostCents,
-                    window: store.snapshot.window,
-                    now: Date(),
-                    chartHeight: nil
-                )
+                EmptyView()
             }
+
+            PanelStatsGrid(stats: PanelStats.make(snapshot: store.snapshot, style: costStyle))
 
             if let statusCaption {
                 Text(statusCaption)

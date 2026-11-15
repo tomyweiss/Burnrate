@@ -57,8 +57,8 @@ enum ClaudeLimitGauges {
     }
 }
 
-/// Claude Code panel header: estimated hero, sparkline, and the token line that
-/// plan-limit gauges replace when those limits are enabled.
+/// Claude Code panel header: estimated hero, sparkline, plan-limit rings, then the
+/// stats grid and the token line.
 struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
     let hero: String
     let isLoading: Bool
@@ -74,6 +74,7 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
     var weeklySonnet: ClaudeLimitWindow?
     var extraUsage: ClaudeExtraUsage?
     var limitsUnavailable: Bool = false
+    var stats: [PanelStat] = []
     let unpricedCaption: String?
     let statusCaption: String?
     let statusIsWarning: Bool
@@ -161,13 +162,17 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
                                         title: gauge.title,
                                         percent: gauge.percent,
                                         detail: gauge.detail,
-                                        diameter: 72
+                                        diameter: 88
                                     )
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
+                }
+
+                if !stats.isEmpty {
+                    PanelStatsGrid(stats: stats)
                 }
 
                 Text(tokenLine)
