@@ -48,6 +48,16 @@ struct PercentGauge: View {
 
     private static var ringWidth: CGFloat { 9 }
 
+    /// Header content width: the 540pt panel minus 16pt padding on each side.
+    static let headerContentWidth: CGFloat = 508
+
+    /// Largest ring that fits `count` rings in one header row, between 72 and 120pt.
+    static func fittedDiameter(count: Int, spacing: CGFloat) -> CGFloat {
+        guard count > 0 else { return 120 }
+        let fit = (headerContentWidth - spacing * CGFloat(count - 1)) / CGFloat(count)
+        return min(120, max(72, fit.rounded(.down)))
+    }
+
     var body: some View {
         let shown = percent.map(IncludedPools.displayPercent)
         let fill = shown.map { min(CGFloat($0), 100) / 100 } ?? 0
@@ -138,14 +148,13 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
         return count
     }
 
-    /// Three rings use 88pt. Fewer rings keep the larger size.
-    private var ringSize: CGFloat { ringCount >= 3 ? 88 : 100 }
     private var ringSpacing: CGFloat { 24 }
+    private var ringSize: CGFloat { PercentGauge.fittedDiameter(count: ringCount, spacing: ringSpacing) }
     private static var includedTint: Color { .accentColor }
     private static var onDemandTint: Color { .orange }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 8) {
             allowanceCluster
             spendCluster
                 .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -157,7 +166,7 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
     // MARK: Allowance
 
     private var allowanceCluster: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 6) {
             clusterHeader("Included allowance")
 
             HStack(alignment: .top, spacing: ringSpacing) {
@@ -196,8 +205,8 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
     }
 
     private var spendCluster: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline) {
                     clusterHeader("Spend this cycle")
                     Spacer(minLength: 8)
@@ -693,6 +702,11 @@ struct UsagePanel: View {
             weeklySonnet: claudeCode.limits?.weeklySonnet,
             extraUsage: claudeCode.limits?.extraUsage,
             limitsUnavailable: claudeCode.limitsError != nil,
+            onEnablePlanLimits: {
+                settings.claudeLimitsEnabled = true
+                Task { await claudeCode.refresh() }
+                MenuBarPanelKeeper.keepOpen()
+            },
             stats: PanelStats.make(snapshot: claudeCode.snapshot, style: costStyle),
             unpricedCaption: ClaudeTokenLine.unpricedCaption(claudeCode.unpricedModels),
             statusCaption: PanelSourceResolver.statusCaption(
@@ -708,7 +722,7 @@ struct UsagePanel: View {
     }
 
     private var cursorHeader: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .center, spacing: 8) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .center, spacing: 8) {

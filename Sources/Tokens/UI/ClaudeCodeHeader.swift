@@ -74,6 +74,7 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
     var weeklySonnet: ClaudeLimitWindow?
     var extraUsage: ClaudeExtraUsage?
     var limitsUnavailable: Bool = false
+    var onEnablePlanLimits: (() -> Void)? = nil
     var stats: [PanelStat] = []
     let unpricedCaption: String?
     let statusCaption: String?
@@ -84,7 +85,7 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .center, spacing: 8) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .center, spacing: 8) {
@@ -180,35 +181,63 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
         }
     }
 
-    @ViewBuilder
+    private static var ringSpacing: CGFloat { 16 }
+
+    /// Placeholder `5h` / `Weekly` rings stand in until limits load, and while
+    /// plan limits are off or unavailable, so the header always has its gauges.
+    private var shownGauges: [ClaudeLimitGauge] {
+        let placeholders = [
+            ClaudeLimitGauge(title: "5h", percent: nil, detail: nil),
+            ClaudeLimitGauge(title: "Weekly", percent: nil, detail: nil)
+        ]
+        guard showsPlanLimits, !limitsUnavailable else { return placeholders }
+        let gauges = ClaudeLimitGauges.make(
+            fiveHour: fiveHour,
+            weekly: weekly,
+            weeklyOpus: weeklyOpus,
+            weeklySonnet: weeklySonnet,
+            extraUsage: extraUsage
+        )
+        return gauges.isEmpty ? placeholders : gauges
+    }
+
     private var planLimitRings: some View {
-        if showsPlanLimits {
-            if limitsUnavailable {
-                Text(ClaudeLimitsClient.unavailable)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            } else {
-                let gauges = ClaudeLimitGauges.make(
-                    fiveHour: fiveHour,
-                    weekly: weekly,
-                    weeklyOpus: weeklyOpus,
-                    weeklySonnet: weeklySonnet,
-                    extraUsage: extraUsage
-                )
-                if !gauges.isEmpty {
-                    GaugeWrapLayout(spacing: 16) {
-                        ForEach(gauges, id: \.title) { gauge in
-                            PercentGauge(
-                                title: gauge.title,
-                                percent: gauge.percent,
-                                detail: gauge.detail,
-                                diameter: 88
-                            )
-                        }
+        let gauges = shownGauges
+        let diameter = PercentGauge.fittedDiameter(count: gauges.count, spacing: Self.ringSpacing)
+        return VStack(alignment: .leading, spacing: 4) {
+            Text("Plan limits")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            HStack(alignment: .center, spacing: Self.ringSpacing) {
+                GaugeWrapLayout(spacing: Self.ringSpacing) {
+                    ForEach(gauges, id: \.title) { gauge in
+                        PercentGauge(
+                            title: gauge.title,
+                            percent: gauge.percent,
+                            detail: gauge.detail,
+                            diameter: diameter
+                        )
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                if !showsPlanLimits, let onEnablePlanLimits {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Button("Show plan limits", action: onEnablePlanLimits)
+                            .controlSize(.small)
+                        Text("Reads your Claude Code login from Keychain. macOS may ask once.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } else if showsPlanLimits, limitsUnavailable {
+                    Text(ClaudeLimitsClient.unavailable)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
