@@ -39,10 +39,14 @@ final class UsageStore {
     /// a full-cycle event fetch, so it runs far less often than the usage poll.
     private let calibrationInterval: TimeInterval = 30 * 60
 
-    init(settings: SettingsStore, enableAnomalyAlerts: Bool = true) {
+    convenience init(settings: SettingsStore, enableAnomalyAlerts: Bool = true) {
+        self.init(settings: settings, anomalyMonitor: enableAnomalyAlerts ? AnomalyMonitor() : nil)
+    }
+
+    init(settings: SettingsStore, anomalyMonitor: AnomalyMonitor?) {
         self.settings = settings
-        self.anomalyMonitor = enableAnomalyAlerts ? AnomalyMonitor() : nil
-        if enableAnomalyAlerts {
+        self.anomalyMonitor = anomalyMonitor
+        if anomalyMonitor != nil {
             NotificationPresenter.shared.install()
         }
     }

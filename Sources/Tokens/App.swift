@@ -5,6 +5,7 @@ import AppKit
 struct TokensApp: App {
     @State private var settings: SettingsStore
     @State private var store: UsageStore
+    @State private var claudeCodeStore: ClaudeCodeStore
     @State private var updates: UpdateManager
     @State private var community: CommunityStore
     @State private var interactionTracker: InteractionTracker
@@ -17,14 +18,18 @@ struct TokensApp: App {
         let settings = SettingsStore()
         FailureReporter.isEnabled = { true }
         let interactionTracker = InteractionTracker()
-        let store = UsageStore(settings: settings)
+        let anomalyMonitor = AnomalyMonitor()
+        let store = UsageStore(settings: settings, anomalyMonitor: anomalyMonitor)
+        let claudeCodeStore = ClaudeCodeStore(settings: settings, anomalyMonitor: anomalyMonitor)
         let community = CommunityStore(settings: settings, interactionTracker: interactionTracker)
         store.setCommunityStore(community)
         community.setUsageStore(store)
         Task { await community.migrateNicknameToCursorDefaultIfNeeded() }
         store.start()
+        claudeCodeStore.start()
         _settings = State(initialValue: settings)
         _store = State(initialValue: store)
+        _claudeCodeStore = State(initialValue: claudeCodeStore)
         _updates = State(initialValue: UpdateManager(settings: settings))
         _community = State(initialValue: community)
         _interactionTracker = State(initialValue: interactionTracker)
@@ -88,8 +93,10 @@ struct TokensApp: App {
                 community: community,
                 interactionTracker: interactionTracker
             )
+                .environment(claudeCodeStore)
                 .onAppear {
                     store.start()
+                    claudeCodeStore.start()
                     updates.autoCheckIfNeeded()
                 }
         } label: {
