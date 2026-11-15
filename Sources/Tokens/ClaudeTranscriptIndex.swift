@@ -82,7 +82,8 @@ actor ClaudeTranscriptIndex {
     ///
     /// Refreshes files whose mtime is at least `sinceMs`, newest first. Calls `progress(done, total)`
     /// when a parent session's files in this pass are all processed. `total` is the number of
-    /// distinct session ids in the pass. Subagent files are still read. Saves the cache once.
+    /// distinct session ids in the pass. Subagent files are still read. Saves the cache when a file
+    /// was read, added, or replaced.
     func refresh(
         sinceMs: Double,
         progress: @Sendable (Int, Int) -> Void = { _, _ in }
@@ -95,8 +96,11 @@ actor ClaudeTranscriptIndex {
             chunkBytes: readChunkBytes,
             progress: progress
         )
+        let changed = updated != files
         files = updated
-        Self.save(updated, to: cacheURL)
+        if changed {
+            Self.save(updated, to: cacheURL)
+        }
         return Self.ordered(updated)
     }
 

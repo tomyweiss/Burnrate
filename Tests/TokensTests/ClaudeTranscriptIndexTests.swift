@@ -421,6 +421,29 @@ import TokensCore
     #expect(await index.sessionCount() == 1)
 }
 
+@Test func claudeIndexSkipsRewritingTheCacheWhenNothingChanged() async throws {
+    let fixture = try ClaudeIndexFixture()
+    defer { fixture.cleanup() }
+    try fixture.write(
+        "proj/sess-1.jsonl",
+        try ClaudeIndexLines.usage(id: "msg_1", sessionId: "sess-1") + "\n",
+        mtime: ClaudeIndexFixture.date(10_000)
+    )
+
+    let index = ClaudeTranscriptIndex(projectsRoot: fixture.root, cacheURL: fixture.cacheURL)
+    _ = await index.refresh(sinceMs: 0)
+    let stamped = ClaudeIndexFixture.date(1_700_000_000)
+    try FileManager.default.setAttributes(
+        [.modificationDate: stamped],
+        ofItemAtPath: fixture.cacheURL.path
+    )
+
+    _ = await index.refresh(sinceMs: 0)
+    let attrs = try FileManager.default.attributesOfItem(atPath: fixture.cacheURL.path)
+    let mtime = try #require(attrs[.modificationDate] as? Date)
+    #expect(mtime == stamped)
+}
+
 @Test func claudeIndexUsesTheBurnrateApplicationSupportCache() {
     #expect(ClaudeTranscriptIndex.defaultRoot.path.hasSuffix("/.claude/projects"))
     let cache = ClaudeTranscriptIndex.defaultCacheURL
