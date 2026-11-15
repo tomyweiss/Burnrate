@@ -207,11 +207,13 @@ final class ClaudeCodeStore {
         }
 
         guard let data = planLimits.readKeychain() else {
-            limitsError = ClaudeLimitsClient.unavailable
+            limitsError = ClaudeLimitsClient.noLogin
             return
         }
         switch ClaudeOAuthToken.extract(from: data, now: now) {
-        case .expired, .unreadable:
+        case .expired:
+            limitsError = ClaudeLimitsClient.loginExpired
+        case .unreadable:
             limitsError = ClaudeLimitsClient.unavailable
         case .valid(let accessToken):
             lastLimitsFetchAt = now
@@ -228,7 +230,11 @@ final class ClaudeCodeStore {
                     clearPlanLimits()
                     return
                 }
-                limitsError = ClaudeLimitsClient.unavailable
+                if case ClaudeLimitsClientError.httpStatus(401) = error {
+                    limitsError = ClaudeLimitsClient.loginExpired
+                } else {
+                    limitsError = ClaudeLimitsClient.unavailable
+                }
             }
         }
     }

@@ -704,7 +704,7 @@ struct UsagePanel: View {
             weeklyOpus: claudeCode.limits?.weeklyOpus,
             weeklySonnet: claudeCode.limits?.weeklySonnet,
             extraUsage: claudeCode.limits?.extraUsage,
-            limitsUnavailable: claudeCode.limitsError != nil,
+            limitsMessage: claudeCode.limitsError,
             onEnablePlanLimits: {
                 settings.claudeLimitsEnabled = true
                 Task { await claudeCode.refresh() }

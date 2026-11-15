@@ -305,7 +305,19 @@ import TokensCore
     #expect(harness.probe.keychainReads == 1)
     #expect(harness.probe.fetches.isEmpty)
     #expect(harness.store.limits == nil)
-    #expect(harness.store.limitsError == "Limits unavailable")
+    #expect(harness.store.limitsError == ClaudeLimitsClient.loginExpired)
+}
+
+@Test @MainActor func claudeLimitsRejectedTokenReadsAsExpired() async throws {
+    let harness = try LimitsHarness()
+    defer { harness.cleanup() }
+    harness.settings.claudeLimitsEnabled = true
+    harness.probe.data = try claudeLimitsKeychain(token: "token-a", expiresAtMs: 1_800_000_000_000)
+    harness.probe.fetchError = ClaudeLimitsClientError.httpStatus(401)
+
+    await harness.store.refresh()
+
+    #expect(harness.store.limitsError == ClaudeLimitsClient.loginExpired)
 }
 
 @Test @MainActor func claudeLimitsSuccessSetsWindows() async throws {

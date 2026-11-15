@@ -25,6 +25,8 @@ struct ClaudePlanLimits {
 /// https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor/issues/202
 enum ClaudeLimitsClient {
     static let unavailable = "Limits unavailable"
+    static let loginExpired = "Claude Code login expired. Run Claude Code to renew it."
+    static let noLogin = "No Claude Code login found. Sign in to Claude Code."
     static let minimumInterval: TimeInterval = 60
     static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 

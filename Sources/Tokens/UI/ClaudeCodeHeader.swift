@@ -73,7 +73,7 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
     var weeklyOpus: ClaudeLimitWindow?
     var weeklySonnet: ClaudeLimitWindow?
     var extraUsage: ClaudeExtraUsage?
-    var limitsUnavailable: Bool = false
+    var limitsMessage: String?
     var onEnablePlanLimits: (() -> Void)? = nil
     var stats: [PanelStat] = []
     let unpricedCaption: String?
@@ -191,7 +191,7 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
             ClaudeLimitGauge(title: "5h", percent: nil, detail: nil),
             ClaudeLimitGauge(title: "Weekly", percent: nil, detail: nil)
         ]
-        guard showsPlanLimits, !limitsUnavailable else { return placeholders }
+        guard showsPlanLimits, limitsMessage == nil else { return placeholders }
         let gauges = ClaudeLimitGauges.make(
             fiveHour: fiveHour,
             weekly: weekly,
@@ -205,7 +205,7 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
     private var planLimitRings: some View {
         let gauges = shownGauges
         let showsEnable = !showsPlanLimits && onEnablePlanLimits != nil
-        let showsUnavailable = showsPlanLimits && limitsUnavailable
+        let showsUnavailable = showsPlanLimits && limitsMessage != nil
         let diameter = PercentGauge.fittedDiameter(
             count: gauges.count,
             spacing: Self.ringSpacing,
@@ -238,8 +238,8 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
                     }
                     .frame(width: Self.noteWidth, height: diameter, alignment: .leading)
                 } else if showsUnavailable {
-                    Text(ClaudeLimitsClient.unavailable)
-                        .font(.subheadline)
+                    Text(limitsMessage ?? ClaudeLimitsClient.unavailable)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(width: Self.noteWidth, height: diameter, alignment: .leading)
