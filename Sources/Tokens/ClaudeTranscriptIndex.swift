@@ -81,7 +81,8 @@ actor ClaudeTranscriptIndex {
     /// Returns every indexed file, including retained deleted files and files not re-read this pass.
     ///
     /// Refreshes files whose mtime is at least `sinceMs`, newest first. Calls `progress(done, total)`
-    /// after each of those files, then saves the cache once.
+    /// when a parent session's files in this pass are all processed. `total` is the number of
+    /// distinct session ids in the pass. Subagent files are still read. Saves the cache once.
     func refresh(
         sinceMs: Double,
         progress: @Sendable (Int, Int) -> Void = { _, _ in }
@@ -120,14 +121,23 @@ actor ClaudeTranscriptIndex {
     ) async -> [String: ClaudeSessionFile] {
         var files = existing
         let discovered = discover(root: root, sinceMs: sinceMs)
-        let total = discovered.count
+        var remaining: [String: Int] = [:]
+        remaining.reserveCapacity(discovered.count)
+        for item in discovered {
+            remaining[item.sessionId, default: 0] += 1
+        }
+        let total = remaining.count
         var done = 0
         for item in discovered {
             if let file = refreshed(item, existing: files[item.path], chunkBytes: chunkBytes) {
                 files[file.path] = file
             }
-            done += 1
-            progress(done, total)
+            let left = remaining[item.sessionId, default: 1] - 1
+            remaining[item.sessionId] = left
+            if left == 0 {
+                done += 1
+                progress(done, total)
+            }
             await Task.yield()
         }
         return files

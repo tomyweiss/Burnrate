@@ -42,8 +42,8 @@ import TokensCore
     }
 
     #expect(files.count == 2)
-    #expect(progress.done == [1, 2])
-    #expect(progress.total == [2, 2])
+    #expect(progress.done == [1])
+    #expect(progress.total == [1])
     #expect(await index.sessionCount() == 1)
 
     let sessionFile = try #require(files.first { $0.sessionId == "sess-1" && $0.agentId == nil })
@@ -72,6 +72,32 @@ import TokensCore
     #expect(subagent.prompts.map(\.text) == ["sub prompt"])
     #expect(subagent.prompts.first?.sessionId == "sess-1")
     #expect(subagent.prompts.first?.skills == [])
+}
+
+@Test func claudeIndexReportsProgressOverParentSessions() async throws {
+    let fixture = try ClaudeIndexFixture()
+    defer { fixture.cleanup() }
+    let line = try ClaudeIndexLines.usage(id: "msg_a", sessionId: "sess-a")
+    try fixture.write("proj/sess-a.jsonl", line + "\n", mtime: ClaudeIndexFixture.date(30))
+    try fixture.write(
+        "proj/sess-a/subagents/agent-xyz.jsonl",
+        try ClaudeIndexLines.usage(id: "msg_sub", sessionId: "sess-a", sidechain: true) + "\n",
+        mtime: ClaudeIndexFixture.date(20)
+    )
+    try fixture.write(
+        "proj/sess-b/subagents/agent-only.jsonl",
+        try ClaudeIndexLines.usage(id: "msg_b", sessionId: "sess-b", sidechain: true) + "\n",
+        mtime: ClaudeIndexFixture.date(10)
+    )
+
+    let progress = ProgressLog()
+    let index = ClaudeTranscriptIndex(projectsRoot: fixture.root, cacheURL: fixture.cacheURL)
+    _ = await index.refresh(sinceMs: 0) { done, total in
+        progress.append(done, total)
+    }
+
+    #expect(progress.done == [1, 2])
+    #expect(progress.total == [2, 2])
 }
 
 @Test func claudeIndexAppendsOnlyNewLinesAndAdvancesOffset() async throws {
