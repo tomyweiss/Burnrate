@@ -181,7 +181,8 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
         }
     }
 
-    private static var ringSpacing: CGFloat { 16 }
+    private static var ringSpacing: CGFloat { 12 }
+    private static var noteWidth: CGFloat { 150 }
 
     /// Placeholder `5h` / `Weekly` rings stand in until limits load, and while
     /// plan limits are off or unavailable, so the header always has its gauges.
@@ -203,26 +204,30 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
 
     private var planLimitRings: some View {
         let gauges = shownGauges
-        let diameter = PercentGauge.fittedDiameter(count: gauges.count, spacing: Self.ringSpacing)
+        let showsEnable = !showsPlanLimits && onEnablePlanLimits != nil
+        let showsUnavailable = showsPlanLimits && limitsUnavailable
+        let diameter = PercentGauge.fittedDiameter(
+            count: gauges.count,
+            spacing: Self.ringSpacing,
+            reserving: showsEnable || showsUnavailable ? Self.noteWidth : 0
+        )
         return VStack(alignment: .leading, spacing: 4) {
             Text("Plan limits")
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
 
-            HStack(alignment: .center, spacing: Self.ringSpacing) {
-                GaugeWrapLayout(spacing: Self.ringSpacing) {
-                    ForEach(gauges, id: \.title) { gauge in
-                        PercentGauge(
-                            title: gauge.title,
-                            percent: gauge.percent,
-                            detail: gauge.detail,
-                            diameter: diameter
-                        )
-                    }
+            GaugeWrapLayout(spacing: Self.ringSpacing) {
+                ForEach(gauges, id: \.title) { gauge in
+                    PercentGauge(
+                        title: gauge.title,
+                        percent: gauge.percent,
+                        detail: gauge.detail,
+                        diameter: diameter
+                    )
                 }
 
-                if !showsPlanLimits, let onEnablePlanLimits {
+                if showsEnable, let onEnablePlanLimits {
                     VStack(alignment: .leading, spacing: 4) {
                         Button("Show plan limits", action: onEnablePlanLimits)
                             .controlSize(.small)
@@ -231,25 +236,30 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                } else if showsPlanLimits, limitsUnavailable {
+                    .frame(width: Self.noteWidth, height: diameter, alignment: .leading)
+                } else if showsUnavailable {
                     Text(ClaudeLimitsClient.unavailable)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(width: Self.noteWidth, height: diameter, alignment: .leading)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity)
         }
     }
 }
 
-/// Keeps each gauge at its own size and wraps onto a second row when the
-/// panel is too narrow for one row.
-private struct GaugeWrapLayout: Layout {
+/// Keeps each gauge at its own size, spreads each row so the gaps between
+/// gauges and at both edges are equal (at least `spacing`), and wraps onto a
+/// second row when the panel is too narrow for one row.
+struct GaugeWrapLayout: Layout {
     var spacing: CGFloat
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let packed = rows(fitting: proposal.width ?? .greatestFiniteMagnitude, subviews: subviews)
-        let width = packed.map(\.width).max() ?? 0
+        let natural = packed.map { $0.width + spacing * 2 }.max() ?? 0
+        let width = proposal.width.map { $0.isFinite ? $0 : natural } ?? natural
         let gaps = spacing * CGFloat(max(packed.count - 1, 0))
         let height = packed.reduce(CGFloat(0)) { $0 + $1.height } + gaps
         return CGSize(width: width, height: height)
@@ -259,14 +269,16 @@ private struct GaugeWrapLayout: Layout {
         let packed = rows(fitting: bounds.width, subviews: subviews)
         var y = bounds.minY
         for row in packed {
-            var x = bounds.minX
+            let itemsWidth = row.items.reduce(CGFloat(0)) { $0 + $1.size.width }
+            let gap = max(spacing, (bounds.width - itemsWidth) / CGFloat(row.items.count + 1))
+            var x = bounds.minX + gap
             for item in row.items {
                 item.view.place(
                     at: CGPoint(x: x, y: y),
                     anchor: .topLeading,
                     proposal: ProposedViewSize(width: item.size.width, height: item.size.height)
                 )
-                x += item.size.width + spacing
+                x += item.size.width + gap
             }
             y += row.height + spacing
         }
@@ -299,7 +311,7 @@ private struct GaugeWrapLayout: Layout {
 
         for view in subviews {
             let size = view.sizeThatFits(.unspecified)
-            let needed = items.isEmpty ? size.width : width + spacing + size.width
+            let needed = (items.isEmpty ? size.width : width + spacing + size.width) + spacing * 2
             if !items.isEmpty, needed > maxWidth {
                 flush()
             }

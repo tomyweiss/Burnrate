@@ -51,10 +51,13 @@ struct PercentGauge: View {
     /// Header content width: the 540pt panel minus 16pt padding on each side.
     static let headerContentWidth: CGFloat = 508
 
-    /// Largest ring that fits `count` rings in one header row, between 72 and 120pt.
-    static func fittedDiameter(count: Int, spacing: CGFloat) -> CGFloat {
+    /// Largest ring that fits `count` rings in one header row with at least
+    /// `spacing` between rings and at both edges, between 72 and 120pt.
+    /// `reserving` is the width of one more item sharing the row.
+    static func fittedDiameter(count: Int, spacing: CGFloat, reserving: CGFloat = 0) -> CGFloat {
         guard count > 0 else { return 120 }
-        let fit = (headerContentWidth - spacing * CGFloat(count - 1)) / CGFloat(count)
+        let items = count + (reserving > 0 ? 1 : 0)
+        let fit = (headerContentWidth - reserving - spacing * CGFloat(items + 1)) / CGFloat(count)
         return min(120, max(72, fit.rounded(.down)))
     }
 
@@ -169,7 +172,7 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
         VStack(alignment: .leading, spacing: 6) {
             clusterHeader("Included allowance")
 
-            HStack(alignment: .top, spacing: ringSpacing) {
+            GaugeWrapLayout(spacing: ringSpacing) {
                 percentGauge("Cursor models", percent: pools?.cursorModelsPercent)
                     .help("Share of the Cursor models pool used this billing cycle")
                 if showsOtherModelsRing {

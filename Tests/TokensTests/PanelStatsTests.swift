@@ -197,9 +197,10 @@ private func panelSession(_ id: String, parent: String? = nil) -> SessionUsage {
 }
 
 @Test func gaugeDiameterFillsOneHeaderRow() {
-    #expect(PercentGauge.fittedDiameter(count: 2, spacing: 16) == 120)
+    #expect(PercentGauge.fittedDiameter(count: 2, spacing: 12) == 120)
     #expect(PercentGauge.fittedDiameter(count: 3, spacing: 24) == 120)
-    #expect(PercentGauge.fittedDiameter(count: 4, spacing: 16) == 115)
-    #expect(PercentGauge.fittedDiameter(count: 5, spacing: 16) == 88)
+    #expect(PercentGauge.fittedDiameter(count: 4, spacing: 16) == 107)
+    #expect(PercentGauge.fittedDiameter(count: 5, spacing: 12) == 87)
     #expect(PercentGauge.fittedDiameter(count: 8, spacing: 16) == 72)
+    #expect(PercentGauge.fittedDiameter(count: 2, spacing: 12, reserving: 150) == 120)
 }
