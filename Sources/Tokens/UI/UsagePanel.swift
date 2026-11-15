@@ -111,7 +111,7 @@ struct PercentGauge: View {
     }
 }
 
-/// Allowance rings on the left, this cycle's included vs on-demand bar on the right.
+/// Allowance rings, then this cycle's included vs on-demand bar on its own row.
 /// The sparkline is drawn above the block. Blue is included; orange is on-demand.
 private struct IncludedPoolsGauges<Timeline: View>: View {
     /// Nil until Cursor reports the pools. The rings stay on screen either way.
@@ -138,19 +138,19 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
         return count
     }
 
-    /// Three rings stay in the allowance column at 88pt. Fewer rings keep the larger size.
+    /// Three rings use 88pt. Fewer rings keep the larger size.
     private var ringSize: CGFloat { ringCount >= 3 ? 88 : 100 }
-    private var ringSpacing: CGFloat { ringCount >= 3 ? 8 : 24 }
+    private var ringSpacing: CGFloat { 24 }
     private static var includedTint: Color { .accentColor }
     private static var onDemandTint: Color { .orange }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 24) {
+        VStack(alignment: .leading, spacing: 14) {
             allowanceCluster
             spendCluster
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -218,7 +218,6 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
             .help("How this cycle's spend splits between the included allowance and on-demand")
 
             timeline()
-                .frame(maxHeight: .infinity)
         }
     }
 
