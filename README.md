@@ -129,7 +129,8 @@ spend across the active window. A timeline picker switches between
 **Today**, **Last 24h**, **Last 7d**, and **This billing** (configurable
 billing day and timezone). The timeline is shared by both sources.
 
-In Claude Code, every dollar starts with `~`. Under the total: "Estimated at
+In Claude Code, every estimated dollar starts with `~`; extra usage is
+Anthropic's own credit count, so it has none. Under the total: "Estimated at
 API list prices · not your bill". The header shows the estimated window total,
 a burn pill, and a token line. With plan limits on, 5-hour, weekly, and
 per-model weekly gauges sit above that token line, plus extra usage when that
