@@ -3,6 +3,7 @@ import Testing
 
 private func cursorSource(
     enabled: Bool = true,
+    available: Bool = true,
     burnLevel: BurnLevel = .calm,
     spend: Bool = false,
     cursor: Bool = false,
@@ -13,6 +14,7 @@ private func cursorSource(
 ) -> MenuBarState.Cursor {
     MenuBarState.Cursor(
         enabled: enabled,
+        available: available,
         burnLevel: burnLevel,
         showsWindowSpend: spend,
         showsCursorModels: cursor,
@@ -128,6 +130,44 @@ private func claudeSource(
     #expect(shown.statusText == "$12.40 · 5h 62% · wk 34%")
 }
 
+@Test func menuBarClaudeOnlyDropsCursorWindowSpend() {
+    let presentation = MenuBarState.presentation(
+        cursor: cursorSource(available: false, spend: true, cursor: true, other: true, grok: true),
+        claude: claudeSource(spend: true)
+    )
+    #expect(presentation.statusText == "~$31.20")
+}
+
+@Test func menuBarDisabledCursorDropsCursorFigures() {
+    let presentation = MenuBarState.presentation(
+        cursor: cursorSource(enabled: false, spend: true),
+        claude: claudeSource(spend: true)
+    )
+    #expect(presentation.statusText == "~$31.20")
+}
+
+@Test func menuBarClaudeOnlyPlaceholder() {
+    let presentation = MenuBarState.presentation(
+        cursor: cursorSource(available: false, spend: true, spendIsPlaceholder: true),
+        claude: claudeSource(spend: true, dollars: nil, spendIsPlaceholder: true)
+    )
+    #expect(presentation.statusText == "~$—")
+}
+
+@Test func menuBarKeepsCursorFiguresWhenClaudeCannotReplaceIt() {
+    let unavailable = MenuBarState.presentation(
+        cursor: cursorSource(available: false, spend: true),
+        claude: claudeSource(enabled: false, spend: true)
+    )
+    #expect(unavailable.statusText == "$12.40")
+
+    let missing = MenuBarState.presentation(
+        cursor: cursorSource(available: false, spend: true),
+        claude: claudeSource(installed: false, spend: true)
+    )
+    #expect(missing.statusText == "$12.40")
+}
+
 @Test func menuBarClaudePlaceholderBeforeFirstIndex() {
     let presentation = MenuBarState.presentation(
         cursor: cursorSource(),
@@ -140,6 +180,16 @@ private func claudeSource(
     #expect(
         ClaudeCodeHint.shouldShow(
             claudeInstalled: true,
+            claudeEnabled: true,
+            cursorAvailable: true,
+            showsClaudeSpend: false,
+            hintDismissed: false
+        )
+    )
+    #expect(
+        !ClaudeCodeHint.shouldShow(
+            claudeInstalled: true,
+            claudeEnabled: false,
             cursorAvailable: true,
             showsClaudeSpend: false,
             hintDismissed: false
@@ -148,6 +198,7 @@ private func claudeSource(
     #expect(
         !ClaudeCodeHint.shouldShow(
             claudeInstalled: false,
+            claudeEnabled: true,
             cursorAvailable: true,
             showsClaudeSpend: false,
             hintDismissed: false
@@ -156,6 +207,7 @@ private func claudeSource(
     #expect(
         !ClaudeCodeHint.shouldShow(
             claudeInstalled: true,
+            claudeEnabled: true,
             cursorAvailable: false,
             showsClaudeSpend: false,
             hintDismissed: false
@@ -164,6 +216,7 @@ private func claudeSource(
     #expect(
         !ClaudeCodeHint.shouldShow(
             claudeInstalled: true,
+            claudeEnabled: true,
             cursorAvailable: true,
             showsClaudeSpend: true,
             hintDismissed: false
@@ -172,6 +225,7 @@ private func claudeSource(
     #expect(
         !ClaudeCodeHint.shouldShow(
             claudeInstalled: true,
+            claudeEnabled: true,
             cursorAvailable: true,
             showsClaudeSpend: false,
             hintDismissed: true

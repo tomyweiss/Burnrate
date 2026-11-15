@@ -5,6 +5,8 @@ import Foundation
 enum MenuBarState {
     struct Cursor: Equatable, Sendable {
         var enabled: Bool
+        /// False after a missing Cursor login. Figures stay up until Claude Code can replace them.
+        var available: Bool
         var burnLevel: BurnLevel
         var showsWindowSpend: Bool
         var showsCursorModels: Bool
@@ -39,14 +41,23 @@ enum MenuBarState {
         var accessibilityText: String?
     }
 
+    /// Cursor window spend, pool percents, and Grok Bot are omitted when Cursor
+    /// is switched off, and when Cursor is signed out while Claude Code is on.
+    static func showsCursorParts(cursor: Cursor, claude: Claude) -> Bool {
+        guard cursor.enabled else { return false }
+        if !cursor.available, claude.installed, claude.enabled { return false }
+        return true
+    }
+
     static func presentation(cursor: Cursor, claude: Claude) -> Presentation {
         let claudeVisible = claude.installed && claude.enabled
         let showLimits = claudeVisible && claude.limitsEnabled
+        let cursorVisible = showsCursorParts(cursor: cursor, claude: claude)
         let input = StatusBarFigures.Input(
-            showsWindowSpend: cursor.showsWindowSpend,
-            showsCursorModels: cursor.showsCursorModels,
-            showsOtherModels: cursor.showsOtherModels,
-            showsGrokBot: cursor.showsGrokBot,
+            showsWindowSpend: cursorVisible && cursor.showsWindowSpend,
+            showsCursorModels: cursorVisible && cursor.showsCursorModels,
+            showsOtherModels: cursorVisible && cursor.showsOtherModels,
+            showsGrokBot: cursorVisible && cursor.showsGrokBot,
             windowDollars: cursor.windowDollars,
             spendIsPlaceholder: cursor.spendIsPlaceholder,
             cursorModelsPercent: cursor.cursorModelsPercent,

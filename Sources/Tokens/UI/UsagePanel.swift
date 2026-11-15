@@ -428,6 +428,7 @@ struct UsagePanel: View {
     private var showsClaudeCodeHint: Bool {
         ClaudeCodeHint.shouldShow(
             claudeInstalled: claudeCode.isInstalled,
+            claudeEnabled: settings.claudeCodeEnabled,
             cursorAvailable: store.isCursorAvailable,
             showsClaudeSpend: settings.showsClaudeSpend(
                 cursorAvailable: store.isCursorAvailable,

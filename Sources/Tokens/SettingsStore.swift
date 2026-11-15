@@ -153,14 +153,43 @@ final class SettingsStore {
         claudeCodeHintDismissed = true
     }
 
-    /// True when the status bar shows no figures. Replaces the old hide-amount toggle.
-    var hideAmountInMenuBar: Bool {
-        let claudeLimits = claudeLimitsEnabled
-            && (statusBarShowsClaudeFiveHour || statusBarShowsClaudeWeekly)
-        return !statusBarShowsWindowSpend && !statusBarShowsCursorModels
-            && !statusBarShowsOtherModels && !statusBarShowsGrokBot
-            && !statusBarShowsClaudeSpend
-            && !claudeLimits
+    /// True when the menu bar would show no figures. Uses the same Cursor
+    /// suppression and implicit Claude spend default as `MenuBarState`.
+    /// Defaults match a signed-in Cursor with Claude Code not installed, which
+    /// is what community uploads used before source visibility existed.
+    func hideAmountInMenuBar(cursorAvailable: Bool = true, claudeInstalled: Bool = false) -> Bool {
+        MenuBarState.presentation(
+            cursor: MenuBarState.Cursor(
+                enabled: cursorEnabled,
+                available: cursorAvailable,
+                burnLevel: .calm,
+                showsWindowSpend: statusBarShowsWindowSpend,
+                showsCursorModels: statusBarShowsCursorModels,
+                showsOtherModels: statusBarShowsOtherModels,
+                showsGrokBot: statusBarShowsGrokBot,
+                windowDollars: 0,
+                spendIsPlaceholder: false,
+                cursorModelsPercent: nil,
+                otherModelsPercent: nil,
+                grokBotPercent: nil
+            ),
+            claude: MenuBarState.Claude(
+                installed: claudeInstalled,
+                enabled: claudeCodeEnabled,
+                burnLevel: .calm,
+                showsSpend: showsClaudeSpend(
+                    cursorAvailable: cursorAvailable,
+                    claudeInstalled: claudeInstalled
+                ),
+                dollars: nil,
+                spendIsPlaceholder: false,
+                showsFiveHour: statusBarShowsClaudeFiveHour,
+                fiveHourPercent: nil,
+                showsWeekly: statusBarShowsClaudeWeekly,
+                weeklyPercent: nil,
+                limitsEnabled: claudeLimitsEnabled
+            )
+        ).statusText == nil
     }
 
     var showLocationSubtitle: Bool {
@@ -711,7 +740,10 @@ final class SettingsStore {
     }
 
     /// Allow-listed settings snapshot for community analytics uploads.
-    func communityClientConfig() -> CommunityClientConfig {
+    func communityClientConfig(
+        cursorAvailable: Bool = true,
+        claudeInstalled: Bool = false
+    ) -> CommunityClientConfig {
         let hiddenTabs = UsageTab.allCases
             .filter { !visibleUsageTabs.contains($0) }
             .map(\.rawValue)
@@ -722,7 +754,10 @@ final class SettingsStore {
             refreshIntervalSeconds: Int(refreshIntervalSeconds),
             anomalyThresholdDollars: Int(anomalyThresholdDollars),
             anomalyWindowMinutes: anomalyWindowMinutes,
-            hideAmountInMenuBar: hideAmountInMenuBar,
+            hideAmountInMenuBar: hideAmountInMenuBar(
+                cursorAvailable: cursorAvailable,
+                claudeInstalled: claudeInstalled
+            ),
             autoCheckForUpdates: autoCheckForUpdates,
             launchAtLogin: launchAtLogin,
             hiddenTabs: hiddenTabs,

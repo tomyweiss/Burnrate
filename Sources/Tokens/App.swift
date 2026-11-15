@@ -126,6 +126,7 @@ struct TokensApp: App {
         MenuBarState.presentation(
             cursor: MenuBarState.Cursor(
                 enabled: settings.cursorEnabled,
+                available: store.isCursorAvailable,
                 burnLevel: store.burnLevel,
                 showsWindowSpend: settings.statusBarShowsWindowSpend,
                 showsCursorModels: settings.statusBarShowsCursorModels,

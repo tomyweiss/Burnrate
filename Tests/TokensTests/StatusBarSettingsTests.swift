@@ -25,7 +25,7 @@ private func isolatedDefaults() -> (suite: String, defaults: UserDefaults) {
     #expect(defaults.object(forKey: "statusBarShowsWindowSpend") != nil)
     #expect(defaults.object(forKey: "statusBarShowsCursorModels") != nil)
     #expect(defaults.object(forKey: "statusBarShowsOtherModels") != nil)
-    #expect(store.hideAmountInMenuBar == false)
+    #expect(store.hideAmountInMenuBar() == false)
     #expect(store.communityClientConfig().hideAmountInMenuBar == false)
 }
 
@@ -38,7 +38,7 @@ private func isolatedDefaults() -> (suite: String, defaults: UserDefaults) {
     #expect(store.statusBarShowsWindowSpend == false)
     #expect(store.statusBarShowsCursorModels == false)
     #expect(store.statusBarShowsOtherModels == false)
-    #expect(store.hideAmountInMenuBar == true)
+    #expect(store.hideAmountInMenuBar() == true)
     #expect(store.communityClientConfig().hideAmountInMenuBar == true)
 }
 
@@ -82,7 +82,7 @@ private func isolatedDefaults() -> (suite: String, defaults: UserDefaults) {
     store.statusBarShowsWindowSpend = false
     store.statusBarShowsGrokBot = true
 
-    #expect(store.hideAmountInMenuBar == false)
+    #expect(store.hideAmountInMenuBar() == false)
 }
 
 @Test func claudeStatusBarDefaultsOffWithoutWritingSpendKey() {
@@ -157,7 +157,7 @@ private func isolatedDefaults() -> (suite: String, defaults: UserDefaults) {
     store.statusBarShowsWindowSpend = false
     store.statusBarShowsClaudeSpend = true
 
-    #expect(store.hideAmountInMenuBar == false)
+    #expect(store.hideAmountInMenuBar(cursorAvailable: true, claudeInstalled: true) == false)
 }
 
 @Test func claudeLimitTogglesDoNotCountUntilLimitsAreEnabled() {
@@ -168,8 +168,32 @@ private func isolatedDefaults() -> (suite: String, defaults: UserDefaults) {
     store.statusBarShowsWindowSpend = false
     store.statusBarShowsClaudeFiveHour = true
     store.statusBarShowsClaudeWeekly = true
-    #expect(store.hideAmountInMenuBar == true)
+    #expect(store.hideAmountInMenuBar(cursorAvailable: true, claudeInstalled: true) == true)
 
     store.claudeLimitsEnabled = true
-    #expect(store.hideAmountInMenuBar == false)
+    #expect(store.hideAmountInMenuBar(cursorAvailable: true, claudeInstalled: true) == false)
+}
+
+@Test func hideAmountFollowsFiguresActuallyShown() {
+    let (suite, defaults) = isolatedDefaults()
+    defer { defaults.removePersistentDomain(forName: suite) }
+
+    let implicit = makeSettings(defaults)
+    #expect(implicit.hideAmountInMenuBar(cursorAvailable: false, claudeInstalled: true) == false)
+    #expect(
+        implicit.communityClientConfig(cursorAvailable: false, claudeInstalled: true).hideAmountInMenuBar
+            == false
+    )
+
+    implicit.statusBarShowsClaudeSpend = false
+    #expect(implicit.hideAmountInMenuBar(cursorAvailable: false, claudeInstalled: true) == true)
+
+    let cursorOff = makeSettings(defaults)
+    cursorOff.cursorEnabled = false
+    cursorOff.claudeCodeEnabled = false
+    #expect(cursorOff.hideAmountInMenuBar(cursorAvailable: true, claudeInstalled: true) == true)
+
+    cursorOff.claudeCodeEnabled = true
+    cursorOff.statusBarShowsClaudeSpend = true
+    #expect(cursorOff.hideAmountInMenuBar(cursorAvailable: true, claudeInstalled: true) == false)
 }

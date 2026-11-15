@@ -305,7 +305,10 @@ final class CommunityStore {
                 usageStore?.communityDailySkills[day] ?? []
             },
             nicknameSource: "cursor",
-            clientConfig: settings.communityClientConfig(),
+            clientConfig: settings.communityClientConfig(
+                cursorAvailable: usageStore?.isCursorAvailable ?? true,
+                claudeInstalled: usageStore?.claudeCodeInstalled ?? false
+            ),
             clientVersion: AppIdentity.versionLabel
         )
     }
