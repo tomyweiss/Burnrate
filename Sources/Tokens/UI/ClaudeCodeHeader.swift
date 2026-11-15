@@ -164,6 +164,9 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
                     Text(unpricedCaption)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .help(unpricedCaption)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }

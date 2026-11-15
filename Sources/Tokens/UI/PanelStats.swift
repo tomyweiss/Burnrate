@@ -6,12 +6,20 @@ struct PanelStat: Equatable, Sendable {
     let detail: String?
 
     /// One element per tile. A leading `~` is spoken as "estimated".
-    var accessibilityLabel: String {
+    /// Blurred tiles speak only the title, the same way `privacyBlurred` hides the figure.
+    func accessibilityLabel(valuesHidden: Bool) -> String {
+        if valuesHidden {
+            return "\(title), hidden"
+        }
         let spoken = value.hasPrefix("~") ? "estimated \(value.dropFirst())" : value
         if let detail {
             return "\(title), \(spoken), \(detail)"
         }
         return "\(title), \(spoken)"
+    }
+
+    var accessibilityLabel: String {
+        accessibilityLabel(valuesHidden: false)
     }
 }
 
@@ -128,6 +136,6 @@ struct PanelStatsGrid: View {
                 .fill(Color.primary.opacity(0.05))
         )
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(stat.accessibilityLabel)
+        .accessibilityLabel(stat.accessibilityLabel(valuesHidden: blurSensitiveContent))
     }
 }

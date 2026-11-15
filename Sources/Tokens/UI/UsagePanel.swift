@@ -281,9 +281,19 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
 }
 
 /// Reserves the hint and the footer at their ideal heights, then keeps 220pt for the
-/// tabs. Any shortfall is given to the header, which drops stats-tile padding first.
-private struct UsagePanelColumn: Layout {
+/// tabs. A shortfall first drops stats-tile padding; past that the header scrolls
+/// instead of cropping. Subviews are hint, header measurer, header, tabs, footer.
+struct UsagePanelColumn: Layout {
     var tabMinimum: CGFloat
+
+    /// Two rows × 8pt of vertical tile padding. The grid can shed all of it before scrolling.
+    static let statsPaddingRelief: CGFloat = 16
+
+    /// True when the header still overflows the space between the hint and the footer
+    /// after the stats grid has dropped its padding and the tabs have kept `tabFloor`.
+    static func headerNeedsScroll(headerIdeal: CGFloat, available: CGFloat, tabFloor: CGFloat) -> Bool {
+        headerIdeal + tabFloor > available + statsPaddingRelief
+    }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let width = proposal.width ?? subviews.map { $0.sizeThatFits(.unspecified).width }.max() ?? 0
@@ -295,21 +305,21 @@ private struct UsagePanelColumn: Layout {
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        guard subviews.count == 4 else { return }
+        guard subviews.count == 5 else { return }
         let width = bounds.width
         let unconstrained = ProposedViewSize(width: width, height: nil)
         let hint = subviews[0].sizeThatFits(unconstrained)
-        let footer = subviews[3].sizeThatFits(unconstrained)
-        let headerIdeal = subviews[1].sizeThatFits(unconstrained)
+        let headerIdeal = subviews[1].sizeThatFits(unconstrained).height
+        let footer = subviews[4].sizeThatFits(unconstrained)
         let remaining = max(bounds.height - hint.height - footer.height, 0)
 
         let headerHeight: CGFloat
         let tabHeight: CGFloat
-        if headerIdeal.height + tabMinimum <= remaining {
-            headerHeight = headerIdeal.height
-            tabHeight = remaining - headerHeight
+        if headerIdeal + tabMinimum <= remaining {
+            headerHeight = headerIdeal
+            tabHeight = remaining - headerIdeal
         } else {
-            headerHeight = min(headerIdeal.height, max(remaining - tabMinimum, 0))
+            headerHeight = max(remaining - tabMinimum, 0)
             tabHeight = remaining - headerHeight
         }
 
@@ -323,20 +333,60 @@ private struct UsagePanelColumn: Layout {
         subviews[1].place(
             at: CGPoint(x: bounds.minX, y: y),
             anchor: .topLeading,
+            proposal: ProposedViewSize(width: width, height: headerIdeal)
+        )
+        subviews[2].place(
+            at: CGPoint(x: bounds.minX, y: y),
+            anchor: .topLeading,
             proposal: ProposedViewSize(width: width, height: headerHeight)
         )
         y += headerHeight
-        subviews[2].place(
+        subviews[3].place(
             at: CGPoint(x: bounds.minX, y: y),
             anchor: .topLeading,
             proposal: ProposedViewSize(width: width, height: tabHeight)
         )
         y += tabHeight
-        subviews[3].place(
+        subviews[4].place(
             at: CGPoint(x: bounds.minX, y: y),
             anchor: .topLeading,
             proposal: ProposedViewSize(width: width, height: footer.height)
         )
+    }
+}
+
+private struct HeaderIdealHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+/// Shows the header at its natural height when it fits. Scrolls it inside the
+/// slot the column reserved when it does not, after stats padding has been shed.
+private struct HeaderScrollSlot<Content: View>: View {
+    var idealHeight: CGFloat
+    var tabMinimum: CGFloat
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        GeometryReader { geo in
+            let scroll = UsagePanelColumn.headerNeedsScroll(
+                headerIdeal: idealHeight,
+                available: geo.size.height + tabMinimum,
+                tabFloor: tabMinimum
+            )
+            if scroll {
+                ScrollView(.vertical) {
+                    content()
+                }
+                .scrollIndicators(.automatic)
+                .scrollBounceBehavior(.basedOnSize)
+            } else {
+                content()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
+        }
     }
 }
 
@@ -360,6 +410,7 @@ struct UsagePanel: View {
     @State private var sectionSearchText = ""
     @State private var isSectionSearchPresented = false
     @State private var showCustomRangePicker = false
+    @State private var headerIdealHeight: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.costStyle) private var costStyle
     @Environment(ClaudeCodeStore.self) private var claudeCode
@@ -459,12 +510,21 @@ struct UsagePanel: View {
             .fixedSize(horizontal: false, vertical: true)
             .layoutPriority(2)
 
-            header
-                .padding(.horizontal, 16)
-                .padding(.top, 14)
-                .padding(.bottom, 10)
-                .layoutPriority(0)
-                .clipped()
+            paddedHeader
+                .fixedSize(horizontal: false, vertical: true)
+                .background {
+                    GeometryReader { proxy in
+                        Color.clear.preference(key: HeaderIdealHeightKey.self, value: proxy.size.height)
+                    }
+                }
+                .opacity(0)
+                .accessibilityHidden(true)
+                .allowsHitTesting(false)
+
+            HeaderScrollSlot(idealHeight: headerIdealHeight, tabMinimum: 220) {
+                paddedHeader
+            }
+            .layoutPriority(0)
 
             Group {
                 if displayedSource == nil {
@@ -498,6 +558,14 @@ struct UsagePanel: View {
             sessionPath = []
             selectedSkill = nil
         }
+        .onPreferenceChange(HeaderIdealHeightKey.self) { headerIdealHeight = $0 }
+    }
+
+    private var paddedHeader: some View {
+        header
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
     }
 
     private func openChangeLog(version: String? = nil, releaseNotes: String? = nil) {
@@ -681,6 +749,9 @@ struct UsagePanel: View {
                         Text(caption)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .truncationMode(.tail)
+                            .help(caption)
                     }
 
                     if headerFigures.showsTimelineSpendBelow {

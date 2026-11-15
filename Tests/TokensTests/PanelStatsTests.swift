@@ -58,6 +58,20 @@ import Testing
     #expect(average?.value == "~$49.20")
     #expect(perHour?.accessibilityLabel == "Per hour, estimated $4.10")
     #expect(average?.accessibilityLabel == "Avg / session, estimated $49.20")
+    #expect(perHour?.accessibilityLabel(valuesHidden: true) == "Per hour, hidden")
+    #expect(average?.accessibilityLabel(valuesHidden: true) == "Avg / session, hidden")
+}
+
+@Test func headerScrollsOnlyAfterStatsPaddingCannotSaveTheTabFloor() {
+    let floor: CGFloat = 220
+    let relief = UsagePanelColumn.statsPaddingRelief
+
+    #expect(UsagePanelColumn.headerNeedsScroll(headerIdeal: 400, available: 700, tabFloor: floor) == false)
+    #expect(UsagePanelColumn.headerNeedsScroll(headerIdeal: 400, available: 620, tabFloor: floor) == false)
+
+    let withinRelief = 400 + floor - relief
+    #expect(UsagePanelColumn.headerNeedsScroll(headerIdeal: 400, available: withinRelief, tabFloor: floor) == false)
+    #expect(UsagePanelColumn.headerNeedsScroll(headerIdeal: 400, available: withinRelief - 1, tabFloor: floor) == true)
 }
 
 @Test func panelStatsPerHourUsesAtLeastOneHour() {
