@@ -8,6 +8,11 @@ enum MoneyFormat {
     static func dollarsFromCents(_ cents: Double) -> String {
         dollars(cents / 100.0)
     }
+
+    /// Claude Code estimates, always prefixed so they are not read as a bill.
+    static func estimated(_ value: Double) -> String {
+        "~\(dollars(value))"
+    }
 }
 
 enum TokenFormat {
