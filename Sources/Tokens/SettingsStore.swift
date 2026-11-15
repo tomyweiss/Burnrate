@@ -15,6 +15,11 @@ final class SettingsStore {
         static let statusBarShowsCursorModels = "statusBarShowsCursorModels"
         static let statusBarShowsOtherModels = "statusBarShowsOtherModels"
         static let statusBarShowsGrokBot = "statusBarShowsGrokBot"
+        static let statusBarShowsClaudeSpend = "statusBarShowsClaudeSpend"
+        static let statusBarShowsClaudeFiveHour = "statusBarShowsClaudeFiveHour"
+        static let statusBarShowsClaudeWeekly = "statusBarShowsClaudeWeekly"
+        static let claudeCodeHintDismissed = "claudeCodeHintDismissed"
+        static let claudeLimitsEnabled = "claudeLimitsEnabled"
         static let autoCheckForUpdates = "autoCheckForUpdates"
         static let usageTimelinePreset = "usageTimelinePreset"
         static let billingDayOfMonth = "billingDayOfMonth"
@@ -104,10 +109,58 @@ final class SettingsStore {
         didSet { defaults.set(statusBarShowsGrokBot, forKey: Keys.statusBarShowsGrokBot) }
     }
 
+    /// Stored Claude Code spend preference. False until the user turns it on.
+    /// Launch does not write this key: see `showsClaudeSpend`.
+    var statusBarShowsClaudeSpend: Bool {
+        didSet { defaults.set(statusBarShowsClaudeSpend, forKey: Keys.statusBarShowsClaudeSpend) }
+    }
+
+    var statusBarShowsClaudeFiveHour: Bool {
+        didSet { defaults.set(statusBarShowsClaudeFiveHour, forKey: Keys.statusBarShowsClaudeFiveHour) }
+    }
+
+    var statusBarShowsClaudeWeekly: Bool {
+        didSet { defaults.set(statusBarShowsClaudeWeekly, forKey: Keys.statusBarShowsClaudeWeekly) }
+    }
+
+    /// Opt-in plan limits. Off until Task 6 wires the fetch. The 5h and weekly
+    /// status-bar toggles stay hidden while this is false.
+    var claudeLimitsEnabled: Bool {
+        didSet { defaults.set(claudeLimitsEnabled, forKey: Keys.claudeLimitsEnabled) }
+    }
+
+    var claudeCodeHintDismissed: Bool {
+        didSet { defaults.set(claudeCodeHintDismissed, forKey: Keys.claudeCodeHintDismissed) }
+    }
+
+    /// Claude spend for the menu bar. The stored default is off, but a key that
+    /// has never been written reads as on when Cursor is unavailable and Claude
+    /// Code is installed. Reading that case does not store `true`, so a later
+    /// Cursor sign-in falls back to off instead of keeping a launch-time write.
+    func showsClaudeSpend(cursorAvailable: Bool, claudeInstalled: Bool) -> Bool {
+        if defaults.object(forKey: Keys.statusBarShowsClaudeSpend) != nil {
+            return statusBarShowsClaudeSpend
+        }
+        return !cursorAvailable && claudeInstalled
+    }
+
+    func showClaudeCodeInMenuBar() {
+        statusBarShowsClaudeSpend = true
+        claudeCodeHintDismissed = true
+    }
+
+    func dismissClaudeCodeHint() {
+        claudeCodeHintDismissed = true
+    }
+
     /// True when the status bar shows no figures. Replaces the old hide-amount toggle.
     var hideAmountInMenuBar: Bool {
-        !statusBarShowsWindowSpend && !statusBarShowsCursorModels
+        let claudeLimits = claudeLimitsEnabled
+            && (statusBarShowsClaudeFiveHour || statusBarShowsClaudeWeekly)
+        return !statusBarShowsWindowSpend && !statusBarShowsCursorModels
             && !statusBarShowsOtherModels && !statusBarShowsGrokBot
+            && !statusBarShowsClaudeSpend
+            && !claudeLimits
     }
 
     var showLocationSubtitle: Bool {
@@ -453,6 +506,11 @@ final class SettingsStore {
         statusBarShowsCursorModels = statusBar.cursor
         statusBarShowsOtherModels = statusBar.other
         statusBarShowsGrokBot = defaults.bool(forKey: Keys.statusBarShowsGrokBot)
+        statusBarShowsClaudeSpend = defaults.bool(forKey: Keys.statusBarShowsClaudeSpend)
+        statusBarShowsClaudeFiveHour = defaults.bool(forKey: Keys.statusBarShowsClaudeFiveHour)
+        statusBarShowsClaudeWeekly = defaults.bool(forKey: Keys.statusBarShowsClaudeWeekly)
+        claudeLimitsEnabled = defaults.bool(forKey: Keys.claudeLimitsEnabled)
+        claudeCodeHintDismissed = defaults.bool(forKey: Keys.claudeCodeHintDismissed)
         showLocationSubtitle = defaults.bool(forKey: Keys.showLocationSubtitle)
         hideArchivedSessions = defaults.bool(forKey: Keys.hideArchivedSessions)
         blurSensitiveContent = defaults.bool(forKey: Keys.blurSensitiveContent)

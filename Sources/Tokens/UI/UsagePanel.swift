@@ -369,6 +369,21 @@ struct UsagePanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if showsClaudeCodeHint {
+                ClaudeCodeHint(
+                    onShowInMenuBar: {
+                        settings.showClaudeCodeInMenuBar()
+                        MenuBarPanelKeeper.keepOpen()
+                    },
+                    onDismiss: {
+                        settings.dismissClaudeCodeHint()
+                        MenuBarPanelKeeper.keepOpen()
+                    }
+                )
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+            }
+
             header
                 .padding(.horizontal, 16)
                 .padding(.top, 14)
@@ -408,6 +423,18 @@ struct UsagePanel: View {
     private func openChangeLog(version: String? = nil, releaseNotes: String? = nil) {
         onOpenChangeLog(version, releaseNotes)
         MenuBarPanelKeeper.keepOpen()
+    }
+
+    private var showsClaudeCodeHint: Bool {
+        ClaudeCodeHint.shouldShow(
+            claudeInstalled: claudeCode.isInstalled,
+            cursorAvailable: store.isCursorAvailable,
+            showsClaudeSpend: settings.showsClaudeSpend(
+                cursorAvailable: store.isCursorAvailable,
+                claudeInstalled: claudeCode.isInstalled
+            ),
+            hintDismissed: settings.claudeCodeHintDismissed
+        )
     }
 
     private var headerFigures: StatusBarFigures.Header {

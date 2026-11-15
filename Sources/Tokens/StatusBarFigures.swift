@@ -11,6 +11,13 @@ enum StatusBarFigures {
         var cursorModelsPercent: Double?
         var otherModelsPercent: Double?
         var grokBotPercent: Double?
+        var showsClaudeSpend: Bool
+        var claudeDollars: Double?
+        var claudeSpendIsPlaceholder: Bool
+        var showsClaudeFiveHour: Bool
+        var claudeFiveHourPercent: Double?
+        var showsClaudeWeekly: Bool
+        var claudeWeeklyPercent: Double?
 
         init(
             showsWindowSpend: Bool,
@@ -21,7 +28,14 @@ enum StatusBarFigures {
             spendIsPlaceholder: Bool = false,
             cursorModelsPercent: Double? = nil,
             otherModelsPercent: Double? = nil,
-            grokBotPercent: Double? = nil
+            grokBotPercent: Double? = nil,
+            showsClaudeSpend: Bool = false,
+            claudeDollars: Double? = nil,
+            claudeSpendIsPlaceholder: Bool = false,
+            showsClaudeFiveHour: Bool = false,
+            claudeFiveHourPercent: Double? = nil,
+            showsClaudeWeekly: Bool = false,
+            claudeWeeklyPercent: Double? = nil
         ) {
             self.showsWindowSpend = showsWindowSpend
             self.showsCursorModels = showsCursorModels
@@ -32,6 +46,13 @@ enum StatusBarFigures {
             self.cursorModelsPercent = cursorModelsPercent
             self.otherModelsPercent = otherModelsPercent
             self.grokBotPercent = grokBotPercent
+            self.showsClaudeSpend = showsClaudeSpend
+            self.claudeDollars = claudeDollars
+            self.claudeSpendIsPlaceholder = claudeSpendIsPlaceholder
+            self.showsClaudeFiveHour = showsClaudeFiveHour
+            self.claudeFiveHourPercent = claudeFiveHourPercent
+            self.showsClaudeWeekly = showsClaudeWeekly
+            self.claudeWeeklyPercent = claudeWeeklyPercent
         }
     }
 
@@ -77,9 +98,15 @@ enum StatusBarFigures {
         var cursor: Bool
         var other: Bool
         var grok: Bool
+        var claudeSpend: Bool
+        var fiveHour: Bool
+        var weekly: Bool
 
-        var showsAny: Bool { spend || cursor || other || grok }
+        var showsAny: Bool {
+            spend || cursor || other || grok || claudeSpend || fiveHour || weekly
+        }
 
+        /// Cursor-family percents only. Claude limits always carry their own prefix.
         var percentCount: Int {
             [cursor, other, grok].filter { $0 }.count
         }
@@ -89,6 +116,9 @@ enum StatusBarFigures {
             cursor = input.showsCursorModels
             other = input.showsOtherModels
             grok = input.showsGrokBot
+            claudeSpend = input.showsClaudeSpend
+            fiveHour = input.showsClaudeFiveHour
+            weekly = input.showsClaudeWeekly
         }
     }
 
@@ -107,12 +137,30 @@ enum StatusBarFigures {
         if flags.grok {
             parts.append(percentToken(input.grokBotPercent, prefix: tagPercents ? "GB" : nil))
         }
+        if flags.claudeSpend {
+            let text = claudeSpendText(input)
+            // `CC` only when Cursor window spend is also on, same idea as `C` / `O`.
+            parts.append(flags.spend ? "CC \(text)" : text)
+        }
+        if flags.fiveHour {
+            parts.append(percentToken(input.claudeFiveHourPercent, prefix: "5h"))
+        }
+        if flags.weekly {
+            parts.append(percentToken(input.claudeWeeklyPercent, prefix: "wk"))
+        }
         return parts
     }
 
     private static func spendText(_ input: Input) -> String {
         if input.spendIsPlaceholder { return "$—.——" }
         return MoneyFormat.dollars(input.windowDollars)
+    }
+
+    private static func claudeSpendText(_ input: Input) -> String {
+        guard !input.claudeSpendIsPlaceholder, let dollars = input.claudeDollars else {
+            return "~$—"
+        }
+        return MoneyFormat.estimated(dollars)
     }
 
     private static func percentToken(_ percent: Double?, prefix: String?) -> String {
@@ -143,7 +191,23 @@ enum StatusBarFigures {
         if flags.grok {
             parts.append(percentAccess("Grok Bot", input.grokBotPercent))
         }
+        if flags.claudeSpend {
+            parts.append(claudeSpendAccess(input))
+        }
+        if flags.fiveHour {
+            parts.append(percentAccess("5-hour limit", input.claudeFiveHourPercent))
+        }
+        if flags.weekly {
+            parts.append(percentAccess("Weekly limit", input.claudeWeeklyPercent))
+        }
         return parts.joined(separator: ", ")
+    }
+
+    private static func claudeSpendAccess(_ input: Input) -> String {
+        guard !input.claudeSpendIsPlaceholder, let dollars = input.claudeDollars else {
+            return "Claude Code estimated $—"
+        }
+        return "Claude Code estimated \(MoneyFormat.dollars(dollars))"
     }
 
     private static func percentAccess(_ name: String, _ percent: Double?) -> String {

@@ -10,6 +10,20 @@ enum BurnLevel: Equatable, Sendable {
     case critical
     case error
 
+    /// Menu-bar severity. A warning triangle outranks a filled flame.
+    var severity: Int {
+        switch self {
+        case .calm: 0
+        case .elevated: 1
+        case .critical: 2
+        case .error: 3
+        }
+    }
+
+    static func moreSevere(_ lhs: BurnLevel, _ rhs: BurnLevel) -> BurnLevel {
+        lhs.severity >= rhs.severity ? lhs : rhs
+    }
+
     static func level(recentDollars: Double, thresholdDollars: Double, hasError: Bool) -> BurnLevel {
         if hasError { return .error }
         let threshold = max(thresholdDollars, 0.01)

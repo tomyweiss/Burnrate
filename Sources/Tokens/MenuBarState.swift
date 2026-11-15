@@ -1,0 +1,83 @@
+import Foundation
+
+/// Menu-bar text and icon from the Cursor and Claude Code stores.
+/// Dollar figures stay separate; this only decides which parts are visible.
+enum MenuBarState {
+    struct Cursor: Equatable, Sendable {
+        var enabled: Bool
+        var burnLevel: BurnLevel
+        var showsWindowSpend: Bool
+        var showsCursorModels: Bool
+        var showsOtherModels: Bool
+        var showsGrokBot: Bool
+        var windowDollars: Double
+        var spendIsPlaceholder: Bool
+        var cursorModelsPercent: Double?
+        var otherModelsPercent: Double?
+        var grokBotPercent: Double?
+    }
+
+    struct Claude: Equatable, Sendable {
+        var installed: Bool
+        var enabled: Bool
+        var burnLevel: BurnLevel
+        var showsSpend: Bool
+        var dollars: Double?
+        var spendIsPlaceholder: Bool
+        var showsFiveHour: Bool
+        var fiveHourPercent: Double?
+        var showsWeekly: Bool
+        var weeklyPercent: Double?
+        /// Plan-limit figures stay hidden until this is on. Task 6 fills the percents.
+        var limitsEnabled: Bool
+    }
+
+    struct Presentation: Equatable, Sendable {
+        var input: StatusBarFigures.Input
+        var burnLevel: BurnLevel
+        var statusText: String?
+        var accessibilityText: String?
+    }
+
+    static func presentation(cursor: Cursor, claude: Claude) -> Presentation {
+        let claudeVisible = claude.installed && claude.enabled
+        let showLimits = claudeVisible && claude.limitsEnabled
+        let input = StatusBarFigures.Input(
+            showsWindowSpend: cursor.showsWindowSpend,
+            showsCursorModels: cursor.showsCursorModels,
+            showsOtherModels: cursor.showsOtherModels,
+            showsGrokBot: cursor.showsGrokBot,
+            windowDollars: cursor.windowDollars,
+            spendIsPlaceholder: cursor.spendIsPlaceholder,
+            cursorModelsPercent: cursor.cursorModelsPercent,
+            otherModelsPercent: cursor.otherModelsPercent,
+            grokBotPercent: cursor.grokBotPercent,
+            showsClaudeSpend: claudeVisible && claude.showsSpend,
+            claudeDollars: claude.dollars,
+            claudeSpendIsPlaceholder: claude.spendIsPlaceholder,
+            showsClaudeFiveHour: showLimits && claude.showsFiveHour,
+            claudeFiveHourPercent: claude.fiveHourPercent,
+            showsClaudeWeekly: showLimits && claude.showsWeekly,
+            claudeWeeklyPercent: claude.weeklyPercent
+        )
+        return Presentation(
+            input: input,
+            burnLevel: combinedBurn(cursor: cursor, claude: claude, claudeVisible: claudeVisible),
+            statusText: StatusBarFigures.statusText(input),
+            accessibilityText: StatusBarFigures.accessibilityLabel(input)
+        )
+    }
+
+    /// The worse of the enabled sources. A disabled or missing source does not
+    /// contribute its flame or its warning triangle.
+    private static func combinedBurn(cursor: Cursor, claude: Claude, claudeVisible: Bool) -> BurnLevel {
+        var level = BurnLevel.calm
+        if cursor.enabled {
+            level = BurnLevel.moreSevere(level, cursor.burnLevel)
+        }
+        if claudeVisible {
+            level = BurnLevel.moreSevere(level, claude.burnLevel)
+        }
+        return level
+    }
+}

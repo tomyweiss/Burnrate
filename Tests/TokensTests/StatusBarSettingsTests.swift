@@ -84,3 +84,92 @@ private func isolatedDefaults() -> (suite: String, defaults: UserDefaults) {
 
     #expect(store.hideAmountInMenuBar == false)
 }
+
+@Test func claudeStatusBarDefaultsOffWithoutWritingSpendKey() {
+    let (suite, defaults) = isolatedDefaults()
+    defer { defaults.removePersistentDomain(forName: suite) }
+
+    let store = makeSettings(defaults)
+    #expect(store.statusBarShowsClaudeSpend == false)
+    #expect(store.statusBarShowsClaudeFiveHour == false)
+    #expect(store.statusBarShowsClaudeWeekly == false)
+    #expect(store.claudeLimitsEnabled == false)
+    #expect(store.claudeCodeHintDismissed == false)
+    #expect(defaults.object(forKey: "statusBarShowsClaudeSpend") == nil)
+    #expect(defaults.object(forKey: "claudeLimitsEnabled") == nil)
+    #expect(store.showsClaudeSpend(cursorAvailable: true, claudeInstalled: true) == false)
+    #expect(store.showsClaudeSpend(cursorAvailable: false, claudeInstalled: false) == false)
+    #expect(store.showsClaudeSpend(cursorAvailable: false, claudeInstalled: true) == true)
+}
+
+@Test func claudeStatusBarSpendPersistsAndOverridesImplicitDefault() {
+    let (suite, defaults) = isolatedDefaults()
+    defer { defaults.removePersistentDomain(forName: suite) }
+
+    let store = makeSettings(defaults)
+    store.statusBarShowsClaudeSpend = false
+    #expect(defaults.object(forKey: "statusBarShowsClaudeSpend") != nil)
+
+    let storedOff = makeSettings(defaults)
+    #expect(storedOff.statusBarShowsClaudeSpend == false)
+    #expect(storedOff.showsClaudeSpend(cursorAvailable: false, claudeInstalled: true) == false)
+
+    store.statusBarShowsClaudeSpend = true
+    let storedOn = makeSettings(defaults)
+    #expect(storedOn.showsClaudeSpend(cursorAvailable: true, claudeInstalled: false) == true)
+}
+
+@Test func claudeStatusBarLimitTogglesAndHintPersist() {
+    let (suite, defaults) = isolatedDefaults()
+    defer { defaults.removePersistentDomain(forName: suite) }
+
+    let store = makeSettings(defaults)
+    store.statusBarShowsClaudeFiveHour = true
+    store.statusBarShowsClaudeWeekly = true
+    store.claudeLimitsEnabled = true
+    store.dismissClaudeCodeHint()
+
+    let reloaded = makeSettings(defaults)
+    #expect(reloaded.statusBarShowsClaudeFiveHour == true)
+    #expect(reloaded.statusBarShowsClaudeWeekly == true)
+    #expect(reloaded.claudeLimitsEnabled == true)
+    #expect(reloaded.claudeCodeHintDismissed == true)
+}
+
+@Test func showClaudeCodeInMenuBarTurnsSpendOnAndDismissesHint() {
+    let (suite, defaults) = isolatedDefaults()
+    defer { defaults.removePersistentDomain(forName: suite) }
+
+    let store = makeSettings(defaults)
+    store.showClaudeCodeInMenuBar()
+
+    let reloaded = makeSettings(defaults)
+    #expect(reloaded.statusBarShowsClaudeSpend == true)
+    #expect(reloaded.claudeCodeHintDismissed == true)
+    #expect(reloaded.showsClaudeSpend(cursorAvailable: true, claudeInstalled: true) == true)
+}
+
+@Test func claudeSpendAloneCountsAsShown() {
+    let (suite, defaults) = isolatedDefaults()
+    defer { defaults.removePersistentDomain(forName: suite) }
+
+    let store = makeSettings(defaults)
+    store.statusBarShowsWindowSpend = false
+    store.statusBarShowsClaudeSpend = true
+
+    #expect(store.hideAmountInMenuBar == false)
+}
+
+@Test func claudeLimitTogglesDoNotCountUntilLimitsAreEnabled() {
+    let (suite, defaults) = isolatedDefaults()
+    defer { defaults.removePersistentDomain(forName: suite) }
+
+    let store = makeSettings(defaults)
+    store.statusBarShowsWindowSpend = false
+    store.statusBarShowsClaudeFiveHour = true
+    store.statusBarShowsClaudeWeekly = true
+    #expect(store.hideAmountInMenuBar == true)
+
+    store.claudeLimitsEnabled = true
+    #expect(store.hideAmountInMenuBar == false)
+}

@@ -103,17 +103,63 @@ struct TokensApp: App {
                     updates.autoCheckIfNeeded()
                 }
         } label: {
-            Label {
-                if let amount = store.menuAmountText {
-                    Text(amount)
-                        .monospacedDigit()
-                        .accessibilityLabel(store.menuAmountAccessibilityText ?? amount)
-                }
-            } icon: {
-                Image(nsImage: store.menuBarIcon)
-            }
-            .labelStyle(.titleAndIcon)
+            menuBarLabel
         }
         .menuBarExtraStyle(.window)
+    }
+
+    private var menuBarLabel: some View {
+        let bar = menuBarPresentation
+        return Label {
+            if let amount = bar.statusText {
+                Text(amount)
+                    .monospacedDigit()
+                    .accessibilityLabel(bar.accessibilityText ?? amount)
+            }
+        } icon: {
+            Image(nsImage: menuBarImage(bar.burnLevel))
+        }
+        .labelStyle(.titleAndIcon)
+    }
+
+    private var menuBarPresentation: MenuBarState.Presentation {
+        MenuBarState.presentation(
+            cursor: MenuBarState.Cursor(
+                enabled: settings.cursorEnabled,
+                burnLevel: store.burnLevel,
+                showsWindowSpend: settings.statusBarShowsWindowSpend,
+                showsCursorModels: settings.statusBarShowsCursorModels,
+                showsOtherModels: settings.statusBarShowsOtherModels,
+                showsGrokBot: settings.statusBarShowsGrokBot,
+                windowDollars: store.snapshot.windowDollars,
+                spendIsPlaceholder: !store.hasCompletedFetch && store.lastError == nil,
+                cursorModelsPercent: store.includedPools?.cursorModelsPercent,
+                otherModelsPercent: store.includedPools?.otherModelsPercent,
+                grokBotPercent: store.grokBotUsage?.percentUsed
+            ),
+            claude: MenuBarState.Claude(
+                installed: claudeCodeStore.isInstalled,
+                enabled: settings.claudeCodeEnabled,
+                burnLevel: claudeCodeStore.burnLevel,
+                showsSpend: settings.showsClaudeSpend(
+                    cursorAvailable: store.isCursorAvailable,
+                    claudeInstalled: claudeCodeStore.isInstalled
+                ),
+                dollars: claudeCodeStore.snapshot.windowDollars,
+                spendIsPlaceholder: !claudeCodeStore.hasCompletedFetch && claudeCodeStore.lastError == nil,
+                showsFiveHour: settings.statusBarShowsClaudeFiveHour,
+                fiveHourPercent: nil,
+                showsWeekly: settings.statusBarShowsClaudeWeekly,
+                weeklyPercent: nil,
+                limitsEnabled: settings.claudeLimitsEnabled
+            )
+        )
+    }
+
+    private func menuBarImage(_ level: BurnLevel) -> NSImage {
+        if AppIdentity.isDevBuild {
+            return level.menuBarImageWithDevDot()
+        }
+        return level.menuBarImage()
     }
 }
