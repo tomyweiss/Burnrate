@@ -64,6 +64,19 @@ struct SettingsPanel: View {
                         Task { await claudeCode.refresh() }
                         MenuBarPanelKeeper.keepOpen()
                     }
+
+                    Toggle("Show plan limits", isOn: $settings.claudeLimitsEnabled)
+                        .onChange(of: settings.claudeLimitsEnabled) { _, enabled in
+                            if enabled {
+                                Task { await claudeCode.refresh() }
+                            } else {
+                                claudeCode.clearPlanLimits()
+                            }
+                            MenuBarPanelKeeper.keepOpen()
+                        }
+                    Text("Reads your Claude Code login from Keychain to fetch your 5-hour and weekly limits. macOS may ask for permission once.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("General") {

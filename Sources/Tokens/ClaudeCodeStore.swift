@@ -1,4 +1,5 @@
 import Foundation
+import TokensCore
 
 @MainActor
 @Observable
@@ -16,11 +17,17 @@ final class ClaudeCodeStore {
     private(set) var sessionCount = 0
     /// Transcript `.jsonl` path keyed by conversation id (`sessionId` or `sessionId:agent-…`).
     private(set) var transcriptPaths: [String: String] = [:]
+    /// Last successful 5-hour and weekly windows. Kept when a later fetch fails.
+    private(set) var limits: ClaudeLimits?
+    /// Set when the opt-in limits call cannot be made or fails. Spend keeps working.
+    private(set) var limitsError: String?
 
     private let settings: SettingsStore
     private let anomalyMonitor: AnomalyMonitor?
     private let index: ClaudeTranscriptIndex
     private let projectsRoot: URL
+    private let planLimits: ClaudePlanLimits
+    private var lastLimitsFetchAt: Date?
     private var pollTask: Task<Void, Never>?
     private var refreshGeneration = 0
     private var refreshInFlight = false
@@ -43,12 +50,21 @@ final class ClaudeCodeStore {
         settings: SettingsStore,
         anomalyMonitor: AnomalyMonitor?,
         projectsRoot: URL = ClaudeTranscriptIndex.defaultRoot,
-        cacheURL: URL = ClaudeTranscriptIndex.defaultCacheURL
+        cacheURL: URL = ClaudeTranscriptIndex.defaultCacheURL,
+        planLimits: ClaudePlanLimits = .live
     ) {
         self.settings = settings
         self.anomalyMonitor = anomalyMonitor
         self.projectsRoot = projectsRoot
+        self.planLimits = planLimits
         self.index = ClaudeTranscriptIndex(projectsRoot: projectsRoot, cacheURL: cacheURL)
+    }
+
+    /// Drops cached windows when the user turns plan limits off.
+    func clearPlanLimits() {
+        limits = nil
+        limitsError = nil
+        lastLimitsFetchAt = nil
     }
 
     func start() {
@@ -95,6 +111,8 @@ final class ClaudeCodeStore {
     }
 
     private func performRefresh(generation: Int) async {
+        await refreshPlanLimits()
+        guard generation == refreshGeneration else { return }
         let now = Date()
         let window = settings.usageWindow
         let range = window.dateRange(now: now)
@@ -157,6 +175,47 @@ final class ClaudeCodeStore {
         indexingProgress = nil
         isSpikeActive = next.recentCostCents >= settings.anomalyThresholdDollars * 100
         await anomalyMonitor?.evaluate(snapshot: next, settings: settings, source: .claudeCode)
+    }
+
+    /// At most once per refresh, and not again for 60 seconds. A failed call
+    /// keeps the previous windows and sets `limitsError`. The token is never refreshed.
+    private func refreshPlanLimits() async {
+        guard settings.claudeLimitsEnabled else {
+            clearPlanLimits()
+            return
+        }
+        guard settings.claudeCodeEnabled else { return }
+
+        let now = planLimits.now()
+        if let lastLimitsFetchAt, now.timeIntervalSince(lastLimitsFetchAt) < ClaudeLimitsClient.minimumInterval {
+            return
+        }
+
+        guard let data = planLimits.readKeychain() else {
+            limitsError = ClaudeLimitsClient.unavailable
+            return
+        }
+        switch ClaudeOAuthToken.extract(from: data, now: now) {
+        case .expired, .unreadable:
+            limitsError = ClaudeLimitsClient.unavailable
+        case .valid(let accessToken):
+            lastLimitsFetchAt = now
+            do {
+                let fetched = try await planLimits.fetch(accessToken)
+                guard settings.claudeLimitsEnabled else {
+                    clearPlanLimits()
+                    return
+                }
+                limits = fetched
+                limitsError = nil
+            } catch {
+                guard settings.claudeLimitsEnabled else {
+                    clearPlanLimits()
+                    return
+                }
+                limitsError = ClaudeLimitsClient.unavailable
+            }
+        }
     }
 
     private func progressHandler(generation: Int) -> @Sendable (Int, Int) -> Void {

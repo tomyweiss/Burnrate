@@ -149,9 +149,13 @@ struct TokensApp: App {
                 dollars: claudeCodeStore.snapshot.windowDollars,
                 spendIsPlaceholder: !claudeCodeStore.hasCompletedFetch && claudeCodeStore.lastError == nil,
                 showsFiveHour: settings.statusBarShowsClaudeFiveHour,
-                fiveHourPercent: nil,
+                fiveHourPercent: claudeCodeStore.limitsError == nil
+                    ? claudeCodeStore.limits?.fiveHour?.percentUsed
+                    : nil,
                 showsWeekly: settings.statusBarShowsClaudeWeekly,
-                weeklyPercent: nil,
+                weeklyPercent: claudeCodeStore.limitsError == nil
+                    ? claudeCodeStore.limits?.weekly?.percentUsed
+                    : nil,
                 limitsEnabled: settings.claudeLimitsEnabled
             )
         )

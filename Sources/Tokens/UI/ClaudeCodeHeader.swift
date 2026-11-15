@@ -1,4 +1,5 @@
 import SwiftUI
+import TokensCore
 
 /// Claude Code panel header: estimated hero, sparkline, and the token line that
 /// plan-limit gauges replace when those limits are enabled.
@@ -10,6 +11,10 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
     let sparklineCostCents: [Double]
     let window: UsageTimeWindow
     let tokenLine: String
+    var showsPlanLimits: Bool = false
+    var fiveHour: ClaudeLimitWindow?
+    var weekly: ClaudeLimitWindow?
+    var limitsUnavailable: Bool = false
     let unpricedCaption: String?
     let statusCaption: String?
     let statusIsWarning: Bool
@@ -77,6 +82,29 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
             )
 
             VStack(alignment: .leading, spacing: 4) {
+                if showsPlanLimits {
+                    if limitsUnavailable {
+                        Text(ClaudeLimitsClient.unavailable)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        HStack(alignment: .top, spacing: 16) {
+                            PercentGauge(
+                                title: "5h",
+                                percent: fiveHour?.percentUsed,
+                                detail: fiveHour?.resetsDetail(),
+                                diameter: 72
+                            )
+                            PercentGauge(
+                                title: "Weekly",
+                                percent: weekly?.percentUsed,
+                                detail: weekly?.resetsDetail(),
+                                diameter: 72
+                            )
+                        }
+                    }
+                }
+
                 Text(tokenLine)
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
@@ -97,5 +125,30 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
                     .foregroundStyle(statusIsWarning ? Color.orange : Color.secondary)
             }
         }
+    }
+}
+
+extension ClaudeLimitWindow {
+    /// "resets 3:40pm" when it is today, "resets Thu" during the coming week,
+    /// otherwise "resets Nov 20".
+    func resetsDetail(now: Date = .now, calendar: Calendar = .current) -> String? {
+        guard let resetsAt else { return nil }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = calendar.timeZone
+        if calendar.isDate(resetsAt, inSameDayAs: now) {
+            formatter.dateFormat = "h:mma"
+            formatter.amSymbol = "am"
+            formatter.pmSymbol = "pm"
+            return "resets \(formatter.string(from: resetsAt))"
+        }
+        let start = calendar.startOfDay(for: now)
+        let resetDay = calendar.startOfDay(for: resetsAt)
+        if let day = calendar.dateComponents([.day], from: start, to: resetDay).day, (1...6).contains(day) {
+            formatter.dateFormat = "EEE"
+            return "resets \(formatter.string(from: resetsAt))"
+        }
+        formatter.dateFormat = "MMM d"
+        return "resets \(formatter.string(from: resetsAt))"
     }
 }

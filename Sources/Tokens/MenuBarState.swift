@@ -30,7 +30,7 @@ enum MenuBarState {
         var fiveHourPercent: Double?
         var showsWeekly: Bool
         var weeklyPercent: Double?
-        /// Plan-limit figures stay hidden until this is on. Task 6 fills the percents.
+        /// Plan-limit figures stay hidden until this is on.
         var limitsEnabled: Bool
     }
 

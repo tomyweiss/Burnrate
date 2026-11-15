@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import TokensCore
 
 enum UsageTab: String, CaseIterable, Identifiable {
     case models
@@ -42,6 +43,78 @@ enum CostMetric: String, CaseIterable, Identifiable {
 /// cap) on the left; on the right the cycle's spend as one stacked bar
 /// (included vs on-demand share of the total) with `timeline` filling the
 /// remaining height so both columns end level with the rings.
+/// Ring used by the Cursor included pools and the Claude Code plan limits.
+struct PercentGauge: View {
+    let title: String
+    let percent: Double?
+    var detail: String? = nil
+    var diameter: CGFloat
+
+    private static var ringWidth: CGFloat { 9 }
+
+    var body: some View {
+        let shown = percent.map(IncludedPools.displayPercent)
+        let fill = shown.map { min(CGFloat($0), 100) / 100 } ?? 0
+        let tint = Self.tint(percent)
+
+        VStack(spacing: 6) {
+            ZStack {
+                Circle()
+                    .stroke(Color.secondary.opacity(0.25), lineWidth: Self.ringWidth)
+                Circle()
+                    .trim(from: 0, to: fill)
+                    .stroke(tint, style: StrokeStyle(lineWidth: Self.ringWidth, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                VStack(spacing: 0) {
+                    Text(shown.map { "\($0)%" } ?? "—")
+                        .font(.title3.weight(.semibold).monospacedDigit())
+                        .minimumScaleFactor(0.6)
+                        .lineLimit(1)
+                    if shown != nil {
+                        Text("used")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, diameter < 80 ? 4 : 12)
+            }
+            .frame(width: diameter, height: diameter)
+
+            VStack(spacing: 1) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                if let detail {
+                    Text(detail)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+            }
+            .frame(width: diameter)
+        }
+        .frame(width: diameter)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityText(shown: shown))
+    }
+
+    private func accessibilityText(shown: Int?) -> String {
+        let base = shown.map { "\(title), \($0) percent used" } ?? "\(title), not loaded"
+        guard let detail else { return base }
+        return "\(base), \(detail)"
+    }
+
+    /// Orange once the pool is exhausted, because usage past that point
+    /// flows into on-demand spend (also orange).
+    private static func tint(_ percent: Double?) -> Color {
+        guard let percent else { return Color.secondary.opacity(0.45) }
+        return percent >= 100 ? .orange : .accentColor
+    }
+}
+
 /// Blue means covered by the plan; orange means paying.
 private struct IncludedPoolsGauges<Timeline: View>: View {
     /// Nil until Cursor reports the pools. The rings stay on screen either way.
@@ -71,7 +144,6 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
     /// Three rings stay in the allowance column. Fewer rings keep the larger size.
     private var ringSize: CGFloat { ringCount >= 3 ? 72 : 100 }
     private var ringSpacing: CGFloat { ringCount >= 3 ? 8 : 24 }
-    private static var ringWidth: CGFloat { 9 }
     private static var includedTint: Color { .accentColor }
     private static var onDemandTint: Color { .orange }
 
@@ -111,65 +183,7 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
     }
 
     private func percentGauge(_ title: String, percent: Double?, detail: String? = nil) -> some View {
-        let shown = percent.map(IncludedPools.displayPercent)
-        let fill = shown.map { min(CGFloat($0), 100) / 100 } ?? 0
-        let tint = percentTint(percent)
-
-        return VStack(spacing: 6) {
-            ZStack {
-                Circle()
-                    .stroke(Color.secondary.opacity(0.25), lineWidth: Self.ringWidth)
-                Circle()
-                    .trim(from: 0, to: fill)
-                    .stroke(tint, style: StrokeStyle(lineWidth: Self.ringWidth, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                VStack(spacing: 0) {
-                    Text(shown.map { "\($0)%" } ?? "—")
-                        .font(.title3.weight(.semibold).monospacedDigit())
-                        .minimumScaleFactor(0.6)
-                        .lineLimit(1)
-                    if shown != nil {
-                        Text("used")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.horizontal, ringSize < 80 ? 4 : 12)
-            }
-            .frame(width: ringSize, height: ringSize)
-
-            VStack(spacing: 1) {
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                if let detail {
-                    Text(detail)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                }
-            }
-            .frame(width: ringSize)
-        }
-        .frame(width: ringSize)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(gaugeAccessibility(title: title, shown: shown, detail: detail))
-    }
-
-    private func gaugeAccessibility(title: String, shown: Int?, detail: String?) -> String {
-        let base = shown.map { "\(title), \($0) percent used" } ?? "\(title), not loaded"
-        guard let detail else { return base }
-        return "\(base), \(detail)"
-    }
-
-    /// Orange once the pool is exhausted, because usage past that point
-    /// flows into on-demand spend (also orange).
-    private func percentTint(_ percent: Double?) -> Color {
-        guard let percent else { return Color.secondary.opacity(0.45) }
-        return percent >= 100 ? Self.onDemandTint : Self.includedTint
+        PercentGauge(title: title, percent: percent, detail: detail, diameter: ringSize)
     }
 
     // MARK: Spend
@@ -536,6 +550,10 @@ struct UsagePanel: View {
             sparklineCostCents: claudeCode.snapshot.sparklineCostCents,
             window: claudeCode.snapshot.window,
             tokenLine: ClaudeTokenLine.string(snapshot: claudeCode.snapshot),
+            showsPlanLimits: settings.claudeLimitsEnabled,
+            fiveHour: claudeCode.limits?.fiveHour,
+            weekly: claudeCode.limits?.weekly,
+            limitsUnavailable: claudeCode.limitsError != nil,
             unpricedCaption: ClaudeTokenLine.unpricedCaption(claudeCode.unpricedModels),
             statusCaption: PanelSourceResolver.statusCaption(
                 indexing: indexing,
