@@ -78,6 +78,9 @@ struct SettingsPanel: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                .onAppear {
+                    Task { await claudeCode.refreshInstallStatus() }
+                }
 
                 Section("General") {
                     Picker("Poll every", selection: $settings.refreshIntervalSeconds) {

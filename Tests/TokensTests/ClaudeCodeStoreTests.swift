@@ -152,6 +152,33 @@ import Testing
     #expect(store.indexingProgress == nil)
 }
 
+@Test @MainActor func disabledRefreshDoesNotProbeClaudeCodeInstall() async throws {
+    let fixture = try ClaudeStoreFixture()
+    defer { fixture.cleanup() }
+    let settings = claudeStoreSettings(fixture.defaults)
+    settings.claudeCodeEnabled = false
+    let store = ClaudeCodeStore(
+        settings: settings,
+        anomalyMonitor: nil,
+        projectsRoot: fixture.root,
+        cacheURL: fixture.cacheURL
+    )
+
+    await store.refresh()
+    #expect(store.isInstalled == false)
+    #expect(store.hasCompletedFetch)
+    #expect(store.snapshot.eventCount == 0)
+
+    try fixture.write("proj/sess-live.jsonl", "{}\n", mtime: Date())
+    await store.refresh()
+    #expect(store.isInstalled == false)
+    #expect(store.sessionCount == 0)
+
+    await store.refreshInstallStatus()
+    #expect(store.isInstalled)
+    #expect(store.snapshot.eventCount == 0)
+}
+
 private func claudeStoreDefaults() -> (suite: String, defaults: UserDefaults) {
     let suite = "com.burnrate.tests.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suite)!

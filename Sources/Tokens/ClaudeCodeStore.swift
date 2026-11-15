@@ -74,6 +74,7 @@ final class ClaudeCodeStore {
         }
         pollTask = Task { [weak self] in
             await self?.anomalyMonitor?.requestAuthorizationIfNeeded()
+            await self?.refreshInstallStatus()
             while let self, !Task.isCancelled {
                 await self.refresh()
                 let seconds = max(15, self.settings.refreshIntervalSeconds)
@@ -85,6 +86,18 @@ final class ClaudeCodeStore {
     func stop() {
         pollTask?.cancel()
         pollTask = nil
+    }
+
+    /// Probes `~/.claude/projects` without indexing. Launch and Settings call this so the
+    /// "Claude Code · N sessions / Not found" line stays right while a disabled source skips polls.
+    func refreshInstallStatus() async {
+        let installed = ClaudeTranscriptIndex.isClaudeCodeInstalled(root: projectsRoot)
+        setInstalled(installed)
+        if installed {
+            sessionCount = await index.sessionCount()
+        } else {
+            sessionCount = 0
+        }
     }
 
     /// The index actor suspends inside `refresh`, and a second call can enter before
@@ -113,6 +126,14 @@ final class ClaudeCodeStore {
     private func performRefresh(generation: Int) async {
         await refreshPlanLimits()
         guard generation == refreshGeneration else { return }
+        guard settings.claudeCodeEnabled else {
+            clearSnapshot()
+            hasCompletedFetch = true
+            isLoading = false
+            indexingProgress = nil
+            return
+        }
+
         let now = Date()
         let window = settings.usageWindow
         let range = window.dateRange(now: now)
@@ -122,13 +143,9 @@ final class ClaudeCodeStore {
         guard generation == refreshGeneration else { return }
         setInstalled(installed)
 
-        guard installed, settings.claudeCodeEnabled else {
+        guard installed else {
             clearSnapshot()
-            if installed {
-                sessionCount = await index.sessionCount()
-            } else {
-                sessionCount = 0
-            }
+            sessionCount = 0
             hasCompletedFetch = true
             isLoading = false
             indexingProgress = nil
