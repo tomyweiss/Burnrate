@@ -14,7 +14,7 @@ No Dock icon. Cursor auth comes from the local IDE login. Claude Code spend is r
 
 ### Menu bar
 
-- Flame SF Symbol + the figures chosen in Settings. Cursor figures first (window spend, Cursor models %, Other models %, Grok Bot %), then Claude Code (estimated spend, and `5h` / `wk` when plan limits are on). All off hides the text.
+- Flame SF Symbol + the figures chosen in Settings. Cursor figures first (window spend, Cursor models %, Other models %, Grok Bot %), then Claude Code (estimated spend, and `5h` / `wk` only when plan limits are on and those status-bar toggles are on). All off hides the text.
 - Estimated Claude Code spend is `CC ~$31.20` when Cursor spend is also shown, and `~$31.20` on its own. Off after an update when Cursor is signed in. On when Claude Code is the only source and the toggle has never been set. Before the first index finishes it reads `~$—`.
 - `flame.fill` when recent spend on any enabled source ≥ spike threshold
 - Warning triangle when any enabled source has an error, while keeping the last known amount

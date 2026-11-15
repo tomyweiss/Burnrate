@@ -171,9 +171,9 @@ and Max you pay a flat rate; this is what the same usage would cost on the API.
 A model with no price shows its tokens and is left out of the cost.
 
 The first Claude Code pass shows a caption like "Indexing Claude Code · 12 of
-71 sessions" and fills in newest sessions first. Until that pass finishes, a
-menu-bar Claude Code figure reads `~$—`. Full behavior:
-[CAPABILITIES.md](CAPABILITIES.md).
+71 sessions" while it indexes. Newest files are read first. Results appear when
+that pass finishes. Until then, a menu-bar Claude Code figure reads `~$—`. Full
+behavior: [CAPABILITIES.md](CAPABILITIES.md).
 
 ### Privacy & security
 
