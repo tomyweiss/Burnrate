@@ -9,6 +9,7 @@
 - Plan limits are off until you turn them on in Settings. Burnrate reads the Claude Code login from Keychain in memory and checks the 5-hour, weekly, and per-model weekly limits at most once a minute, plus extra usage when that pool is on. It does not store or refresh the token, and the request does not use model quota.
 - Spike alerts use the same threshold, window, and cooldown for each source. A Claude Code alert says the amount is estimated.
 - Settings has a Sources section to enable each source, and status bar figures are grouped by source.
+- The panel header now leads: larger allowance rings and a stats grid (sessions, events, top model, cache read, per hour, average per session), with the tabs in a shorter list below. The panel is a little taller.
 
 ## 0.60.10
 
