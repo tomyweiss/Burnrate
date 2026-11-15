@@ -10,7 +10,9 @@ enum Aggregator {
         rates: SpendRates = .unavailable,
         includePrompts: Bool = true,
         includeLocalComposers: Bool = true,
-        grokLibrary: GrokBotStore.Library = .disk
+        grokLibrary: GrokBotStore.Library = .disk,
+        cursorLocalCatalogs: Bool = true,
+        extraMeta: [String: SessionMeta] = [:]
     ) -> UsageSnapshot {
         let range = window.dateRange(now: now)
         let startMs = range.start.timeIntervalSince1970 * 1000
@@ -81,7 +83,8 @@ enum Aggregator {
         var parentByChild = conversationParents(
             conversationIds: knownConversationIds,
             events: events,
-            library: grokLibrary
+            library: grokLibrary,
+            cursorLocalCatalogs: cursorLocalCatalogs
         )
 
         // Parents discovered only via children may have no events in-window —
@@ -97,7 +100,8 @@ enum Aggregator {
             parentByChild = conversationParents(
                 conversationIds: knownConversationIds,
                 events: events,
-                library: grokLibrary
+                library: grokLibrary,
+                cursorLocalCatalogs: cursorLocalCatalogs
             )
             for parentId in Set(parentByChild.values) where bySession[parentId] == nil {
                 bySession[parentId] = CrossSessionAccumulator()
@@ -105,7 +109,7 @@ enum Aggregator {
             }
         }
 
-        let locals = includeLocalComposers
+        let locals = includeLocalComposers && cursorLocalCatalogs
             ? SessionCatalog.composersUpdated(fromMs: startMs, toMs: endMs)
             : []
         for local in locals where bySession[local.meta.conversationId] == nil {
@@ -117,12 +121,23 @@ enum Aggregator {
 
         let childrenByParent = childrenByParentMap(parentByChild)
 
-        var catalog = SessionCatalog.lookup(
-            conversationIds: knownConversationIds,
-            grokNames: grokLibrary.names
-        )
-        for local in locals where catalog[local.meta.conversationId]?.name == nil {
-            catalog[local.meta.conversationId] = local.meta
+        var catalog: [String: SessionMeta]
+        if cursorLocalCatalogs {
+            catalog = SessionCatalog.lookup(
+                conversationIds: knownConversationIds,
+                grokNames: grokLibrary.names
+            )
+            for local in locals where catalog[local.meta.conversationId]?.name == nil {
+                catalog[local.meta.conversationId] = local.meta
+            }
+        } else {
+            catalog = catalogFromLibrary(
+                conversationIds: knownConversationIds,
+                names: grokLibrary.names
+            )
+        }
+        for (id, meta) in extraMeta {
+            catalog[id] = meta
         }
 
         let hierarchicalSessions = buildHierarchicalSessions(
@@ -169,7 +184,8 @@ enum Aggregator {
                 startMs: startMs,
                 endMs: endMs,
                 rates: rates,
-                library: grokLibrary
+                library: grokLibrary,
+                cursorLocalCatalogs: cursorLocalCatalogs
             )
         } else {
             (prompts, subagentPrompts, skills) = ([], [], [])
@@ -270,9 +286,13 @@ enum Aggregator {
     private static func conversationParents(
         conversationIds: Set<String>,
         events: [UsageEvent],
-        library: GrokBotStore.Library
+        library: GrokBotStore.Library,
+        cursorLocalCatalogs: Bool = true
     ) -> [String: String] {
-        var parents = PromptCatalog.subagentParents(conversationIds: conversationIds)
+        var parents: [String: String] = [:]
+        if cursorLocalCatalogs {
+            parents = PromptCatalog.subagentParents(conversationIds: conversationIds)
+        }
         // The Grok roster lists every historical sand task. A parent only belongs
         // in this window when one of those tasks actually landed here.
         for (child, parent) in library.subagentParents where parents[child] == nil && conversationIds.contains(child) {
@@ -296,6 +316,34 @@ enum Aggregator {
             parents[child] = parent
         }
         return parents
+    }
+
+    private static func catalogFromLibrary(
+        conversationIds: Set<String>,
+        names: [String: String]
+    ) -> [String: SessionMeta] {
+        var catalog: [String: SessionMeta] = [:]
+        for id in conversationIds {
+            let name = names[id]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !name.isEmpty else { continue }
+            catalog[id] = SessionMeta(conversationId: id, name: name)
+        }
+        return catalog
+    }
+
+    private static func libraryPrompts(
+        _ prompts: [String: [PromptRecord]],
+        ids: Set<String>
+    ) -> [String: [PromptRecord]] {
+        var result: [String: [PromptRecord]] = [:]
+        for id in ids {
+            guard let records = prompts[id], !records.isEmpty else { continue }
+            result[id] = records.sorted {
+                if $0.createdAtMs != $1.createdAtMs { return $0.createdAtMs < $1.createdAtMs }
+                return $0.bubbleId < $1.bubbleId
+            }
+        }
+        return result
     }
 
     // MARK: - Session hierarchy
@@ -464,7 +512,8 @@ enum Aggregator {
         startMs: Double,
         endMs: Double,
         rates: SpendRates,
-        library: GrokBotStore.Library
+        library: GrokBotStore.Library,
+        cursorLocalCatalogs: Bool = true
     ) -> (prompts: [PromptUsage], subagentPrompts: [PromptUsage], skills: [SkillUsage]) {
         func effectiveConversationId(_ id: String) -> String {
             rootConversationId(id, parentByChild: parentByChild)
@@ -475,10 +524,12 @@ enum Aggregator {
             .subtracting(parentByChild.keys)
             .union(parentByChild.values)
         let promptConversationIds = rootIds.union(parentByChild.keys)
-        let promptsByConversation = PromptCatalog.lookup(
-            conversationIds: promptConversationIds,
-            extraPrompts: library.prompts
-        )
+        let promptsByConversation = cursorLocalCatalogs
+            ? PromptCatalog.lookup(
+                conversationIds: promptConversationIds,
+                extraPrompts: library.prompts
+            )
+            : libraryPrompts(library.prompts, ids: promptConversationIds)
         guard !promptsByConversation.isEmpty else { return ([], [], []) }
 
         // Allow small clock skew between local bubble timestamps and server event
