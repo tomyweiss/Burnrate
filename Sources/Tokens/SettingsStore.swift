@@ -24,6 +24,7 @@ final class SettingsStore {
         static let showLocationSubtitle = "showLocationSubtitle"
         static let hideArchivedSessions = "hideArchivedSessions"
         static let blurSensitiveContent = "blurSensitiveContent"
+        static let cursorEnabled = "cursorEnabled"
         static let claudeCodeEnabled = "claudeCodeEnabled"
         static let shareCommunityUsage = "shareCommunityUsage"
         static let communityParticipantId = "communityParticipantId"
@@ -120,6 +121,11 @@ final class SettingsStore {
     /// Blur session titles and prompt text (for screen recordings / demos).
     var blurSensitiveContent: Bool {
         didSet { defaults.set(blurSensitiveContent, forKey: Keys.blurSensitiveContent) }
+    }
+
+    /// Cursor usage is fetched when this is on. Defaults on.
+    var cursorEnabled: Bool {
+        didSet { defaults.set(cursorEnabled, forKey: Keys.cursorEnabled) }
     }
 
     /// Claude Code transcripts are read when this is on. Defaults on.
@@ -450,6 +456,11 @@ final class SettingsStore {
         showLocationSubtitle = defaults.bool(forKey: Keys.showLocationSubtitle)
         hideArchivedSessions = defaults.bool(forKey: Keys.hideArchivedSessions)
         blurSensitiveContent = defaults.bool(forKey: Keys.blurSensitiveContent)
+        if defaults.object(forKey: Keys.cursorEnabled) == nil {
+            cursorEnabled = true
+        } else {
+            cursorEnabled = defaults.bool(forKey: Keys.cursorEnabled)
+        }
         if defaults.object(forKey: Keys.claudeCodeEnabled) == nil {
             claudeCodeEnabled = true
         } else {

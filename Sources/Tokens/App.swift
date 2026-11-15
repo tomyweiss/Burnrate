@@ -21,6 +21,9 @@ struct TokensApp: App {
         let anomalyMonitor = AnomalyMonitor()
         let store = UsageStore(settings: settings, anomalyMonitor: anomalyMonitor)
         let claudeCodeStore = ClaudeCodeStore(settings: settings, anomalyMonitor: anomalyMonitor)
+        claudeCodeStore.setInstalledObserver { installed in
+            store.noteClaudeCodeInstalled(installed)
+        }
         let community = CommunityStore(settings: settings, interactionTracker: interactionTracker)
         store.setCommunityStore(community)
         community.setUsageStore(store)

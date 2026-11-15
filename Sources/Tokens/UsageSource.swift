@@ -10,4 +10,11 @@ enum UsageSource: String, CaseIterable, Sendable, Codable {
         case .claudeCode: "Claude Code"
         }
     }
+
+    var costStyle: CostStyle {
+        switch self {
+        case .cursor: .billed
+        case .claudeCode: .estimated
+        }
+    }
 }

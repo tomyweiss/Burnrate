@@ -12,6 +12,10 @@ final class ClaudeCodeStore {
     private(set) var unpricedModels: [String] = []
     private(set) var lastError: String?
     private(set) var isSpikeActive = false
+    /// Distinct Claude Code sessions in the index. Subagents count as their parent.
+    private(set) var sessionCount = 0
+    /// Transcript `.jsonl` path keyed by conversation id (`sessionId` or `sessionId:agent-…`).
+    private(set) var transcriptPaths: [String: String] = [:]
 
     private let settings: SettingsStore
     private let anomalyMonitor: AnomalyMonitor?
@@ -20,6 +24,12 @@ final class ClaudeCodeStore {
     private var pollTask: Task<Void, Never>?
     private var refreshGeneration = 0
     private var refreshInFlight = false
+    private var installedObserver: (@MainActor (Bool) -> Void)?
+
+    func setInstalledObserver(_ observer: @escaping @MainActor (Bool) -> Void) {
+        installedObserver = observer
+        observer(isInstalled)
+    }
 
     var burnLevel: BurnLevel {
         BurnLevel.level(
@@ -92,10 +102,15 @@ final class ClaudeCodeStore {
 
         let installed = ClaudeTranscriptIndex.isClaudeCodeInstalled(root: projectsRoot)
         guard generation == refreshGeneration else { return }
-        isInstalled = installed
+        setInstalled(installed)
 
         guard installed, settings.claudeCodeEnabled else {
             clearSnapshot()
+            if installed {
+                sessionCount = await index.sessionCount()
+            } else {
+                sessionCount = 0
+            }
             hasCompletedFetch = true
             isLoading = false
             indexingProgress = nil
@@ -134,6 +149,8 @@ final class ClaudeCodeStore {
 
         snapshot = next
         unpricedModels = unpriced
+        sessionCount = Set(files.map(\.sessionId)).count
+        transcriptPaths = Self.transcriptPaths(in: files)
         lastError = nil
         hasCompletedFetch = true
         isLoading = false
@@ -152,11 +169,27 @@ final class ClaudeCodeStore {
         }
     }
 
+    private func setInstalled(_ installed: Bool) {
+        guard isInstalled != installed else { return }
+        isInstalled = installed
+        installedObserver?(installed)
+    }
+
+    nonisolated static func transcriptPaths(in files: [ClaudeSessionFile]) -> [String: String] {
+        var paths: [String: String] = [:]
+        for file in files {
+            let id = file.agentId.map { "\(file.sessionId):\($0)" } ?? file.sessionId
+            paths[id] = file.path
+        }
+        return paths
+    }
+
     private func clearSnapshot() {
         snapshot = .empty
         unpricedModels = []
         isSpikeActive = false
         lastError = nil
+        transcriptPaths = [:]
     }
 }
 

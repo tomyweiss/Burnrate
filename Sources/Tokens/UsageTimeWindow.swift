@@ -249,17 +249,23 @@ struct UsageTimeWindow: Sendable, Hashable {
     }
 
     var emptyStateMessage: String {
+        emptyStateMessage(for: .cursor)
+    }
+
+    /// Claude Code says "usage" and does not mention Cursor.
+    func emptyStateMessage(for source: UsageSource) -> String {
+        let claude = source == .claudeCode
         switch preset {
         case .today:
-            return "No spend since midnight"
+            return claude ? "No usage since midnight" : "No spend since midnight"
         case .last24Hours:
-            return "No spend in the last 24 hours"
+            return claude ? "No usage in the last 24 hours" : "No spend in the last 24 hours"
         case .last7Days:
-            return "No spend in the last 7 days"
+            return claude ? "No usage in the last 7 days" : "No spend in the last 7 days"
         case .thisBilling:
-            return "No spend this billing cycle"
+            return claude ? "No usage this billing cycle" : "No spend this billing cycle"
         case .custom:
-            return "No spend in this date range"
+            return claude ? "No usage in this date range" : "No spend in this date range"
         }
     }
 
