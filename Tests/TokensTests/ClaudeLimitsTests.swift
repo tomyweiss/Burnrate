@@ -26,15 +26,25 @@ import TokensCore
     let limits = try #require(ClaudeLimits.parse(json: json))
     #expect(limits.fiveHour == ClaudeLimitWindow(
         percentUsed: 62,
-        resetsAt: claudeLimitsDate("2026-11-15T15:40:00Z")
+        resetsAt: Date(timeIntervalSince1970: 1_794_757_200)
     ))
     #expect(limits.weekly == ClaudeLimitWindow(
         percentUsed: 34,
-        resetsAt: claudeLimitsDate("2026-11-20T08:00:00Z")
+        resetsAt: Date(timeIntervalSince1970: 1_795_161_600)
+    ))
+    #expect(limits.weeklySonnet == ClaudeLimitWindow(
+        percentUsed: 99,
+        resetsAt: Date(timeIntervalSince1970: 1_795_161_600)
+    ))
+    #expect(limits.weeklyOpus == nil)
+    #expect(limits.extraUsage == ClaudeExtraUsage(
+        percentUsed: nil,
+        usedDollars: nil,
+        monthlyLimitDollars: nil
     ))
 }
 
-@Test func claudeLimitsParseMissingSevenDayIgnoresModelWindow() throws {
+@Test func claudeLimitsParseMissingSevenDayStillParsesOpus() throws {
     let json: [String: Any] = [
         "five_hour": [
             "utilization": 10,
@@ -44,11 +54,109 @@ import TokensCore
             "utilization": 80,
             "resets_at": "2026-11-20T08:00:00Z",
         ],
+        "seven_day_sonnet": NSNull(),
     ]
 
     let limits = try #require(ClaudeLimits.parse(json: json))
     #expect(limits.fiveHour?.percentUsed == 10)
     #expect(limits.weekly == nil)
+    #expect(limits.weeklySonnet == nil)
+    #expect(limits.weeklyOpus == ClaudeLimitWindow(
+        percentUsed: 80,
+        resetsAt: Date(timeIntervalSince1970: 1_795_161_600)
+    ))
+}
+
+@Test func claudeLimitsParseAllBuckets() throws {
+    let json: [String: Any] = [
+        "five_hour": ["utilization": 62, "resets_at": "2026-11-15T15:40:00Z"],
+        "seven_day": ["utilization": 34, "resets_at": "2026-11-20T08:00:00Z"],
+        "seven_day_opus": ["utilization": 80, "resets_at": "2026-11-20T08:00:00Z"],
+        "seven_day_sonnet": ["utilization": 21, "resets_at": "2026-11-20T08:00:00Z"],
+        "seven_day_oauth_apps": ["utilization": 5, "resets_at": "2026-11-20T08:00:00Z"],
+        "iguana_necktie": ["utilization": 1, "resets_at": "2026-11-20T08:00:00Z"],
+        "extra_usage": [
+            "is_enabled": true,
+            "monthly_limit": 5000,
+            "used_credits": 1240,
+            "utilization": 24.8,
+        ],
+    ]
+
+    let limits = try #require(ClaudeLimits.parse(json: json))
+    #expect(limits.weeklyOpus?.percentUsed == 80)
+    #expect(limits.weeklySonnet?.percentUsed == 21)
+    #expect(limits.extraUsage == ClaudeExtraUsage(
+        percentUsed: 24.8,
+        usedDollars: 12.4,
+        monthlyLimitDollars: 50
+    ))
+    #expect(limits.extraUsage?.amountDetail == "$12.40 of $50")
+}
+
+@Test func claudeLimitsParseExtraUsageDisabledIsNil() throws {
+    let json: [String: Any] = [
+        "five_hour": ["utilization": 10, "resets_at": NSNull()],
+        "extra_usage": [
+            "is_enabled": false,
+            "monthly_limit": 5000,
+            "used_credits": 1240,
+            "utilization": 24.8,
+        ],
+    ]
+    let limits = try #require(ClaudeLimits.parse(json: json))
+    #expect(limits.extraUsage == nil)
+
+    let onlyDisabled: [String: Any] = [
+        "extra_usage": ["is_enabled": false, "monthly_limit": 5000, "used_credits": 1240],
+    ]
+    #expect(ClaudeLimits.parse(json: onlyDisabled) == nil)
+}
+
+@Test func claudeLimitsParseExtraUsageWithoutMonthlyLimitHasNilPercent() throws {
+    let json: [String: Any] = [
+        "extra_usage": [
+            "is_enabled": true,
+            "monthly_limit": NSNull(),
+            "used_credits": 1240,
+            "utilization": 24.8,
+        ],
+    ]
+    let extra = try #require(ClaudeLimits.parse(json: json)?.extraUsage)
+    #expect(extra.percentUsed == nil)
+    #expect(extra.usedDollars == 12.4)
+    #expect(extra.monthlyLimitDollars == nil)
+    #expect(extra.amountDetail == nil)
+}
+
+@Test func claudeLimitsParseExtraUsageScalesByDecimalPlaces() throws {
+    let cents: [String: Any] = [
+        "extra_usage": [
+            "is_enabled": true,
+            "monthly_limit": 30000,
+            "used_credits": 10587,
+            "utilization": 35.29,
+            "decimal_places": 2,
+        ],
+    ]
+    let scaled = try #require(ClaudeLimits.parse(json: cents)?.extraUsage)
+    #expect(scaled.percentUsed == 35.29)
+    #expect(scaled.usedDollars == 105.87)
+    #expect(scaled.monthlyLimitDollars == 300)
+    #expect(scaled.amountDetail == "$105.87 of $300")
+
+    let major: [String: Any] = [
+        "extra_usage": [
+            "is_enabled": true,
+            "monthly_limit": 50,
+            "used_credits": 12.4,
+            "utilization": 24.8,
+            "decimal_places": 0,
+        ],
+    ]
+    let unscaled = try #require(ClaudeLimits.parse(json: major)?.extraUsage)
+    #expect(unscaled.usedDollars == 12.4)
+    #expect(unscaled.monthlyLimitDollars == 50)
 }
 
 @Test func claudeLimitsParseFractionalAndPlainResets() throws {
@@ -67,11 +175,11 @@ import TokensCore
 
     let five = try #require(ClaudeLimits.parse(json: fractional)?.fiveHour)
     #expect(five.percentUsed == 33)
-    #expect(five.resetsAt == claudeLimitsDate("2026-04-11T07:00:00.528743+00:00"))
+    #expect(five.resetsAt == Date(timeIntervalSince1970: 1_775_890_800.528743))
 
     let weekly = try #require(ClaudeLimits.parse(json: plain)?.weekly)
     #expect(weekly.percentUsed == 13)
-    #expect(weekly.resetsAt == claudeLimitsDate("2026-04-17T00:59:59Z"))
+    #expect(weekly.resetsAt == Date(timeIntervalSince1970: 1_776_387_599))
 }
 
 @Test func claudeLimitsParseKeepsOnePercent() throws {
@@ -85,6 +193,59 @@ import TokensCore
     let five = try #require(ClaudeLimits.parse(json: json)?.fiveHour)
     #expect(five.percentUsed == 1)
     #expect(five.resetsAt == nil)
+}
+
+@Test func claudeLimitGaugesFollowBucketOrderAndHideAbsences() throws {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    let now = Date(timeIntervalSince1970: 1_794_757_200)
+    let five = ClaudeLimitWindow(percentUsed: 62, resetsAt: now)
+    let weekly = ClaudeLimitWindow(percentUsed: 34, resetsAt: Date(timeIntervalSince1970: 1_795_161_600))
+    let opus = ClaudeLimitWindow(percentUsed: 80, resetsAt: Date(timeIntervalSince1970: 1_795_161_600))
+    let sonnet = ClaudeLimitWindow(percentUsed: 21, resetsAt: nil)
+    let extra = ClaudeExtraUsage(percentUsed: 24.8, usedDollars: 12.4, monthlyLimitDollars: 50)
+
+    let all = ClaudeLimitGauges.make(
+        fiveHour: five,
+        weekly: weekly,
+        weeklyOpus: opus,
+        weeklySonnet: sonnet,
+        extraUsage: extra,
+        now: now,
+        calendar: calendar
+    )
+    #expect(all.map(\.title) == ["5h", "Weekly", "Opus wk", "Sonnet wk", "Extra"])
+    #expect(all.map(\.percent) == [62, 34, 80, 21, 24.8])
+    try #require(all.count == 5)
+    #expect(all[0].detail == "resets 3:40pm")
+    #expect(all[1].detail == "resets Fri")
+    #expect(all[2].detail == "resets Fri")
+    #expect(all[3].detail == nil)
+    #expect(all[4].detail == "$12.40 of $50")
+
+    let partial = ClaudeLimitGauges.make(
+        fiveHour: five,
+        weekly: nil,
+        weeklyOpus: opus,
+        weeklySonnet: nil,
+        extraUsage: ClaudeExtraUsage(percentUsed: nil, usedDollars: 12.4, monthlyLimitDollars: nil),
+        now: now,
+        calendar: calendar
+    )
+    #expect(partial.map(\.title) == ["5h", "Opus wk", "Extra"])
+    try #require(partial.count == 3)
+    #expect(partial[2].detail == nil)
+
+    let none = ClaudeLimitGauges.make(
+        fiveHour: nil,
+        weekly: nil,
+        weeklyOpus: nil,
+        weeklySonnet: nil,
+        extraUsage: nil,
+        now: now,
+        calendar: calendar
+    )
+    #expect(none.isEmpty)
 }
 
 @Test func claudeLimitsParseGarbageIsNil() {

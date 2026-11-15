@@ -6,7 +6,7 @@
 - Claude Code dollars are estimates from local token counts times Anthropic API list prices, shown with `~`. They are not your bill. Pro and Max still pay a flat rate. A model with no price shows its tokens and is left out of the cost. Long-context price tiers are not in the table, so an estimate can differ from an API bill.
 - Session and subagent transcripts are read from `~/.claude/projects` on this Mac and indexed locally. Claude Code deletes old transcripts later; the index keeps what Burnrate already read. Nothing from Claude Code is uploaded, and Community stays Cursor-only.
 - The menu bar can show estimated Claude Code spend, tagged `CC` only when Cursor spend is also on. The first time both sources are present, the panel offers to show it. With plan limits on, it can also show `5h` and `wk` percents.
-- Plan limits are off until you turn them on in Settings. Burnrate reads the Claude Code login from Keychain in memory and checks the 5-hour and weekly limits at most once a minute. It does not store or refresh the token, and the request does not use model quota.
+- Plan limits are off until you turn them on in Settings. Burnrate reads the Claude Code login from Keychain in memory and checks the 5-hour, weekly, and per-model weekly limits at most once a minute, plus extra usage when that pool is on. It does not store or refresh the token, and the request does not use model quota.
 - Spike alerts use the same threshold, window, and cooldown for each source. A Claude Code alert says the amount is estimated.
 - Settings has a Sources section to enable each source, and status bar figures are grouped by source.
 

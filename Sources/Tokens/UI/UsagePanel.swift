@@ -553,6 +553,9 @@ struct UsagePanel: View {
             showsPlanLimits: settings.claudeLimitsEnabled,
             fiveHour: claudeCode.limits?.fiveHour,
             weekly: claudeCode.limits?.weekly,
+            weeklyOpus: claudeCode.limits?.weeklyOpus,
+            weeklySonnet: claudeCode.limits?.weeklySonnet,
+            extraUsage: claudeCode.limits?.extraUsage,
             limitsUnavailable: claudeCode.limitsError != nil,
             unpricedCaption: ClaudeTokenLine.unpricedCaption(claudeCode.unpricedModels),
             statusCaption: PanelSourceResolver.statusCaption(

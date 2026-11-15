@@ -131,8 +131,9 @@ billing day and timezone). The timeline is shared by both sources.
 
 In Claude Code, every dollar starts with `~`. Under the total: "Estimated at
 API list prices · not your bill". The header shows the estimated window total,
-a burn pill, and a token line. With plan limits on, 5-hour and weekly gauges
-sit above that token line. A model with no list price shows its tokens and is
+a burn pill, and a token line. With plan limits on, 5-hour, weekly, and
+per-model weekly gauges sit above that token line, plus extra usage when that
+pool is on. A model with no list price shows its tokens and is
 left out of the cost ("No price for <model>. Tokens shown, cost excluded").
 
 Tabs slice the selected source:

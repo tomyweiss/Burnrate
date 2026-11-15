@@ -1,6 +1,62 @@
 import SwiftUI
 import TokensCore
 
+struct ClaudeLimitGauge: Equatable, Sendable {
+    var title: String
+    var percent: Double?
+    var detail: String?
+}
+
+enum ClaudeLimitGauges {
+    /// Present buckets only, in panel order. A missing window or a disabled
+    /// extra-usage pool is left out, the same way an absent Other models bucket
+    /// hides its ring.
+    static func make(
+        fiveHour: ClaudeLimitWindow?,
+        weekly: ClaudeLimitWindow?,
+        weeklyOpus: ClaudeLimitWindow?,
+        weeklySonnet: ClaudeLimitWindow?,
+        extraUsage: ClaudeExtraUsage?,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> [ClaudeLimitGauge] {
+        var gauges: [ClaudeLimitGauge] = []
+        if let fiveHour {
+            gauges.append(gauge("5h", window: fiveHour, now: now, calendar: calendar))
+        }
+        if let weekly {
+            gauges.append(gauge("Weekly", window: weekly, now: now, calendar: calendar))
+        }
+        if let weeklyOpus {
+            gauges.append(gauge("Opus wk", window: weeklyOpus, now: now, calendar: calendar))
+        }
+        if let weeklySonnet {
+            gauges.append(gauge("Sonnet wk", window: weeklySonnet, now: now, calendar: calendar))
+        }
+        if let extraUsage {
+            gauges.append(ClaudeLimitGauge(
+                title: "Extra",
+                percent: extraUsage.percentUsed,
+                detail: extraUsage.amountDetail
+            ))
+        }
+        return gauges
+    }
+
+    private static func gauge(
+        _ title: String,
+        window: ClaudeLimitWindow,
+        now: Date,
+        calendar: Calendar
+    ) -> ClaudeLimitGauge {
+        ClaudeLimitGauge(
+            title: title,
+            percent: window.percentUsed,
+            detail: window.resetsDetail(now: now, calendar: calendar)
+        )
+    }
+}
+
 /// Claude Code panel header: estimated hero, sparkline, and the token line that
 /// plan-limit gauges replace when those limits are enabled.
 struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
@@ -14,6 +70,9 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
     var showsPlanLimits: Bool = false
     var fiveHour: ClaudeLimitWindow?
     var weekly: ClaudeLimitWindow?
+    var weeklyOpus: ClaudeLimitWindow?
+    var weeklySonnet: ClaudeLimitWindow?
+    var extraUsage: ClaudeExtraUsage?
     var limitsUnavailable: Bool = false
     let unpricedCaption: String?
     let statusCaption: String?
@@ -88,19 +147,25 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     } else {
-                        HStack(alignment: .top, spacing: 16) {
-                            PercentGauge(
-                                title: "5h",
-                                percent: fiveHour?.percentUsed,
-                                detail: fiveHour?.resetsDetail(),
-                                diameter: 72
-                            )
-                            PercentGauge(
-                                title: "Weekly",
-                                percent: weekly?.percentUsed,
-                                detail: weekly?.resetsDetail(),
-                                diameter: 72
-                            )
+                        let gauges = ClaudeLimitGauges.make(
+                            fiveHour: fiveHour,
+                            weekly: weekly,
+                            weeklyOpus: weeklyOpus,
+                            weeklySonnet: weeklySonnet,
+                            extraUsage: extraUsage
+                        )
+                        if !gauges.isEmpty {
+                            GaugeWrapLayout(spacing: 16) {
+                                ForEach(gauges, id: \.title) { gauge in
+                                    PercentGauge(
+                                        title: gauge.title,
+                                        percent: gauge.percent,
+                                        detail: gauge.detail,
+                                        diameter: 72
+                                    )
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
                 }
@@ -125,6 +190,76 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
                     .foregroundStyle(statusIsWarning ? Color.orange : Color.secondary)
             }
         }
+    }
+}
+
+/// Keeps each gauge at its own size and wraps onto a second row when the
+/// panel is too narrow for one row.
+private struct GaugeWrapLayout: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let packed = rows(fitting: proposal.width ?? .greatestFiniteMagnitude, subviews: subviews)
+        let width = packed.map(\.width).max() ?? 0
+        let gaps = spacing * CGFloat(max(packed.count - 1, 0))
+        let height = packed.reduce(CGFloat(0)) { $0 + $1.height } + gaps
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let packed = rows(fitting: bounds.width, subviews: subviews)
+        var y = bounds.minY
+        for row in packed {
+            var x = bounds.minX
+            for item in row.items {
+                item.view.place(
+                    at: CGPoint(x: x, y: y),
+                    anchor: .topLeading,
+                    proposal: ProposedViewSize(width: item.size.width, height: item.size.height)
+                )
+                x += item.size.width + spacing
+            }
+            y += row.height + spacing
+        }
+    }
+
+    private struct Placed {
+        var view: LayoutSubview
+        var size: CGSize
+    }
+
+    private struct Row {
+        var items: [Placed]
+        var width: CGFloat
+        var height: CGFloat
+    }
+
+    private func rows(fitting maxWidth: CGFloat, subviews: Subviews) -> [Row] {
+        var result: [Row] = []
+        var items: [Placed] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+
+        func flush() {
+            guard !items.isEmpty else { return }
+            result.append(Row(items: items, width: width, height: height))
+            items = []
+            width = 0
+            height = 0
+        }
+
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            let needed = items.isEmpty ? size.width : width + spacing + size.width
+            if !items.isEmpty, needed > maxWidth {
+                flush()
+            }
+            items.append(Placed(view: view, size: size))
+            width = items.count == 1 ? size.width : width + spacing + size.width
+            height = max(height, size.height)
+        }
+        flush()
+        return result
     }
 }
 

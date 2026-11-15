@@ -24,7 +24,7 @@ No Dock icon. Cursor auth comes from the local IDE login. Claude Code spend is r
 
 - **Source switcher** — Cursor | Claude Code, only when both are enabled and detected. Each segment shows that source's window figure. Selection is remembered. Claude-only (no Cursor login) opens on Claude Code with no switcher.
 - **Hero** matches the status-bar figures for Cursor. A percent-only choice keeps the timeline dollar total smaller underneath. Claude Code uses `~` and the caption "Estimated at API list prices · not your bill".
-- **Plan limits** — off by default. When on, 5-hour and weekly gauges sit above the token line. The token line is always shown. A model with no price adds "No price for <model>. Tokens shown, cost excluded".
+- **Plan limits** — off by default. When on, 5-hour, weekly, and per-model weekly gauges sit above the token line, plus extra usage when that pool is on. The token line is always shown. A model with no price adds "No price for <model>. Tokens shown, cost excluded".
 - **One-time hint** — "Burnrate now tracks Claude Code", with Show in menu bar and Dismiss, the first time Claude Code is detected while Cursor is signed in and Claude spend is off.
 - **Timeline picker** — Today, Last 24h, Last 7d, This billing. Shared by both sources.
 - **Burn pill** (glass) for rolling-window spend, tinted by severity. Claude Code amounts use `~`.
