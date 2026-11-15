@@ -143,28 +143,26 @@ final class ClaudeCodeStore {
         guard generation == refreshGeneration else { return }
 
         let fresh = files.filter { $0.mtime.timeIntervalSince1970 * 1000 >= startMs }
-        let built = ClaudeCodeEvents.build(files: fresh)
         let recentWindowMinutes = settings.anomalyWindowMinutes
-        let events = built.events
-        let library = built.library
-        let meta = built.meta
-        let unpriced = built.unpricedModels
 
-        let next = await Task.detached(priority: .userInitiated) {
-            Aggregator.snapshot(
-                events: events,
+        let indexed = await Task.detached(priority: .userInitiated) {
+            let built = ClaudeCodeEvents.build(files: fresh)
+            let snapshot = Aggregator.snapshot(
+                events: built.events,
                 now: now,
                 window: window,
                 recentWindowMinutes: recentWindowMinutes,
                 rates: .unavailable,
                 includeLocalComposers: false,
-                grokLibrary: library,
+                grokLibrary: built.library,
                 cursorLocalCatalogs: false,
-                extraMeta: meta
+                extraMeta: built.meta
             )
+            return (snapshot, built.unpricedModels)
         }.value
         guard generation == refreshGeneration else { return }
 
+        let (next, unpriced) = indexed
         snapshot = next
         unpricedModels = unpriced
         sessionCount = Set(files.map(\.sessionId)).count
