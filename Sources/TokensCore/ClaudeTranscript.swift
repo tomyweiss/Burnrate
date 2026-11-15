@@ -51,6 +51,7 @@ public enum ClaudeTranscript {
             inputTokens: int(usage["input_tokens"]),
             outputTokens: int(usage["output_tokens"]),
             cacheCreationTokens: int(usage["cache_creation_input_tokens"]),
+            cacheCreation1hTokens: cacheCreation1hTokens(in: usage),
             cacheReadTokens: int(usage["cache_read_input_tokens"]),
             isSidechain: object["isSidechain"] as? Bool ?? false,
             cwd: nonEmpty(object["cwd"]),
@@ -148,6 +149,12 @@ public enum ClaudeTranscript {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    /// Absent `cache_creation` means the whole write was 5-minute. 5m = total - 1h.
+    private static func cacheCreation1hTokens(in usage: [String: Any]) -> Int {
+        guard let creation = usage["cache_creation"] as? [String: Any] else { return 0 }
+        return int(creation["ephemeral_1h_input_tokens"])
+    }
+
     private static func int(_ value: Any?) -> Int {
         switch value {
         case let number as NSNumber:
@@ -168,6 +175,7 @@ public struct ClaudeUsageRecord: Sendable, Hashable, Codable {
     public let inputTokens: Int
     public let outputTokens: Int
     public let cacheCreationTokens: Int
+    public let cacheCreation1hTokens: Int
     public let cacheReadTokens: Int
     public let isSidechain: Bool
     public let cwd: String?
@@ -181,6 +189,7 @@ public struct ClaudeUsageRecord: Sendable, Hashable, Codable {
         inputTokens: Int,
         outputTokens: Int,
         cacheCreationTokens: Int,
+        cacheCreation1hTokens: Int,
         cacheReadTokens: Int,
         isSidechain: Bool,
         cwd: String?,
@@ -193,6 +202,7 @@ public struct ClaudeUsageRecord: Sendable, Hashable, Codable {
         self.inputTokens = inputTokens
         self.outputTokens = outputTokens
         self.cacheCreationTokens = cacheCreationTokens
+        self.cacheCreation1hTokens = cacheCreation1hTokens
         self.cacheReadTokens = cacheReadTokens
         self.isSidechain = isSidechain
         self.cwd = cwd

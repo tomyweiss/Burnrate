@@ -15,11 +15,25 @@ import Testing
         inputTokens: 2,
         outputTokens: 2607,
         cacheCreationTokens: 33955,
+        cacheCreation1hTokens: 0,
         cacheReadTokens: 46033,
         isSidechain: true,
         cwd: "/tmp/demo",
         gitBranch: "main"
     )))
+}
+
+@Test func claudeTranscriptReadsOneHourCacheWritesFromCacheCreation() {
+    let line = Data("""
+    {"type":"assistant","timestamp":"2026-11-14T20:02:55.108Z","sessionId":"sess-1","isSidechain":false,"message":{"id":"msg_1","model":"claude-opus-5-5","role":"assistant","usage":{"input_tokens":2,"cache_creation_input_tokens":33955,"cache_read_input_tokens":46033,"output_tokens":2607,"cache_creation":{"ephemeral_5m_input_tokens":3955,"ephemeral_1h_input_tokens":30000}}}}
+    """.utf8)
+
+    guard case .usage(let record) = ClaudeTranscript.parse(line: line) else {
+        Issue.record("expected usage")
+        return
+    }
+    #expect(record.cacheCreationTokens == 33955)
+    #expect(record.cacheCreation1hTokens == 30000)
 }
 
 @Test func claudeTranscriptParsesAStringUserPrompt() {
@@ -171,6 +185,7 @@ import Testing
         inputTokens: 2,
         outputTokens: 10,
         cacheCreationTokens: 0,
+        cacheCreation1hTokens: 0,
         cacheReadTokens: 0,
         isSidechain: false,
         cwd: "/tmp/demo",
@@ -184,6 +199,7 @@ import Testing
         inputTokens: 1,
         outputTokens: 4,
         cacheCreationTokens: 0,
+        cacheCreation1hTokens: 0,
         cacheReadTokens: 0,
         isSidechain: false,
         cwd: nil,
@@ -197,6 +213,7 @@ import Testing
         inputTokens: 2,
         outputTokens: 90,
         cacheCreationTokens: 5,
+        cacheCreation1hTokens: 0,
         cacheReadTokens: 6,
         isSidechain: false,
         cwd: "/tmp/demo",
