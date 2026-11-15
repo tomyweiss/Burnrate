@@ -491,7 +491,9 @@ struct UsagePanel: View {
 
     var body: some View {
         UsagePanelColumn(tabMinimum: 220) {
-            Group {
+            // Each slot is a VStack, not a Group: an empty Group adds no subview,
+            // and the column places subviews by position.
+            VStack(spacing: 0) {
                 if showsClaudeCodeHint {
                     ClaudeCodeHint(
                         onShowInMenuBar: {
@@ -526,7 +528,7 @@ struct UsagePanel: View {
             }
             .layoutPriority(0)
 
-            Group {
+            VStack(spacing: 0) {
                 if displayedSource == nil {
                     NeitherSourceView()
                 } else if !panelHasCompletedFetch, panelIsLoading {
