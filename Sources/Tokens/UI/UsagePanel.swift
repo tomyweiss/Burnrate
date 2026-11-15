@@ -280,6 +280,66 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
     }
 }
 
+/// Reserves the hint and the footer at their ideal heights, then keeps 220pt for the
+/// tabs. Any shortfall is given to the header, which drops stats-tile padding first.
+private struct UsagePanelColumn: Layout {
+    var tabMinimum: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? subviews.map { $0.sizeThatFits(.unspecified).width }.max() ?? 0
+        if let height = proposal.height, height.isFinite {
+            return CGSize(width: width, height: height)
+        }
+        let ideal = subviews.reduce(CGFloat(0)) { $0 + $1.sizeThatFits(ProposedViewSize(width: width, height: nil)).height }
+        return CGSize(width: width, height: ideal)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard subviews.count == 4 else { return }
+        let width = bounds.width
+        let unconstrained = ProposedViewSize(width: width, height: nil)
+        let hint = subviews[0].sizeThatFits(unconstrained)
+        let footer = subviews[3].sizeThatFits(unconstrained)
+        let headerIdeal = subviews[1].sizeThatFits(unconstrained)
+        let remaining = max(bounds.height - hint.height - footer.height, 0)
+
+        let headerHeight: CGFloat
+        let tabHeight: CGFloat
+        if headerIdeal.height + tabMinimum <= remaining {
+            headerHeight = headerIdeal.height
+            tabHeight = remaining - headerHeight
+        } else {
+            headerHeight = min(headerIdeal.height, max(remaining - tabMinimum, 0))
+            tabHeight = remaining - headerHeight
+        }
+
+        var y = bounds.minY
+        subviews[0].place(
+            at: CGPoint(x: bounds.minX, y: y),
+            anchor: .topLeading,
+            proposal: ProposedViewSize(width: width, height: hint.height)
+        )
+        y += hint.height
+        subviews[1].place(
+            at: CGPoint(x: bounds.minX, y: y),
+            anchor: .topLeading,
+            proposal: ProposedViewSize(width: width, height: headerHeight)
+        )
+        y += headerHeight
+        subviews[2].place(
+            at: CGPoint(x: bounds.minX, y: y),
+            anchor: .topLeading,
+            proposal: ProposedViewSize(width: width, height: tabHeight)
+        )
+        y += tabHeight
+        subviews[3].place(
+            at: CGPoint(x: bounds.minX, y: y),
+            anchor: .topLeading,
+            proposal: ProposedViewSize(width: width, height: footer.height)
+        )
+    }
+}
+
 struct UsagePanel: View {
     @Bindable var store: UsageStore
     @Bindable var settings: SettingsStore
@@ -379,27 +439,32 @@ struct UsagePanel: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            if showsClaudeCodeHint {
-                ClaudeCodeHint(
-                    onShowInMenuBar: {
-                        settings.showClaudeCodeInMenuBar()
-                        MenuBarPanelKeeper.keepOpen()
-                    },
-                    onDismiss: {
-                        settings.dismissClaudeCodeHint()
-                        MenuBarPanelKeeper.keepOpen()
-                    }
-                )
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
+        UsagePanelColumn(tabMinimum: 220) {
+            Group {
+                if showsClaudeCodeHint {
+                    ClaudeCodeHint(
+                        onShowInMenuBar: {
+                            settings.showClaudeCodeInMenuBar()
+                            MenuBarPanelKeeper.keepOpen()
+                        },
+                        onDismiss: {
+                            settings.dismissClaudeCodeHint()
+                            MenuBarPanelKeeper.keepOpen()
+                        }
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                }
             }
+            .fixedSize(horizontal: false, vertical: true)
+            .layoutPriority(2)
 
             header
                 .padding(.horizontal, 16)
                 .padding(.top, 14)
                 .padding(.bottom, 10)
-                .fixedSize(horizontal: false, vertical: true)
+                .layoutPriority(0)
+                .clipped()
 
             Group {
                 if displayedSource == nil {
@@ -410,11 +475,14 @@ struct UsagePanel: View {
                     content
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 220, maxHeight: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .layoutPriority(1)
 
             footer
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
+                .fixedSize(horizontal: false, vertical: true)
+                .layoutPriority(2)
         }
         .onDisappear {
             sessionPath = []
@@ -465,6 +533,7 @@ struct UsagePanel: View {
                 .onChange(of: panelSourceRaw) { _, _ in
                     MenuBarPanelKeeper.keepOpen()
                 }
+                .fixedSize(horizontal: false, vertical: true)
             }
 
             switch displayedSource {
@@ -648,13 +717,16 @@ struct UsagePanel: View {
                 }
                 .layoutPriority(0)
             }
+            .fixedSize(horizontal: false, vertical: true)
 
             if store.snapshot.window.preset == .thisBilling {
                 Text("Since \(store.snapshot.window.sparklineStartLabel())")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             } else if settings.usageTimelinePreset == .custom {
                 customRangeButton
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             SparklineView(
@@ -662,6 +734,7 @@ struct UsagePanel: View {
                 window: store.snapshot.window,
                 now: Date()
             )
+            .fixedSize(horizontal: false, vertical: true)
 
             IncludedPoolsGauges(
                 pools: store.includedPools,
@@ -671,13 +744,16 @@ struct UsagePanel: View {
             ) {
                 EmptyView()
             }
+            .fixedSize(horizontal: false, vertical: true)
 
             PanelStatsGrid(stats: PanelStats.make(snapshot: store.snapshot, style: costStyle))
+                .layoutPriority(0)
 
             if let statusCaption {
                 Text(statusCaption)
                     .font(.caption)
                     .foregroundStyle(store.isStale ? Color.orange : Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

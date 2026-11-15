@@ -132,47 +132,25 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
                 trailing()
                     .layoutPriority(0)
             }
+            .fixedSize(horizontal: false, vertical: true)
 
             windowChrome()
+                .fixedSize(horizontal: false, vertical: true)
 
             SparklineView(
                 sparklineCostCents: sparklineCostCents,
                 window: window,
                 now: Date()
             )
+            .fixedSize(horizontal: false, vertical: true)
 
             VStack(alignment: .leading, spacing: 4) {
-                if showsPlanLimits {
-                    if limitsUnavailable {
-                        Text(ClaudeLimitsClient.unavailable)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        let gauges = ClaudeLimitGauges.make(
-                            fiveHour: fiveHour,
-                            weekly: weekly,
-                            weeklyOpus: weeklyOpus,
-                            weeklySonnet: weeklySonnet,
-                            extraUsage: extraUsage
-                        )
-                        if !gauges.isEmpty {
-                            GaugeWrapLayout(spacing: 16) {
-                                ForEach(gauges, id: \.title) { gauge in
-                                    PercentGauge(
-                                        title: gauge.title,
-                                        percent: gauge.percent,
-                                        detail: gauge.detail,
-                                        diameter: 88
-                                    )
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-                }
+                planLimitRings
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if !stats.isEmpty {
                     PanelStatsGrid(stats: stats)
+                        .layoutPriority(0)
                 }
 
                 Text(tokenLine)
@@ -180,6 +158,7 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if let unpricedCaption {
                     Text(unpricedCaption)
@@ -193,6 +172,39 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
                 Text(statusCaption)
                     .font(.caption)
                     .foregroundStyle(statusIsWarning ? Color.orange : Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var planLimitRings: some View {
+        if showsPlanLimits {
+            if limitsUnavailable {
+                Text(ClaudeLimitsClient.unavailable)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                let gauges = ClaudeLimitGauges.make(
+                    fiveHour: fiveHour,
+                    weekly: weekly,
+                    weeklyOpus: weeklyOpus,
+                    weeklySonnet: weeklySonnet,
+                    extraUsage: extraUsage
+                )
+                if !gauges.isEmpty {
+                    GaugeWrapLayout(spacing: 16) {
+                        ForEach(gauges, id: \.title) { gauge in
+                            PercentGauge(
+                                title: gauge.title,
+                                percent: gauge.percent,
+                                detail: gauge.detail,
+                                diameter: 88
+                            )
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
         }
     }

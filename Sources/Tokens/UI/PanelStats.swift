@@ -71,14 +71,13 @@ enum PanelStats {
     }
 }
 
-/// Three columns by two rows. Vertical padding stays tight so the rings can stay 88pt
-/// and the tab list keeps the rest of the panel.
+/// Three columns by two rows. Vertical padding drops from 4 to 0 when the header
+/// is offered less than its ideal height, so the rings stay 88pt and the footer stays put.
 struct PanelStatsGrid: View {
     let stats: [PanelStat]
 
     @Environment(\.blurSensitiveContent) private var blurSensitiveContent
 
-    private static let tileVerticalPadding: CGFloat = 4
     private static let columns = [
         GridItem(.flexible(), spacing: 8, alignment: .top),
         GridItem(.flexible(), spacing: 8, alignment: .top),
@@ -86,14 +85,22 @@ struct PanelStatsGrid: View {
     ]
 
     var body: some View {
+        ViewThatFits(in: .vertical) {
+            grid(verticalPadding: 4)
+            grid(verticalPadding: 2)
+            grid(verticalPadding: 0)
+        }
+    }
+
+    private func grid(verticalPadding: CGFloat) -> some View {
         LazyVGrid(columns: Self.columns, spacing: 6) {
             ForEach(Array(stats.enumerated()), id: \.offset) { _, stat in
-                tile(stat)
+                tile(stat, verticalPadding: verticalPadding)
             }
         }
     }
 
-    private func tile(_ stat: PanelStat) -> some View {
+    private func tile(_ stat: PanelStat, verticalPadding: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(stat.title)
                 .font(.caption)
@@ -114,7 +121,7 @@ struct PanelStatsGrid: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, Self.tileVerticalPadding)
+        .padding(.vertical, verticalPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)

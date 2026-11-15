@@ -48,9 +48,9 @@ struct RootPanel: View {
 
     private let panelWidth: CGFloat = 540
 
-    /// The Bench scatter needs more vertical room than the list tabs.
+    /// List tabs are 820pt. Bench keeps the taller scatter.
     private var panelHeight: CGFloat {
-        route == .usage && panelTabRaw == UsageTab.bench.rawValue ? 860 : 740
+        route == .usage && panelTabRaw == UsageTab.bench.rawValue ? 860 : 820
     }
 
     var body: some View {

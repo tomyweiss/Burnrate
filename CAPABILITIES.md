@@ -20,7 +20,7 @@ No Dock icon. Cursor auth comes from the local IDE login. Claude Code spend is r
 - Warning triangle when any enabled source has an error, while keeping the last known amount
 - Polls on a timer (default 60s; 15s–10m presets). Plan limits are not requested more than once a minute
 
-### Usage panel (460×580)
+### Usage panel (540×820)
 
 - **Source switcher** — Cursor | Claude Code, only when both are enabled and detected. Each segment shows that source's window figure. Selection is remembered. Claude-only (no Cursor login) opens on Claude Code with no switcher.
 - **Hero** matches the status-bar figures for Cursor. A percent-only choice keeps the timeline dollar total smaller underneath. Claude Code uses `~` and the caption "Estimated at API list prices · not your bill".
@@ -30,7 +30,7 @@ No Dock icon. Cursor auth comes from the local IDE login. Claude Code spend is r
 - **Burn pill** (glass) for rolling-window spend, tinted by severity. Claude Code amounts use `~`.
 - **Sparkline** for the active window (hourly or daily buckets)
 - Caption only while indexing, or when data is offline or stale
-- Tabs: **Models** | **Sessions** | **Skills** | **Feed** | **Bench**
+- Tabs: **Models** | **Sessions** | **Skills** | **Feed** | **Bench** (Bench is 540×860)
 - **Community** opens from a trophy chip in the header (next to the timeline). Cursor scope only.
 - Footer: Settings (glass), Refresh, overflow menu (Dashboard / Quit)
 
