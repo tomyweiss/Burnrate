@@ -51,6 +51,29 @@ import Testing
     #expect(abs(cents - 620) < 0.000_001)
 }
 
+@Test func claudePricingClampsOneHourCacheTokensIntoTheCreationTotal() throws {
+    let price = try #require(ClaudePricing.price(for: "claude-opus-5-5"))
+    let over = claudeUsage(
+        model: "claude-opus-5-5",
+        input: 0,
+        output: 0,
+        cacheWrite: 1_000_000,
+        cacheWrite1h: 1_400_000
+    )
+    let overCents = try #require(ClaudePricing.costCents(for: over))
+    #expect(abs(overCents - price.cacheWrite1hPerMTok * 100) < 0.000_001)
+
+    let negative = claudeUsage(
+        model: "claude-opus-5-5",
+        input: 0,
+        output: 0,
+        cacheWrite: 1_000_000,
+        cacheWrite1h: -50_000
+    )
+    let negativeCents = try #require(ClaudePricing.costCents(for: negative))
+    #expect(abs(negativeCents - price.cacheWritePerMTok * 100) < 0.000_001)
+}
+
 @Test func claudePricingResolvesADatedModelSuffix() throws {
     let dated = try #require(ClaudePricing.price(for: "claude-haiku-4-5-20251001"))
     let bare = try #require(ClaudePricing.price(for: "claude-haiku-4-5"))

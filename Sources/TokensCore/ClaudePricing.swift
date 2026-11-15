@@ -24,12 +24,14 @@ public enum ClaudePricing {
     /// Estimated cost in cents, nil when the model has no price.
     public static func costCents(for record: ClaudeUsageRecord) -> Double? {
         guard let price = price(for: record.model) else { return nil }
-        let cache5m = record.cacheCreationTokens - record.cacheCreation1hTokens
+        let cacheTotal = max(0, record.cacheCreationTokens)
+        let cache1h = min(max(0, record.cacheCreation1hTokens), cacheTotal)
+        let cache5m = cacheTotal - cache1h
         let dollars = (
             Double(record.inputTokens) * price.inputPerMTok
                 + Double(record.outputTokens) * price.outputPerMTok
                 + Double(cache5m) * price.cacheWritePerMTok
-                + Double(record.cacheCreation1hTokens) * price.cacheWrite1hPerMTok
+                + Double(cache1h) * price.cacheWrite1hPerMTok
                 + Double(record.cacheReadTokens) * price.cacheReadPerMTok
         ) / 1_000_000
         return dollars * 100
