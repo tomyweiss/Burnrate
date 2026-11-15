@@ -1,5 +1,4 @@
 import Foundation
-import AppKit
 import TokensCore
 
 @MainActor
@@ -107,13 +106,6 @@ final class UsageStore {
 
     var menuSymbolName: String {
         burnLevel.symbolName
-    }
-
-    var menuBarIcon: NSImage {
-        if AppIdentity.isDevBuild {
-            return burnLevel.menuBarImageWithDevDot()
-        }
-        return burnLevel.menuBarImage()
     }
 
     var statusBarInput: StatusBarFigures.Input {

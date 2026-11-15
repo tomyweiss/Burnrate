@@ -25,7 +25,7 @@ struct ClaudeCodeHint: View {
 
     /// Shown once Cursor is signed in, Claude Code is installed and enabled, and
     /// its spend figure is still off. Claude-only installs already default that figure on.
-    static func shouldShow(
+    nonisolated static func shouldShow(
         claudeInstalled: Bool,
         claudeEnabled: Bool,
         cursorAvailable: Bool,

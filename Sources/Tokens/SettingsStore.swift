@@ -109,10 +109,24 @@ final class SettingsStore {
         didSet { defaults.set(statusBarShowsGrokBot, forKey: Keys.statusBarShowsGrokBot) }
     }
 
-    /// Stored Claude Code spend preference. False until the user turns it on.
-    /// Launch does not write this key: see `showsClaudeSpend`.
+    /// Nil while `statusBarShowsClaudeSpend` has never been written. The menu bar
+    /// reads this on every effective-value check, so the first write — including
+    /// an explicit off from the implicit default — is an observable change.
+    private(set) var statusBarClaudeSpendPreference: Bool? {
+        didSet {
+            if let statusBarClaudeSpendPreference {
+                defaults.set(statusBarClaudeSpendPreference, forKey: Keys.statusBarShowsClaudeSpend)
+            } else {
+                defaults.removeObject(forKey: Keys.statusBarShowsClaudeSpend)
+            }
+        }
+    }
+
+    /// Stored Claude spend toggle. False when the key has never been written.
+    /// Setting it records that choice and writes the key.
     var statusBarShowsClaudeSpend: Bool {
-        didSet { defaults.set(statusBarShowsClaudeSpend, forKey: Keys.statusBarShowsClaudeSpend) }
+        get { statusBarClaudeSpendPreference ?? false }
+        set { statusBarClaudeSpendPreference = newValue }
     }
 
     var statusBarShowsClaudeFiveHour: Bool {
@@ -138,14 +152,14 @@ final class SettingsStore {
     /// Code is installed. Reading that case does not store `true`, so a later
     /// Cursor sign-in falls back to off instead of keeping a launch-time write.
     func showsClaudeSpend(cursorAvailable: Bool, claudeInstalled: Bool) -> Bool {
-        if defaults.object(forKey: Keys.statusBarShowsClaudeSpend) != nil {
-            return statusBarShowsClaudeSpend
+        if let statusBarClaudeSpendPreference {
+            return statusBarClaudeSpendPreference
         }
         return !cursorAvailable && claudeInstalled
     }
 
     func showClaudeCodeInMenuBar() {
-        statusBarShowsClaudeSpend = true
+        statusBarClaudeSpendPreference = true
         claudeCodeHintDismissed = true
     }
 
@@ -535,7 +549,11 @@ final class SettingsStore {
         statusBarShowsCursorModels = statusBar.cursor
         statusBarShowsOtherModels = statusBar.other
         statusBarShowsGrokBot = defaults.bool(forKey: Keys.statusBarShowsGrokBot)
-        statusBarShowsClaudeSpend = defaults.bool(forKey: Keys.statusBarShowsClaudeSpend)
+        if defaults.object(forKey: Keys.statusBarShowsClaudeSpend) != nil {
+            statusBarClaudeSpendPreference = defaults.bool(forKey: Keys.statusBarShowsClaudeSpend)
+        } else {
+            statusBarClaudeSpendPreference = nil
+        }
         statusBarShowsClaudeFiveHour = defaults.bool(forKey: Keys.statusBarShowsClaudeFiveHour)
         statusBarShowsClaudeWeekly = defaults.bool(forKey: Keys.statusBarShowsClaudeWeekly)
         claudeLimitsEnabled = defaults.bool(forKey: Keys.claudeLimitsEnabled)

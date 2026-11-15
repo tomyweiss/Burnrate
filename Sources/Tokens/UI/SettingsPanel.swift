@@ -105,7 +105,7 @@ struct SettingsPanel: View {
 
                     statusBarHeading("Claude Code")
                     Toggle("Spend (estimated)", isOn: claudeSpendBinding)
-                        .onChange(of: settings.statusBarShowsClaudeSpend) { _, _ in
+                        .onChange(of: settings.statusBarClaudeSpendPreference) { _, _ in
                             MenuBarPanelKeeper.keepOpen()
                         }
                     if settings.claudeLimitsEnabled {

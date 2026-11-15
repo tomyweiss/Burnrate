@@ -1,6 +1,11 @@
 import Foundation
+import Observation
 import Testing
 @testable import Tokens
+
+private final class ObservationFlag: @unchecked Sendable {
+    var value = false
+}
 
 private func makeSettings(_ defaults: UserDefaults) -> SettingsStore {
     SettingsStore(defaults: defaults, persistMembershipSecretInKeychain: false)
@@ -196,4 +201,34 @@ private func isolatedDefaults() -> (suite: String, defaults: UserDefaults) {
     cursorOff.claudeCodeEnabled = true
     cursorOff.statusBarShowsClaudeSpend = true
     #expect(cursorOff.hideAmountInMenuBar(cursorAvailable: true, claudeInstalled: true) == false)
+}
+
+@Test func claudeSpendPreferenceNotifiesWhenTheUnwrittenDefaultChanges() {
+    let (onSuite, onDefaults) = isolatedDefaults()
+    defer { onDefaults.removePersistentDomain(forName: onSuite) }
+    let turnedOn = makeSettings(onDefaults)
+    let onFlag = ObservationFlag()
+    withObservationTracking {
+        _ = turnedOn.showsClaudeSpend(cursorAvailable: true, claudeInstalled: true)
+    } onChange: {
+        onFlag.value = true
+    }
+    turnedOn.showClaudeCodeInMenuBar()
+    #expect(onFlag.value)
+    #expect(turnedOn.showsClaudeSpend(cursorAvailable: true, claudeInstalled: true))
+
+    let (offSuite, offDefaults) = isolatedDefaults()
+    defer { offDefaults.removePersistentDomain(forName: offSuite) }
+    let turnedOff = makeSettings(offDefaults)
+    #expect(turnedOff.showsClaudeSpend(cursorAvailable: false, claudeInstalled: true))
+    let offFlag = ObservationFlag()
+    withObservationTracking {
+        _ = turnedOff.showsClaudeSpend(cursorAvailable: false, claudeInstalled: true)
+    } onChange: {
+        offFlag.value = true
+    }
+    turnedOff.statusBarShowsClaudeSpend = false
+    #expect(offFlag.value)
+    #expect(turnedOff.showsClaudeSpend(cursorAvailable: false, claudeInstalled: true) == false)
+    #expect(offDefaults.object(forKey: "statusBarShowsClaudeSpend") != nil)
 }

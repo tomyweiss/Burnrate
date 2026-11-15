@@ -117,7 +117,7 @@ struct TokensApp: App {
                     .accessibilityLabel(bar.accessibilityText ?? amount)
             }
         } icon: {
-            Image(nsImage: menuBarImage(bar.burnLevel))
+            Image(nsImage: BurnLevel.menuBarImage(for: bar.burnLevel))
         }
         .labelStyle(.titleAndIcon)
     }
@@ -157,10 +157,4 @@ struct TokensApp: App {
         )
     }
 
-    private func menuBarImage(_ level: BurnLevel) -> NSImage {
-        if AppIdentity.isDevBuild {
-            return level.menuBarImageWithDevDot()
-        }
-        return level.menuBarImage()
-    }
 }

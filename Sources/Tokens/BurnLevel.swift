@@ -59,6 +59,14 @@ enum BurnLevel: Equatable, Sendable {
         }
     }
 
+    /// Menu-bar flame for this level. Burnrate-dev adds the gray dot.
+    static func menuBarImage(for level: BurnLevel) -> NSImage {
+        if AppIdentity.isDevBuild {
+            return level.menuBarImageWithDevDot()
+        }
+        return level.menuBarImage()
+    }
+
     /// Colored menu-bar image (`isTemplate = false` so tint is preserved).
     func menuBarImage(pointSize: CGFloat = 15) -> NSImage {
         let base = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Burnrate")
