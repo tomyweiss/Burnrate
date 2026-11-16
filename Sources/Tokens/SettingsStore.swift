@@ -15,6 +15,11 @@ final class SettingsStore {
         static let statusBarShowsCursorModels = "statusBarShowsCursorModels"
         static let statusBarShowsOtherModels = "statusBarShowsOtherModels"
         static let statusBarShowsGrokBot = "statusBarShowsGrokBot"
+        static let statusBarShowsClaudeSpend = "statusBarShowsClaudeSpend"
+        static let statusBarShowsClaudeFiveHour = "statusBarShowsClaudeFiveHour"
+        static let statusBarShowsClaudeWeekly = "statusBarShowsClaudeWeekly"
+        static let claudeCodeHintDismissed = "claudeCodeHintDismissed"
+        static let claudeLimitsEnabled = "claudeLimitsEnabled"
         static let autoCheckForUpdates = "autoCheckForUpdates"
         static let usageTimelinePreset = "usageTimelinePreset"
         static let billingDayOfMonth = "billingDayOfMonth"
@@ -24,6 +29,8 @@ final class SettingsStore {
         static let showLocationSubtitle = "showLocationSubtitle"
         static let hideArchivedSessions = "hideArchivedSessions"
         static let blurSensitiveContent = "blurSensitiveContent"
+        static let cursorEnabled = "cursorEnabled"
+        static let claudeCodeEnabled = "claudeCodeEnabled"
         static let shareCommunityUsage = "shareCommunityUsage"
         static let communityParticipantId = "communityParticipantId"
         static let communityMembershipSecret = "communityMembershipSecret"
@@ -102,10 +109,101 @@ final class SettingsStore {
         didSet { defaults.set(statusBarShowsGrokBot, forKey: Keys.statusBarShowsGrokBot) }
     }
 
-    /// True when the status bar shows no figures. Replaces the old hide-amount toggle.
-    var hideAmountInMenuBar: Bool {
-        !statusBarShowsWindowSpend && !statusBarShowsCursorModels
-            && !statusBarShowsOtherModels && !statusBarShowsGrokBot
+    /// Nil while `statusBarShowsClaudeSpend` has never been written. The menu bar
+    /// reads this on every effective-value check, so the first write — including
+    /// an explicit off from the implicit default — is an observable change.
+    private(set) var statusBarClaudeSpendPreference: Bool? {
+        didSet {
+            if let statusBarClaudeSpendPreference {
+                defaults.set(statusBarClaudeSpendPreference, forKey: Keys.statusBarShowsClaudeSpend)
+            } else {
+                defaults.removeObject(forKey: Keys.statusBarShowsClaudeSpend)
+            }
+        }
+    }
+
+    /// Stored Claude spend toggle. False when the key has never been written.
+    /// Setting it records that choice and writes the key.
+    var statusBarShowsClaudeSpend: Bool {
+        get { statusBarClaudeSpendPreference ?? false }
+        set { statusBarClaudeSpendPreference = newValue }
+    }
+
+    var statusBarShowsClaudeFiveHour: Bool {
+        didSet { defaults.set(statusBarShowsClaudeFiveHour, forKey: Keys.statusBarShowsClaudeFiveHour) }
+    }
+
+    var statusBarShowsClaudeWeekly: Bool {
+        didSet { defaults.set(statusBarShowsClaudeWeekly, forKey: Keys.statusBarShowsClaudeWeekly) }
+    }
+
+    /// Opt-in plan limits. Off until Task 6 wires the fetch. The 5h and weekly
+    /// status-bar toggles stay hidden while this is false.
+    var claudeLimitsEnabled: Bool {
+        didSet { defaults.set(claudeLimitsEnabled, forKey: Keys.claudeLimitsEnabled) }
+    }
+
+    var claudeCodeHintDismissed: Bool {
+        didSet { defaults.set(claudeCodeHintDismissed, forKey: Keys.claudeCodeHintDismissed) }
+    }
+
+    /// Claude spend for the menu bar. The stored default is off, but a key that
+    /// has never been written reads as on when Cursor is unavailable and Claude
+    /// Code is installed. Reading that case does not store `true`, so a later
+    /// Cursor sign-in falls back to off instead of keeping a launch-time write.
+    func showsClaudeSpend(cursorAvailable: Bool, claudeInstalled: Bool) -> Bool {
+        if let statusBarClaudeSpendPreference {
+            return statusBarClaudeSpendPreference
+        }
+        return !cursorAvailable && claudeInstalled
+    }
+
+    func showClaudeCodeInMenuBar() {
+        statusBarClaudeSpendPreference = true
+        claudeCodeHintDismissed = true
+    }
+
+    func dismissClaudeCodeHint() {
+        claudeCodeHintDismissed = true
+    }
+
+    /// True when the menu bar would show no figures. Uses the same Cursor
+    /// suppression and implicit Claude spend default as `MenuBarState`.
+    /// Defaults match a signed-in Cursor with Claude Code not installed, which
+    /// is what community uploads used before source visibility existed.
+    func hideAmountInMenuBar(cursorAvailable: Bool = true, claudeInstalled: Bool = false) -> Bool {
+        MenuBarState.presentation(
+            cursor: MenuBarState.Cursor(
+                enabled: cursorEnabled,
+                available: cursorAvailable,
+                burnLevel: .calm,
+                showsWindowSpend: statusBarShowsWindowSpend,
+                showsCursorModels: statusBarShowsCursorModels,
+                showsOtherModels: statusBarShowsOtherModels,
+                showsGrokBot: statusBarShowsGrokBot,
+                windowDollars: 0,
+                spendIsPlaceholder: false,
+                cursorModelsPercent: nil,
+                otherModelsPercent: nil,
+                grokBotPercent: nil
+            ),
+            claude: MenuBarState.Claude(
+                installed: claudeInstalled,
+                enabled: claudeCodeEnabled,
+                burnLevel: .calm,
+                showsSpend: showsClaudeSpend(
+                    cursorAvailable: cursorAvailable,
+                    claudeInstalled: claudeInstalled
+                ),
+                dollars: nil,
+                spendIsPlaceholder: false,
+                showsFiveHour: statusBarShowsClaudeFiveHour,
+                fiveHourPercent: nil,
+                showsWeekly: statusBarShowsClaudeWeekly,
+                weeklyPercent: nil,
+                limitsEnabled: claudeLimitsEnabled
+            )
+        ).statusText == nil
     }
 
     var showLocationSubtitle: Bool {
@@ -119,6 +217,16 @@ final class SettingsStore {
     /// Blur session titles and prompt text (for screen recordings / demos).
     var blurSensitiveContent: Bool {
         didSet { defaults.set(blurSensitiveContent, forKey: Keys.blurSensitiveContent) }
+    }
+
+    /// Cursor usage is fetched when this is on. Defaults on.
+    var cursorEnabled: Bool {
+        didSet { defaults.set(cursorEnabled, forKey: Keys.cursorEnabled) }
+    }
+
+    /// Claude Code transcripts are read when this is on. Defaults on.
+    var claudeCodeEnabled: Bool {
+        didSet { defaults.set(claudeCodeEnabled, forKey: Keys.claudeCodeEnabled) }
     }
 
     var autoCheckForUpdates: Bool {
@@ -441,9 +549,28 @@ final class SettingsStore {
         statusBarShowsCursorModels = statusBar.cursor
         statusBarShowsOtherModels = statusBar.other
         statusBarShowsGrokBot = defaults.bool(forKey: Keys.statusBarShowsGrokBot)
+        if defaults.object(forKey: Keys.statusBarShowsClaudeSpend) != nil {
+            statusBarClaudeSpendPreference = defaults.bool(forKey: Keys.statusBarShowsClaudeSpend)
+        } else {
+            statusBarClaudeSpendPreference = nil
+        }
+        statusBarShowsClaudeFiveHour = defaults.bool(forKey: Keys.statusBarShowsClaudeFiveHour)
+        statusBarShowsClaudeWeekly = defaults.bool(forKey: Keys.statusBarShowsClaudeWeekly)
+        claudeLimitsEnabled = defaults.bool(forKey: Keys.claudeLimitsEnabled)
+        claudeCodeHintDismissed = defaults.bool(forKey: Keys.claudeCodeHintDismissed)
         showLocationSubtitle = defaults.bool(forKey: Keys.showLocationSubtitle)
         hideArchivedSessions = defaults.bool(forKey: Keys.hideArchivedSessions)
         blurSensitiveContent = defaults.bool(forKey: Keys.blurSensitiveContent)
+        if defaults.object(forKey: Keys.cursorEnabled) == nil {
+            cursorEnabled = true
+        } else {
+            cursorEnabled = defaults.bool(forKey: Keys.cursorEnabled)
+        }
+        if defaults.object(forKey: Keys.claudeCodeEnabled) == nil {
+            claudeCodeEnabled = true
+        } else {
+            claudeCodeEnabled = defaults.bool(forKey: Keys.claudeCodeEnabled)
+        }
 
         if defaults.object(forKey: Keys.autoCheckForUpdates) == nil {
             autoCheckForUpdates = true
@@ -631,7 +758,10 @@ final class SettingsStore {
     }
 
     /// Allow-listed settings snapshot for community analytics uploads.
-    func communityClientConfig() -> CommunityClientConfig {
+    func communityClientConfig(
+        cursorAvailable: Bool = true,
+        claudeInstalled: Bool = false
+    ) -> CommunityClientConfig {
         let hiddenTabs = UsageTab.allCases
             .filter { !visibleUsageTabs.contains($0) }
             .map(\.rawValue)
@@ -642,7 +772,10 @@ final class SettingsStore {
             refreshIntervalSeconds: Int(refreshIntervalSeconds),
             anomalyThresholdDollars: Int(anomalyThresholdDollars),
             anomalyWindowMinutes: anomalyWindowMinutes,
-            hideAmountInMenuBar: hideAmountInMenuBar,
+            hideAmountInMenuBar: hideAmountInMenuBar(
+                cursorAvailable: cursorAvailable,
+                claudeInstalled: claudeInstalled
+            ),
             autoCheckForUpdates: autoCheckForUpdates,
             launchAtLogin: launchAtLogin,
             hiddenTabs: hiddenTabs,

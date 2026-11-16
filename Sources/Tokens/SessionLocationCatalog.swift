@@ -6,6 +6,7 @@ enum SessionStorageKind: String, Sendable {
     case agentTranscript
     case cliStore
     case ideDatabase
+    case claudeTranscript
     case notFound
 }
 
@@ -23,7 +24,7 @@ struct SessionStorageLocation: Sendable {
 
     var copyHelp: String {
         switch kind {
-        case .agentTranscript: "Copy transcript path"
+        case .agentTranscript, .claudeTranscript: "Copy transcript path"
         case .cliStore: "Copy CLI store path"
         case .ideDatabase: "Copy Cursor state database path"
         case .notFound: "No local log file — copies conversation ID"

@@ -5,6 +5,7 @@ import AppKit
 struct TokensApp: App {
     @State private var settings: SettingsStore
     @State private var store: UsageStore
+    @State private var claudeCodeStore: ClaudeCodeStore
     @State private var updates: UpdateManager
     @State private var community: CommunityStore
     @State private var interactionTracker: InteractionTracker
@@ -17,14 +18,21 @@ struct TokensApp: App {
         let settings = SettingsStore()
         FailureReporter.isEnabled = { true }
         let interactionTracker = InteractionTracker()
-        let store = UsageStore(settings: settings)
+        let anomalyMonitor = AnomalyMonitor()
+        let store = UsageStore(settings: settings, anomalyMonitor: anomalyMonitor)
+        let claudeCodeStore = ClaudeCodeStore(settings: settings, anomalyMonitor: anomalyMonitor)
+        claudeCodeStore.setInstalledObserver { installed in
+            store.noteClaudeCodeInstalled(installed)
+        }
         let community = CommunityStore(settings: settings, interactionTracker: interactionTracker)
         store.setCommunityStore(community)
         community.setUsageStore(store)
         Task { await community.migrateNicknameToCursorDefaultIfNeeded() }
         store.start()
+        claudeCodeStore.start()
         _settings = State(initialValue: settings)
         _store = State(initialValue: store)
+        _claudeCodeStore = State(initialValue: claudeCodeStore)
         _updates = State(initialValue: UpdateManager(settings: settings))
         _community = State(initialValue: community)
         _interactionTracker = State(initialValue: interactionTracker)
@@ -88,22 +96,69 @@ struct TokensApp: App {
                 community: community,
                 interactionTracker: interactionTracker
             )
+                .environment(claudeCodeStore)
                 .onAppear {
                     store.start()
+                    claudeCodeStore.start()
                     updates.autoCheckIfNeeded()
                 }
         } label: {
-            Label {
-                if let amount = store.menuAmountText {
-                    Text(amount)
-                        .monospacedDigit()
-                        .accessibilityLabel(store.menuAmountAccessibilityText ?? amount)
-                }
-            } icon: {
-                Image(nsImage: store.menuBarIcon)
-            }
-            .labelStyle(.titleAndIcon)
+            menuBarLabel
         }
         .menuBarExtraStyle(.window)
     }
+
+    private var menuBarLabel: some View {
+        let bar = menuBarPresentation
+        return Label {
+            if let amount = bar.statusText {
+                Text(amount)
+                    .monospacedDigit()
+                    .accessibilityLabel(bar.accessibilityText ?? amount)
+            }
+        } icon: {
+            Image(nsImage: BurnLevel.menuBarImage(for: bar.burnLevel))
+        }
+        .labelStyle(.titleAndIcon)
+    }
+
+    private var menuBarPresentation: MenuBarState.Presentation {
+        MenuBarState.presentation(
+            cursor: MenuBarState.Cursor(
+                enabled: settings.cursorEnabled,
+                available: store.isCursorAvailable,
+                burnLevel: store.burnLevel,
+                showsWindowSpend: settings.statusBarShowsWindowSpend,
+                showsCursorModels: settings.statusBarShowsCursorModels,
+                showsOtherModels: settings.statusBarShowsOtherModels,
+                showsGrokBot: settings.statusBarShowsGrokBot,
+                windowDollars: store.snapshot.windowDollars,
+                spendIsPlaceholder: !store.hasCompletedFetch && store.lastError == nil,
+                cursorModelsPercent: store.includedPools?.cursorModelsPercent,
+                otherModelsPercent: store.includedPools?.otherModelsPercent,
+                grokBotPercent: store.grokBotUsage?.percentUsed
+            ),
+            claude: MenuBarState.Claude(
+                installed: claudeCodeStore.isInstalled,
+                enabled: settings.claudeCodeEnabled,
+                burnLevel: claudeCodeStore.burnLevel,
+                showsSpend: settings.showsClaudeSpend(
+                    cursorAvailable: store.isCursorAvailable,
+                    claudeInstalled: claudeCodeStore.isInstalled
+                ),
+                dollars: claudeCodeStore.snapshot.windowDollars,
+                spendIsPlaceholder: !claudeCodeStore.hasCompletedFetch && claudeCodeStore.lastError == nil,
+                showsFiveHour: settings.statusBarShowsClaudeFiveHour,
+                fiveHourPercent: claudeCodeStore.limitsError == nil
+                    ? claudeCodeStore.limits?.fiveHour?.percentUsed
+                    : nil,
+                showsWeekly: settings.statusBarShowsClaudeWeekly,
+                weeklyPercent: claudeCodeStore.limitsError == nil
+                    ? claudeCodeStore.limits?.weekly?.percentUsed
+                    : nil,
+                limitsEnabled: settings.claudeLimitsEnabled
+            )
+        )
+    }
+
 }

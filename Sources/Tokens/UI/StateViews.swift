@@ -2,6 +2,14 @@ import SwiftUI
 
 struct EmptySpendView: View {
     let message: String
+    var source: UsageSource = .cursor
+
+    private var detail: String {
+        switch source {
+        case .cursor: "Usage appears here as you work in Cursor."
+        case .claudeCode: "Usage appears here as you work."
+        }
+    }
 
     var body: some View {
         VStack(spacing: 10) {
@@ -10,13 +18,24 @@ struct EmptySpendView: View {
                 .foregroundStyle(.secondary)
             Text(message)
                 .font(.callout.weight(.medium))
-            Text("Usage appears here as you work in Cursor.")
+            Text(detail)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(24)
+    }
+}
+
+struct NeitherSourceView: View {
+    var body: some View {
+        Text(PanelSourceResolver.neitherSourceMessage)
+            .font(.callout.weight(.medium))
+            .multilineTextAlignment(.center)
+            .foregroundStyle(.primary)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(24)
     }
 }
 

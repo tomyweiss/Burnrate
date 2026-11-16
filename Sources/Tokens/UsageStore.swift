@@ -1,5 +1,4 @@
 import Foundation
-import AppKit
 import TokensCore
 
 @MainActor
@@ -9,6 +8,10 @@ final class UsageStore {
     private(set) var isLoading = false
     private(set) var hasCompletedFetch = false
     private(set) var lastError: String?
+    /// False after a refresh fails with `TokensError.tokenNotFound`. True until that is known.
+    private(set) var isCursorAvailable = true
+    /// Set from Claude Code detection. A missing Cursor login stays quiet while this is true and Claude is enabled.
+    private(set) var claudeCodeInstalled = false
     private(set) var isSpikeActive = false
     private(set) var notificationFeedback: String?
     private(set) var isShowingCachedData = false
@@ -39,10 +42,14 @@ final class UsageStore {
     /// a full-cycle event fetch, so it runs far less often than the usage poll.
     private let calibrationInterval: TimeInterval = 30 * 60
 
-    init(settings: SettingsStore, enableAnomalyAlerts: Bool = true) {
+    convenience init(settings: SettingsStore, enableAnomalyAlerts: Bool = true) {
+        self.init(settings: settings, anomalyMonitor: enableAnomalyAlerts ? AnomalyMonitor() : nil)
+    }
+
+    init(settings: SettingsStore, anomalyMonitor: AnomalyMonitor?) {
         self.settings = settings
-        self.anomalyMonitor = enableAnomalyAlerts ? AnomalyMonitor() : nil
-        if enableAnomalyAlerts {
+        self.anomalyMonitor = anomalyMonitor
+        if anomalyMonitor != nil {
             NotificationPresenter.shared.install()
         }
     }
@@ -52,9 +59,40 @@ final class UsageStore {
     }
 
     var isStale: Bool {
-        guard hasCompletedFetch, snapshot.fetchedAt != .distantPast else { return false }
-        let limit = max(15, settings.refreshIntervalSeconds) * 3
-        return Date().timeIntervalSince(snapshot.fetchedAt) > limit
+        PanelSourceResolver.isStale(
+            hasCompletedFetch: hasCompletedFetch,
+            fetchedAt: snapshot.fetchedAt,
+            refreshIntervalSeconds: settings.refreshIntervalSeconds
+        )
+    }
+
+    /// Error the panel and menu-bar triangle should show. Nil when Cursor is quiet.
+    var surfacedLastError: String? {
+        guard CursorCredentialStatus.shouldSurfaceError(
+            isCursorAvailable: isCursorAvailable,
+            cursorEnabled: settings.cursorEnabled,
+            claudeInstalled: claudeCodeInstalled,
+            claudeEnabled: settings.claudeCodeEnabled
+        ) else { return nil }
+        return lastError
+    }
+
+    func noteClaudeCodeInstalled(_ installed: Bool) {
+        claudeCodeInstalled = installed
+    }
+
+    /// A successful Cursor refresh means credentials are present again.
+    func noteCursorCredentialsFound() {
+        isCursorAvailable = true
+        lastError = nil
+    }
+
+    func applyRefreshFailure(_ error: Error, cachedDataAvailable: Bool) {
+        if !CursorCredentialStatus.isAvailable(after: error) {
+            isCursorAvailable = false
+        }
+        lastError = NetworkMessages.userMessage(for: error, cachedDataAvailable: cachedDataAvailable)
+        hasCompletedFetch = true
     }
 
     /// Matches the burn-pill severity for the rolling spike window.
@@ -62,19 +100,12 @@ final class UsageStore {
         BurnLevel.level(
             recentDollars: snapshot.recentDollars,
             thresholdDollars: settings.anomalyThresholdDollars,
-            hasError: lastError != nil && !isShowingCachedData
+            hasError: surfacedLastError != nil && !isShowingCachedData
         )
     }
 
     var menuSymbolName: String {
         burnLevel.symbolName
-    }
-
-    var menuBarIcon: NSImage {
-        if AppIdentity.isDevBuild {
-            return burnLevel.menuBarImageWithDevDot()
-        }
-        return burnLevel.menuBarImage()
     }
 
     var statusBarInput: StatusBarFigures.Input {
@@ -124,6 +155,13 @@ final class UsageStore {
     func refresh(reuseEventsIfPossible: Bool = false) async {
         refreshGeneration += 1
         let generation = refreshGeneration
+
+        guard settings.cursorEnabled else {
+            if generation == refreshGeneration {
+                isLoading = false
+            }
+            return
+        }
 
         let now = Date()
         let window = settings.usageWindow
@@ -231,8 +269,7 @@ final class UsageStore {
             await communityStore?.handleUsageRefreshIfNeeded()
         } catch {
             guard generation == refreshGeneration else { return }
-            lastError = NetworkMessages.userMessage(for: error, cachedDataAvailable: isShowingCachedData)
-            hasCompletedFetch = true
+            applyRefreshFailure(error, cachedDataAvailable: isShowingCachedData)
             refreshMetrics.recordFailure()
             FailureReporter.report(error: error, source: .usage)
         }
@@ -273,7 +310,7 @@ final class UsageStore {
         )
         communityAnalyticsEvents = Self.communityAnalyticsEvents(from: events, now: now, rates: rates)
         communityDailySkills = Aggregator.communityDailySkills(events: events, now: now, rates: rates)
-        lastError = nil
+        noteCursorCredentialsFound()
         isShowingCachedData = false
         hasCompletedFetch = true
         isSpikeActive = next.recentCostCents >= settings.anomalyThresholdDollars * 100

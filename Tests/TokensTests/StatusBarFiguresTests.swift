@@ -10,7 +10,14 @@ private func figures(
     spendIsPlaceholder: Bool = false,
     cursorPercent: Double? = 72.4,
     otherPercent: Double? = 45,
-    grokPercent: Double? = 10.2
+    grokPercent: Double? = 10.2,
+    claudeSpend: Bool = false,
+    claudeDollars: Double? = 31.20,
+    claudeSpendIsPlaceholder: Bool = false,
+    claudeFiveHour: Bool = false,
+    claudeFiveHourPercent: Double? = 62,
+    claudeWeekly: Bool = false,
+    claudeWeeklyPercent: Double? = 34
 ) -> StatusBarFigures.Input {
     StatusBarFigures.Input(
         showsWindowSpend: spend,
@@ -21,7 +28,14 @@ private func figures(
         spendIsPlaceholder: spendIsPlaceholder,
         cursorModelsPercent: cursorPercent,
         otherModelsPercent: otherPercent,
-        grokBotPercent: grokPercent
+        grokBotPercent: grokPercent,
+        showsClaudeSpend: claudeSpend,
+        claudeDollars: claudeDollars,
+        claudeSpendIsPlaceholder: claudeSpendIsPlaceholder,
+        showsClaudeFiveHour: claudeFiveHour,
+        claudeFiveHourPercent: claudeFiveHourPercent,
+        showsClaudeWeekly: claudeWeekly,
+        claudeWeeklyPercent: claudeWeeklyPercent
     )
 }
 
@@ -178,4 +192,74 @@ private func figures(
     #expect(header.caption == "Cursor models used this cycle · Other models used this cycle")
     #expect(header.showsTimelineSpendBelow == false)
     #expect(header.timelineSpend == "$12.40")
+}
+
+@Test func statusBarCursorSpendOnly() {
+    let input = figures(spend: true)
+    #expect(StatusBarFigures.statusText(input) == "$12.40")
+}
+
+@Test func statusBarCursorSpendAndClaudeSpend() {
+    let input = figures(spend: true, claudeSpend: true)
+    #expect(StatusBarFigures.statusText(input) == "$12.40 · CC ~$31.20")
+    #expect(
+        StatusBarFigures.accessibilityLabel(input)
+            == "Window spend $12.40, Claude Code estimated $31.20"
+    )
+}
+
+@Test func statusBarClaudeSpendOnlyOmitsTag() {
+    let input = figures(claudeSpend: true)
+    #expect(StatusBarFigures.statusText(input) == "~$31.20")
+    #expect(StatusBarFigures.accessibilityLabel(input) == "Claude Code estimated $31.20")
+}
+
+@Test func statusBarCursorSpendFiveHourAndWeekly() {
+    let input = figures(spend: true, claudeFiveHour: true, claudeWeekly: true)
+    #expect(StatusBarFigures.statusText(input) == "$12.40 · 5h 62% · wk 34%")
+    #expect(
+        StatusBarFigures.accessibilityLabel(input)
+            == "Window spend $12.40, 5-hour limit 62 percent used, Weekly limit 34 percent used"
+    )
+}
+
+@Test func statusBarClaudeSpendPlaceholder() {
+    let input = figures(claudeSpend: true, claudeDollars: nil, claudeSpendIsPlaceholder: true)
+    #expect(StatusBarFigures.statusText(input) == "~$—")
+    #expect(StatusBarFigures.accessibilityLabel(input) == "Claude Code estimated $—")
+}
+
+@Test func statusBarClaudeSpendOmitsTagWithoutCursorSpend() {
+    let input = figures(cursor: true, claudeSpend: true)
+    #expect(StatusBarFigures.statusText(input) == "72% · ~$31.20")
+}
+
+@Test func statusBarClaudeFiguresFollowGrokBot() {
+    let input = figures(
+        spend: true,
+        cursor: true,
+        other: true,
+        grok: true,
+        claudeSpend: true,
+        claudeFiveHour: true,
+        claudeWeekly: true
+    )
+    #expect(
+        StatusBarFigures.statusText(input)
+            == "$12.40 · C 72% · O 45% · GB 10% · CC ~$31.20 · 5h 62% · wk 34%"
+    )
+}
+
+@Test func statusBarMissingClaudeLimits() {
+    let input = figures(
+        claudeFiveHour: true,
+        claudeFiveHourPercent: nil,
+        claudeWeekly: true,
+        claudeWeeklyPercent: nil
+    )
+    #expect(StatusBarFigures.statusText(input) == "5h — · wk —")
+    #expect(
+        StatusBarFigures.accessibilityLabel(input)
+            == "5-hour limit not loaded, Weekly limit not loaded"
+    )
 }

@@ -6,6 +6,7 @@ struct SettingsPanel: View {
     @Bindable var store: UsageStore
     var onBack: () -> Void
     var onOpenChangeLog: () -> Void
+    @Environment(ClaudeCodeStore.self) private var claudeCode
 
     var body: some View {
         settingsForm
@@ -40,6 +41,47 @@ struct SettingsPanel: View {
             Divider()
 
             Form {
+                Section("Sources") {
+                    Toggle(
+                        PanelSourceResolver.cursorSettingsLabel(signedIn: store.isCursorAvailable),
+                        isOn: $settings.cursorEnabled
+                    )
+                    .onChange(of: settings.cursorEnabled) { _, enabled in
+                        if enabled {
+                            Task { await store.refresh() }
+                        }
+                        MenuBarPanelKeeper.keepOpen()
+                    }
+
+                    Toggle(
+                        PanelSourceResolver.claudeSettingsLabel(
+                            installed: claudeCode.isInstalled,
+                            sessionCount: claudeCode.sessionCount
+                        ),
+                        isOn: $settings.claudeCodeEnabled
+                    )
+                    .onChange(of: settings.claudeCodeEnabled) { _, _ in
+                        Task { await claudeCode.refresh() }
+                        MenuBarPanelKeeper.keepOpen()
+                    }
+
+                    Toggle("Show plan limits", isOn: $settings.claudeLimitsEnabled)
+                        .onChange(of: settings.claudeLimitsEnabled) { _, enabled in
+                            if enabled {
+                                Task { await claudeCode.refresh() }
+                            } else {
+                                claudeCode.clearPlanLimits()
+                            }
+                            MenuBarPanelKeeper.keepOpen()
+                        }
+                    Text("Reads your Claude Code login from Keychain to fetch your 5-hour and weekly limits. macOS may ask for permission once.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .onAppear {
+                    Task { await claudeCode.refreshInstallStatus() }
+                }
+
                 Section("General") {
                     Picker("Poll every", selection: $settings.refreshIntervalSeconds) {
                         ForEach(SettingsStore.refreshIntervalOptions, id: \.self) { seconds in
@@ -59,6 +101,7 @@ struct SettingsPanel: View {
                 }
 
                 Section("Status bar") {
+                    statusBarHeading("Cursor")
                     Toggle("Window spend", isOn: $settings.statusBarShowsWindowSpend)
                         .onChange(of: settings.statusBarShowsWindowSpend) { _, _ in
                             MenuBarPanelKeeper.keepOpen()
@@ -75,7 +118,23 @@ struct SettingsPanel: View {
                         .onChange(of: settings.statusBarShowsGrokBot) { _, _ in
                             MenuBarPanelKeeper.keepOpen()
                         }
-                    Text("Choose what appears next to the flame. The panel header shows those figures. Turning all of them off leaves the flame alone while the panel still shows window spend.")
+
+                    statusBarHeading("Claude Code")
+                    Toggle("Spend (estimated)", isOn: claudeSpendBinding)
+                        .onChange(of: settings.statusBarClaudeSpendPreference) { _, _ in
+                            MenuBarPanelKeeper.keepOpen()
+                        }
+                    if settings.claudeLimitsEnabled {
+                        Toggle("Session limit (5h)", isOn: $settings.statusBarShowsClaudeFiveHour)
+                            .onChange(of: settings.statusBarShowsClaudeFiveHour) { _, _ in
+                                MenuBarPanelKeeper.keepOpen()
+                            }
+                        Toggle("Weekly limit", isOn: $settings.statusBarShowsClaudeWeekly)
+                            .onChange(of: settings.statusBarShowsClaudeWeekly) { _, _ in
+                                MenuBarPanelKeeper.keepOpen()
+                            }
+                    }
+                    Text("Choose what appears next to the flame. Cursor figures also appear in the panel header. Turning all of them off leaves the flame alone while the panel still shows window spend.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -250,6 +309,27 @@ struct SettingsPanel: View {
 
     private var appVersion: String {
         AppIdentity.versionLabel
+    }
+
+    /// Reads the effective Claude spend default, and writes the key only when
+    /// the user changes the toggle.
+    private var claudeSpendBinding: Binding<Bool> {
+        Binding(
+            get: {
+                settings.showsClaudeSpend(
+                    cursorAvailable: store.isCursorAvailable,
+                    claudeInstalled: claudeCode.isInstalled
+                )
+            },
+            set: { settings.statusBarShowsClaudeSpend = $0 }
+        )
+    }
+
+    private func statusBarHeading(_ title: String) -> some View {
+        Text(title)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var timezonePicker: some View {

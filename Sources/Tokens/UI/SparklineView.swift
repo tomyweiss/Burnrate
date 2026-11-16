@@ -9,6 +9,7 @@ struct SparklineView: View {
 
     @State private var hoveredIndex: Int?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.costStyle) private var costStyle
 
     private var currentBucket: Int {
         window.currentBucketIndex(now: now)
@@ -137,6 +138,6 @@ struct SparklineView: View {
     private func barTooltip(index: Int, valueCents: Double) -> String {
         let timeLabel = window.sparklineBucketLabel(index: index, now: now)
         guard valueCents > 0 else { return timeLabel }
-        return "\(timeLabel) · \(MoneyFormat.dollarsFromCents(valueCents))"
+        return "\(timeLabel) · \(MoneyFormat.stringFromCents(valueCents, style: costStyle))"
     }
 }

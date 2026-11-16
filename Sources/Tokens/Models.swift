@@ -456,6 +456,16 @@ struct SessionUsage: Identifiable, Sendable, Hashable {
         return "Session \(short)"
     }
 
+    /// Workspace and git branch, for a Claude Code session row.
+    var claudeLocationSubtitle: String? {
+        var parts: [String] = []
+        let workspace = workspaceName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !workspace.isEmpty { parts.append(workspace) }
+        let branch = branchName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !branch.isEmpty { parts.append(branch) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
     /// Extra subtitle: workspace for local, or `repo · branch` for cloud.
     var locationSubtitle: String? {
         if isCloud {

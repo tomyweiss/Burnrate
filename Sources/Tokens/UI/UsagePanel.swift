@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import TokensCore
 
 enum UsageTab: String, CaseIterable, Identifiable {
     case models
@@ -38,11 +39,93 @@ enum CostMetric: String, CaseIterable, Identifiable {
     }
 }
 
-/// Two columns: the included allowance pools as rings (percent of a fixed
-/// cap) on the left; on the right the cycle's spend as one stacked bar
-/// (included vs on-demand share of the total) with `timeline` filling the
-/// remaining height so both columns end level with the rings.
-/// Blue means covered by the plan; orange means paying.
+/// Ring used by the Cursor included pools and the Claude Code plan limits.
+struct PercentGauge: View {
+    let title: String
+    let percent: Double?
+    var detail: String? = nil
+    var diameter: CGFloat
+
+    private static var ringWidth: CGFloat { 9 }
+
+    /// Header content width: the 540pt panel minus 16pt padding on each side.
+    static let headerContentWidth: CGFloat = 508
+
+    /// Largest ring that fits `count` rings in one header row with at least
+    /// `spacing` between rings and at both edges, between 72 and 120pt.
+    /// `reserving` is the width of one more item sharing the row.
+    static func fittedDiameter(count: Int, spacing: CGFloat, reserving: CGFloat = 0) -> CGFloat {
+        guard count > 0 else { return 120 }
+        let items = count + (reserving > 0 ? 1 : 0)
+        let fit = (headerContentWidth - reserving - spacing * CGFloat(items + 1)) / CGFloat(count)
+        return min(120, max(72, fit.rounded(.down)))
+    }
+
+    var body: some View {
+        let shown = percent.map(IncludedPools.displayPercent)
+        let fill = shown.map { min(CGFloat($0), 100) / 100 } ?? 0
+        let tint = Self.tint(percent)
+
+        VStack(spacing: 6) {
+            ZStack {
+                Circle()
+                    .stroke(Color.secondary.opacity(0.25), lineWidth: Self.ringWidth)
+                Circle()
+                    .trim(from: 0, to: fill)
+                    .stroke(tint, style: StrokeStyle(lineWidth: Self.ringWidth, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                VStack(spacing: 0) {
+                    Text(shown.map { "\($0)%" } ?? "—")
+                        .font(.title3.weight(.semibold).monospacedDigit())
+                        .minimumScaleFactor(0.6)
+                        .lineLimit(1)
+                    if shown != nil {
+                        Text("used")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, diameter < 80 ? 4 : 12)
+            }
+            .frame(width: diameter, height: diameter)
+
+            VStack(spacing: 1) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                if let detail {
+                    Text(detail)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+            }
+            .frame(width: diameter)
+        }
+        .frame(width: diameter)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityText(shown: shown))
+    }
+
+    private func accessibilityText(shown: Int?) -> String {
+        let base = shown.map { "\(title), \($0) percent used" } ?? "\(title), not loaded"
+        guard let detail else { return base }
+        return "\(base), \(detail)"
+    }
+
+    /// Orange once the pool is exhausted, because usage past that point
+    /// flows into on-demand spend (also orange).
+    private static func tint(_ percent: Double?) -> Color {
+        guard let percent else { return Color.secondary.opacity(0.45) }
+        return percent >= 100 ? .orange : .accentColor
+    }
+}
+
+/// Allowance rings, then this cycle's included vs on-demand bar on its own row.
+/// The sparkline is drawn above the block. Blue is included; orange is on-demand.
 private struct IncludedPoolsGauges<Timeline: View>: View {
     /// Nil until Cursor reports the pools. The rings stay on screen either way.
     let pools: IncludedPools?
@@ -68,30 +151,28 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
         return count
     }
 
-    /// Three rings stay in the allowance column. Fewer rings keep the larger size.
-    private var ringSize: CGFloat { ringCount >= 3 ? 72 : 100 }
-    private var ringSpacing: CGFloat { ringCount >= 3 ? 8 : 24 }
-    private static var ringWidth: CGFloat { 9 }
+    private var ringSpacing: CGFloat { 24 }
+    private var ringSize: CGFloat { PercentGauge.fittedDiameter(count: ringCount, spacing: ringSpacing) }
     private static var includedTint: Color { .accentColor }
     private static var onDemandTint: Color { .orange }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 24) {
+        VStack(alignment: .leading, spacing: 8) {
             allowanceCluster
             spendCluster
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: Allowance
 
     private var allowanceCluster: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 6) {
             clusterHeader("Included allowance")
 
-            HStack(alignment: .top, spacing: ringSpacing) {
+            GaugeWrapLayout(spacing: ringSpacing) {
                 percentGauge("Cursor models", percent: pools?.cursorModelsPercent)
                     .help("Share of the Cursor models pool used this billing cycle")
                 if showsOtherModelsRing {
@@ -111,65 +192,7 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
     }
 
     private func percentGauge(_ title: String, percent: Double?, detail: String? = nil) -> some View {
-        let shown = percent.map(IncludedPools.displayPercent)
-        let fill = shown.map { min(CGFloat($0), 100) / 100 } ?? 0
-        let tint = percentTint(percent)
-
-        return VStack(spacing: 6) {
-            ZStack {
-                Circle()
-                    .stroke(Color.secondary.opacity(0.25), lineWidth: Self.ringWidth)
-                Circle()
-                    .trim(from: 0, to: fill)
-                    .stroke(tint, style: StrokeStyle(lineWidth: Self.ringWidth, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                VStack(spacing: 0) {
-                    Text(shown.map { "\($0)%" } ?? "—")
-                        .font(.title3.weight(.semibold).monospacedDigit())
-                        .minimumScaleFactor(0.6)
-                        .lineLimit(1)
-                    if shown != nil {
-                        Text("used")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.horizontal, ringSize < 80 ? 4 : 12)
-            }
-            .frame(width: ringSize, height: ringSize)
-
-            VStack(spacing: 1) {
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                if let detail {
-                    Text(detail)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                }
-            }
-            .frame(width: ringSize)
-        }
-        .frame(width: ringSize)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(gaugeAccessibility(title: title, shown: shown, detail: detail))
-    }
-
-    private func gaugeAccessibility(title: String, shown: Int?, detail: String?) -> String {
-        let base = shown.map { "\(title), \($0) percent used" } ?? "\(title), not loaded"
-        guard let detail else { return base }
-        return "\(base), \(detail)"
-    }
-
-    /// Orange once the pool is exhausted, because usage past that point
-    /// flows into on-demand spend (also orange).
-    private func percentTint(_ percent: Double?) -> Color {
-        guard let percent else { return Color.secondary.opacity(0.45) }
-        return percent >= 100 ? Self.onDemandTint : Self.includedTint
+        PercentGauge(title: title, percent: percent, detail: detail, diameter: ringSize)
     }
 
     // MARK: Spend
@@ -185,12 +208,12 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
     }
 
     private var spendCluster: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline) {
                     clusterHeader("Spend this cycle")
                     Spacer(minLength: 8)
-                    Text(split.map { MoneyFormat.dollars($0.totalCents / 100) } ?? "—")
+                    Text(split.map { MoneyFormat.string($0.totalCents / 100, style: costStyle) } ?? "—")
                         .font(.subheadline.weight(.semibold).monospacedDigit())
                         .lineLimit(1)
                 }
@@ -207,7 +230,6 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
             .help("How this cycle's spend splits between the included allowance and on-demand")
 
             timeline()
-                .frame(maxHeight: .infinity)
         }
     }
 
@@ -241,7 +263,7 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
                 .frame(width: 7, height: 7)
             Text(title)
                 .foregroundStyle(.secondary)
-            Text(cents.map { MoneyFormat.dollars($0 / 100) } ?? "—")
+            Text(cents.map { MoneyFormat.string($0 / 100, style: costStyle) } ?? "—")
                 .fontWeight(.medium)
                 .monospacedDigit()
         }
@@ -251,19 +273,131 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
 
     private var spendAccessibility: String {
         guard let split else { return "Spend this cycle, not loaded" }
-        let total = MoneyFormat.dollars(split.totalCents / 100)
-        let included = MoneyFormat.dollars(split.includedCents / 100)
-        let onDemand = MoneyFormat.dollars(split.onDemandCents / 100)
+        let total = MoneyFormat.string(split.totalCents / 100, style: costStyle)
+        let included = MoneyFormat.string(split.includedCents / 100, style: costStyle)
+        let onDemand = MoneyFormat.string(split.onDemandCents / 100, style: costStyle)
         return "Spend this cycle \(total): \(included) included, \(onDemand) on-demand"
     }
 
     // MARK: Shared
+
+    @Environment(\.costStyle) private var costStyle
 
     private func clusterHeader(_ title: String) -> some View {
         Text(title)
             .font(.subheadline.weight(.medium))
             .foregroundStyle(.secondary)
             .lineLimit(1)
+    }
+}
+
+/// Reserves the hint and the footer at their ideal heights, then keeps 220pt for the
+/// tabs. A shortfall first drops stats-tile padding; past that the header scrolls
+/// instead of cropping. Subviews are hint, header measurer, header, tabs, footer.
+struct UsagePanelColumn: Layout {
+    var tabMinimum: CGFloat
+
+    /// Two rows × 8pt of vertical tile padding. The grid can shed all of it before scrolling.
+    static let statsPaddingRelief: CGFloat = 16
+
+    /// True when the header still overflows the space between the hint and the footer
+    /// after the stats grid has dropped its padding and the tabs have kept `tabFloor`.
+    static func headerNeedsScroll(headerIdeal: CGFloat, available: CGFloat, tabFloor: CGFloat) -> Bool {
+        headerIdeal + tabFloor > available + statsPaddingRelief
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? subviews.map { $0.sizeThatFits(.unspecified).width }.max() ?? 0
+        if let height = proposal.height, height.isFinite {
+            return CGSize(width: width, height: height)
+        }
+        let ideal = subviews.reduce(CGFloat(0)) { $0 + $1.sizeThatFits(ProposedViewSize(width: width, height: nil)).height }
+        return CGSize(width: width, height: ideal)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard subviews.count == 5 else { return }
+        let width = bounds.width
+        let unconstrained = ProposedViewSize(width: width, height: nil)
+        let hint = subviews[0].sizeThatFits(unconstrained)
+        let headerIdeal = subviews[1].sizeThatFits(unconstrained).height
+        let footer = subviews[4].sizeThatFits(unconstrained)
+        let remaining = max(bounds.height - hint.height - footer.height, 0)
+
+        let headerHeight: CGFloat
+        let tabHeight: CGFloat
+        if headerIdeal + tabMinimum <= remaining {
+            headerHeight = headerIdeal
+            tabHeight = remaining - headerIdeal
+        } else {
+            headerHeight = max(remaining - tabMinimum, 0)
+            tabHeight = remaining - headerHeight
+        }
+
+        var y = bounds.minY
+        subviews[0].place(
+            at: CGPoint(x: bounds.minX, y: y),
+            anchor: .topLeading,
+            proposal: ProposedViewSize(width: width, height: hint.height)
+        )
+        y += hint.height
+        subviews[1].place(
+            at: CGPoint(x: bounds.minX, y: y),
+            anchor: .topLeading,
+            proposal: ProposedViewSize(width: width, height: headerIdeal)
+        )
+        subviews[2].place(
+            at: CGPoint(x: bounds.minX, y: y),
+            anchor: .topLeading,
+            proposal: ProposedViewSize(width: width, height: headerHeight)
+        )
+        y += headerHeight
+        subviews[3].place(
+            at: CGPoint(x: bounds.minX, y: y),
+            anchor: .topLeading,
+            proposal: ProposedViewSize(width: width, height: tabHeight)
+        )
+        y += tabHeight
+        subviews[4].place(
+            at: CGPoint(x: bounds.minX, y: y),
+            anchor: .topLeading,
+            proposal: ProposedViewSize(width: width, height: footer.height)
+        )
+    }
+}
+
+private struct HeaderIdealHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+/// Shows the header at its natural height when it fits. Scrolls it inside the
+/// slot the column reserved when it does not, after stats padding has been shed.
+private struct HeaderScrollSlot<Content: View>: View {
+    var idealHeight: CGFloat
+    var tabMinimum: CGFloat
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        GeometryReader { geo in
+            let scroll = UsagePanelColumn.headerNeedsScroll(
+                headerIdeal: idealHeight,
+                available: geo.size.height + tabMinimum,
+                tabFloor: tabMinimum
+            )
+            if scroll {
+                ScrollView(.vertical) {
+                    content()
+                }
+                .scrollIndicators(.automatic)
+                .scrollBounceBehavior(.basedOnSize)
+            } else {
+                content()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
+        }
     }
 }
 
@@ -287,7 +421,73 @@ struct UsagePanel: View {
     @State private var sectionSearchText = ""
     @State private var isSectionSearchPresented = false
     @State private var showCustomRangePicker = false
+    @State private var headerIdealHeight: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.costStyle) private var costStyle
+    @Environment(ClaudeCodeStore.self) private var claudeCode
+    @AppStorage("panelSource") private var panelSourceRaw = ""
+
+    private var storedSource: UsageSource? {
+        UsageSource(rawValue: panelSourceRaw)
+    }
+
+    private var visibleSources: [UsageSource] {
+        PanelSourceResolver.visibleSources(
+            cursorAvailable: store.isCursorAvailable,
+            cursorEnabled: settings.cursorEnabled,
+            claudeInstalled: claudeCode.isInstalled,
+            claudeEnabled: settings.claudeCodeEnabled
+        )
+    }
+
+    private var displayedSource: UsageSource? {
+        PanelSourceResolver.displayedSource(
+            stored: storedSource,
+            cursorAvailable: store.isCursorAvailable,
+            cursorEnabled: settings.cursorEnabled,
+            claudeInstalled: claudeCode.isInstalled,
+            claudeEnabled: settings.claudeCodeEnabled
+        )
+    }
+
+    private var panelSourceSelection: Binding<UsageSource> {
+        Binding(
+            get: { displayedSource ?? .cursor },
+            set: { panelSourceRaw = $0.rawValue }
+        )
+    }
+
+    private var panelSnapshot: UsageSnapshot {
+        displayedSource == .claudeCode ? claudeCode.snapshot : store.snapshot
+    }
+
+    private var panelIsLoading: Bool {
+        switch displayedSource {
+        case .claudeCode: claudeCode.isLoading
+        case .cursor: store.isLoading
+        case nil: false
+        }
+    }
+
+    private var panelHasCompletedFetch: Bool {
+        switch displayedSource {
+        case .claudeCode: claudeCode.hasCompletedFetch
+        case .cursor: store.hasCompletedFetch
+        case nil: true
+        }
+    }
+
+    private var panelLastError: String? {
+        switch displayedSource {
+        case .claudeCode: claudeCode.lastError
+        case .cursor: store.surfacedLastError
+        case nil: nil
+        }
+    }
+
+    private var showsClaudeBranch: Bool {
+        displayedSource == .claudeCode
+    }
 
     private var panelTab: Binding<UsageTab> {
         Binding(
@@ -301,24 +501,61 @@ struct UsagePanel: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-                .padding(.horizontal, 16)
-                .padding(.top, 14)
-                .padding(.bottom, 10)
+        UsagePanelColumn(tabMinimum: 220) {
+            // Each slot is a VStack, not a Group: an empty Group adds no subview,
+            // and the column places subviews by position.
+            VStack(spacing: 0) {
+                if showsClaudeCodeHint {
+                    ClaudeCodeHint(
+                        onShowInMenuBar: {
+                            settings.showClaudeCodeInMenuBar()
+                            MenuBarPanelKeeper.keepOpen()
+                        },
+                        onDismiss: {
+                            settings.dismissClaudeCodeHint()
+                            MenuBarPanelKeeper.keepOpen()
+                        }
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .layoutPriority(2)
 
-            Group {
-                if !store.hasCompletedFetch, store.isLoading {
+            paddedHeader
+                .fixedSize(horizontal: false, vertical: true)
+                .background {
+                    GeometryReader { proxy in
+                        Color.clear.preference(key: HeaderIdealHeightKey.self, value: proxy.size.height)
+                    }
+                }
+                .opacity(0)
+                .accessibilityHidden(true)
+                .allowsHitTesting(false)
+
+            HeaderScrollSlot(idealHeight: headerIdealHeight, tabMinimum: 220) {
+                paddedHeader
+            }
+            .layoutPriority(0)
+
+            VStack(spacing: 0) {
+                if displayedSource == nil {
+                    NeitherSourceView()
+                } else if !panelHasCompletedFetch, panelIsLoading {
                     UsageSkeletonView()
                 } else {
                     content
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .layoutPriority(1)
 
             footer
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
+                .fixedSize(horizontal: false, vertical: true)
+                .layoutPriority(2)
         }
         .onDisappear {
             sessionPath = []
@@ -330,11 +567,36 @@ struct UsagePanel: View {
         .onChange(of: settings.visibleUsageTabRawValues) { _, _ in
             panelTabRaw = settings.normalizedPanelTabSelection(panelTabRaw)
         }
+        .onChange(of: displayedSource) { _, _ in
+            sessionPath = []
+            selectedSkill = nil
+        }
+        .onPreferenceChange(HeaderIdealHeightKey.self) { headerIdealHeight = $0 }
+    }
+
+    private var paddedHeader: some View {
+        header
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
     }
 
     private func openChangeLog(version: String? = nil, releaseNotes: String? = nil) {
         onOpenChangeLog(version, releaseNotes)
         MenuBarPanelKeeper.keepOpen()
+    }
+
+    private var showsClaudeCodeHint: Bool {
+        ClaudeCodeHint.shouldShow(
+            claudeInstalled: claudeCode.isInstalled,
+            claudeEnabled: settings.claudeCodeEnabled,
+            cursorAvailable: store.isCursorAvailable,
+            showsClaudeSpend: settings.showsClaudeSpend(
+                cursorAvailable: store.isCursorAvailable,
+                claudeInstalled: claudeCode.isInstalled
+            ),
+            hintDismissed: settings.claudeCodeHintDismissed
+        )
     }
 
     private var headerFigures: StatusBarFigures.Header {
@@ -343,6 +605,127 @@ struct UsagePanel: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if visibleSources.count == 2 {
+                SourceSwitcher(
+                    selection: panelSourceSelection,
+                    cursorTitle: segmentTitle(for: .cursor),
+                    claudeTitle: segmentTitle(for: .claudeCode)
+                )
+                .onChange(of: panelSourceRaw) { _, _ in
+                    MenuBarPanelKeeper.keepOpen()
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            switch displayedSource {
+            case .claudeCode:
+                claudeHeader
+            case .cursor:
+                cursorHeader
+            case nil:
+                EmptyView()
+            }
+        }
+    }
+
+    private func segmentTitle(for source: UsageSource) -> String {
+        let snapshot = source == .claudeCode ? claudeCode.snapshot : store.snapshot
+        let isPlaceholder: Bool
+        if source == .claudeCode {
+            isPlaceholder = !claudeCode.hasCompletedFetch && claudeCode.lastError == nil
+        } else {
+            isPlaceholder = !store.hasCompletedFetch && store.lastError == nil
+        }
+        return PanelSourceResolver.segmentTitle(
+            source: source,
+            windowDollars: snapshot.windowDollars,
+            isPlaceholder: isPlaceholder
+        )
+    }
+
+    @ViewBuilder
+    private var windowChrome: some View {
+        if panelSnapshot.window.preset == .thisBilling {
+            Text("Since \(panelSnapshot.window.sparklineStartLabel())")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else if settings.usageTimelinePreset == .custom {
+            customRangeButton
+        }
+    }
+
+    private func sourceTrailingControls(showsCommunity: Bool) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            if AppIdentity.isDevBuild {
+                Text("DEV")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(Color.orange))
+                    .accessibilityLabel("Development build")
+            }
+            if showsCommunity {
+                communityButton
+            }
+            timelinePicker
+        }
+    }
+
+    private func refreshSources(reuseEventsIfPossible: Bool = false) async {
+        await store.refresh(reuseEventsIfPossible: reuseEventsIfPossible)
+        await claudeCode.refresh()
+    }
+
+    private var claudeHeader: some View {
+        let recent = claudeCode.snapshot.recentDollars
+        let indexing = claudeCode.indexingProgress
+        let stale = PanelSourceResolver.isStale(
+            hasCompletedFetch: claudeCode.hasCompletedFetch,
+            fetchedAt: claudeCode.snapshot.fetchedAt,
+            refreshIntervalSeconds: settings.refreshIntervalSeconds
+        )
+        let hero = !claudeCode.hasCompletedFetch && claudeCode.lastError == nil
+            ? PanelSourceResolver.placeholderEstimated
+            : MoneyFormat.estimated(claudeCode.snapshot.windowDollars)
+        return ClaudeCodeHeader(
+            hero: hero,
+            isLoading: claudeCode.isLoading,
+            burnText: recent > 0
+                ? "▲ \(MoneyFormat.estimated(recent)) · \(settings.anomalyWindowMinutes)m"
+                : nil,
+            burnTint: claudeCode.burnLevel.swiftUIColor,
+            sparklineCostCents: claudeCode.snapshot.sparklineCostCents,
+            window: claudeCode.snapshot.window,
+            tokenLine: ClaudeTokenLine.string(snapshot: claudeCode.snapshot),
+            showsPlanLimits: settings.claudeLimitsEnabled,
+            fiveHour: claudeCode.limits?.fiveHour,
+            weekly: claudeCode.limits?.weekly,
+            weeklyOpus: claudeCode.limits?.weeklyOpus,
+            weeklySonnet: claudeCode.limits?.weeklySonnet,
+            extraUsage: claudeCode.limits?.extraUsage,
+            limitsMessage: claudeCode.limitsError,
+            onEnablePlanLimits: {
+                settings.claudeLimitsEnabled = true
+                Task { await claudeCode.refresh() }
+                MenuBarPanelKeeper.keepOpen()
+            },
+            stats: PanelStats.make(snapshot: claudeCode.snapshot, style: costStyle),
+            unpricedCaption: ClaudeTokenLine.unpricedCaption(claudeCode.unpricedModels),
+            statusCaption: PanelSourceResolver.statusCaption(
+                indexing: indexing,
+                fetchedAt: claudeCode.snapshot.fetchedAt,
+                isShowingCachedData: false,
+                isStale: stale
+            ),
+            statusIsWarning: stale && indexing == nil,
+            windowChrome: { windowChrome },
+            trailing: { sourceTrailingControls(showsCommunity: false) }
+        )
+    }
+
+    private var cursorHeader: some View {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .center, spacing: 8) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .center, spacing: 8) {
@@ -384,6 +767,9 @@ struct UsagePanel: View {
                         Text(caption)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .truncationMode(.tail)
+                            .help(caption)
                     }
 
                     if headerFigures.showsTimelineSpendBelow {
@@ -420,14 +806,24 @@ struct UsagePanel: View {
                 }
                 .layoutPriority(0)
             }
+            .fixedSize(horizontal: false, vertical: true)
 
             if store.snapshot.window.preset == .thisBilling {
                 Text("Since \(store.snapshot.window.sparklineStartLabel())")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             } else if settings.usageTimelinePreset == .custom {
                 customRangeButton
+                    .fixedSize(horizontal: false, vertical: true)
             }
+
+            SparklineView(
+                sparklineCostCents: store.snapshot.sparklineCostCents,
+                window: store.snapshot.window,
+                now: Date()
+            )
+            .fixedSize(horizontal: false, vertical: true)
 
             IncludedPoolsGauges(
                 pools: store.includedPools,
@@ -435,18 +831,18 @@ struct UsagePanel: View {
                 cycleSpend: store.cycleSpend,
                 grokBot: store.grokBotUsage
             ) {
-                SparklineView(
-                    sparklineCostCents: store.snapshot.sparklineCostCents,
-                    window: store.snapshot.window,
-                    now: Date(),
-                    chartHeight: nil
-                )
+                EmptyView()
             }
+            .fixedSize(horizontal: false, vertical: true)
+
+            PanelStatsGrid(stats: PanelStats.make(snapshot: store.snapshot, style: costStyle))
+                .layoutPriority(0)
 
             if let statusCaption {
                 Text(statusCaption)
                     .font(.caption)
                     .foregroundStyle(store.isStale ? Color.orange : Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -482,7 +878,7 @@ struct UsagePanel: View {
         .foregroundStyle(.secondary)
         .fixedSize()
         .onChange(of: settings.usageTimelinePreset) { _, _ in
-            Task { await store.refresh(reuseEventsIfPossible: true) }
+            Task { await refreshSources(reuseEventsIfPossible: true) }
             MenuBarPanelKeeper.keepOpen()
         }
     }
@@ -537,7 +933,7 @@ struct UsagePanel: View {
         let tint = store.burnLevel.swiftUIColor
 
         return Text(
-            "▲ \(MoneyFormat.dollars(store.snapshot.recentDollars)) · \(settings.anomalyWindowMinutes)m"
+            "▲ \(MoneyFormat.string(store.snapshot.recentDollars, style: costStyle)) · \(settings.anomalyWindowMinutes)m"
         )
         .font(.subheadline.weight(.semibold).monospacedDigit())
         .lineLimit(1)
@@ -565,27 +961,30 @@ struct UsagePanel: View {
     @ViewBuilder
     private var content: some View {
         VStack(spacing: 0) {
-            if let error = store.lastError {
+            if let error = panelLastError {
                 ErrorBanner(message: error) {
-                    Task { await store.refresh() }
+                    Task { await refreshSources() }
                     MenuBarPanelKeeper.keepOpen()
                 }
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
             }
 
-            if store.hasCompletedFetch,
-               store.snapshot.windowCostCents == 0,
-               store.snapshot.models.isEmpty,
-               store.snapshot.rootSessions.isEmpty,
-               store.lastError == nil {
-                EmptySpendView(message: store.snapshot.window.emptyStateMessage)
+            if panelHasCompletedFetch,
+               panelSnapshot.windowCostCents == 0,
+               panelSnapshot.models.isEmpty,
+               panelSnapshot.rootSessions.isEmpty,
+               panelLastError == nil {
+                EmptySpendView(
+                    message: panelSnapshot.window.emptyStateMessage(for: displayedSource ?? .cursor),
+                    source: displayedSource ?? .cursor
+                )
             } else if let skill = selectedSkill {
                 SkillDetailView(
                     // Prefer the freshest snapshot copy; fall back to the tapped one.
-                    skill: store.snapshot.skills
+                    skill: panelSnapshot.skills
                         .first { $0.skill == skill.skill } ?? skill,
-                    prompts: store.snapshot.prompts
+                    prompts: panelSnapshot.prompts
                         .filter { $0.skills.contains(skill.skill) },
                     onBack: {
                         selectedSkill = nil
@@ -593,12 +992,12 @@ struct UsagePanel: View {
                     }
                 )
             } else if let selected = sessionPath.last {
-                let session = store.snapshot.session(id: selected.conversationId) ?? selected
+                let session = panelSnapshot.session(id: selected.conversationId) ?? selected
                 SessionDetailView(
                     session: session,
-                    prompts: store.snapshot.prompts(for: session),
-                    subagents: store.snapshot.childSessions(of: session),
-                    windowCostCents: store.snapshot.windowCostCents,
+                    prompts: panelSnapshot.prompts(for: session),
+                    subagents: panelSnapshot.childSessions(of: session),
+                    windowCostCents: panelSnapshot.windowCostCents,
                     onBack: {
                         if !sessionPath.isEmpty {
                             sessionPath.removeLast()
@@ -608,13 +1007,17 @@ struct UsagePanel: View {
                     onOpenSubagent: { child in
                         sessionPath.append(child)
                         MenuBarPanelKeeper.keepOpen()
-                    }
+                    },
+                    transcriptPath: showsClaudeBranch
+                        ? claudeCode.transcriptPaths[session.conversationId]
+                        : nil,
+                    includesBranch: showsClaudeBranch
                 )
             } else {
                 controlRow
 
                 if panelTab.wrappedValue == .bench {
-                    BenchView(snapshot: store.snapshot)
+                    BenchView(snapshot: panelSnapshot)
                 } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
@@ -630,10 +1033,12 @@ struct UsagePanel: View {
                                 ForEach(filteredModels) { model in
                                     ModelRowView(
                                         model: model,
-                                        windowCostCents: store.snapshot.windowCostCents,
+                                        windowCostCents: panelSnapshot.windowCostCents,
                                         isExpanded: expandedModels.contains(model.id),
                                         reduceMotion: reduceMotion,
                                         showLocationSubtitle: settings.showLocationSubtitle,
+                                        showsStorageBadges: !showsClaudeBranch,
+                                        includesBranch: showsClaudeBranch,
                                         hideArchivedSessions: settings.hideArchivedSessions,
                                         metric: modelsMetric,
                                         metricMaxDollars: maxModelMetricDollars,
@@ -655,17 +1060,19 @@ struct UsagePanel: View {
                                 ForEach(filteredSessions) { session in
                                     SessionRowView(
                                         session: session,
-                                        windowCostCents: store.snapshot.windowCostCents,
+                                        windowCostCents: panelSnapshot.windowCostCents,
                                         showModelChips: true,
                                         showShareBar: true,
                                         showLocationSubtitle: settings.showLocationSubtitle,
+                                        showsStorageBadges: !showsClaudeBranch,
+                                        includesBranch: showsClaudeBranch,
                                         onOpen: { openSession(session) }
                                     )
                                     Divider().opacity(0.35)
                                 }
                             }
                         case .skills:
-                            if store.snapshot.skills.isEmpty {
+                            if panelSnapshot.skills.isEmpty {
                                 tabEmptyText("No skill invocations in this window")
                             } else if filteredSkills.isEmpty {
                                 tabEmptyText(ListSearch.noMatchesMessage(sectionSearchText))
@@ -673,7 +1080,7 @@ struct UsagePanel: View {
                                 ForEach(filteredSkills) { skill in
                                     SkillRowView(
                                         skill: skill,
-                                        windowCostCents: store.snapshot.windowCostCents,
+                                        windowCostCents: panelSnapshot.windowCostCents,
                                         metric: skillsMetric,
                                         metricMaxDollars: maxSkillMetricDollars,
                                         onOpen: {
@@ -685,7 +1092,7 @@ struct UsagePanel: View {
                                 }
                             }
                         case .feed:
-                            if store.snapshot.prompts.isEmpty {
+                            if panelSnapshot.prompts.isEmpty {
                                 tabEmptyText("No prompts found for this window")
                             } else if filteredPrompts.isEmpty {
                                 tabEmptyText(ListSearch.noMatchesMessage(sectionSearchText))
@@ -766,7 +1173,7 @@ struct UsagePanel: View {
         case .models, .sessions:
             return true
         case .skills:
-            return !store.snapshot.skills.isEmpty
+            return !panelSnapshot.skills.isEmpty
         case .feed:
             return false
         case .bench:
@@ -800,8 +1207,8 @@ struct UsagePanel: View {
     }
 
     private var filteredPrompts: [PromptUsage] {
-        guard ListSearch.isActive(sectionSearchText) else { return store.snapshot.prompts }
-        return store.snapshot.prompts.filter { ListSearch.prompt($0, query: sectionSearchText) }
+        guard ListSearch.isActive(sectionSearchText) else { return panelSnapshot.prompts }
+        return panelSnapshot.prompts.filter { ListSearch.prompt($0, query: sectionSearchText) }
     }
 
     @ViewBuilder
@@ -809,7 +1216,7 @@ struct UsagePanel: View {
         switch panelTab.wrappedValue {
         case .models:
             costMetricPicker(selection: $modelsMetricRaw)
-        case .skills where !store.snapshot.skills.isEmpty:
+        case .skills where !panelSnapshot.skills.isEmpty:
             costMetricPicker(selection: $skillsMetricRaw)
         case .skills:
             EmptyView()
@@ -884,7 +1291,7 @@ struct UsagePanel: View {
     }
 
     private var displayedModels: [ModelUsage] {
-        let models = store.snapshot.models
+        let models = panelSnapshot.models
         switch modelsMetric {
         case .total:
             return models
@@ -896,7 +1303,7 @@ struct UsagePanel: View {
     }
 
     private var displayedSkills: [SkillUsage] {
-        let skills = store.snapshot.skills
+        let skills = panelSnapshot.skills
         let value: (SkillUsage) -> Double
         switch skillsMetric {
         case .total:
@@ -915,7 +1322,7 @@ struct UsagePanel: View {
 
     /// Highest value of the selected per-unit metric; scales the share bars.
     private var maxModelMetricDollars: Double {
-        let models = store.snapshot.models
+        let models = panelSnapshot.models
         switch modelsMetric {
         case .total: return 0
         case .average: return models.map(\.averageCostDollars).max() ?? 0
@@ -924,7 +1331,7 @@ struct UsagePanel: View {
     }
 
     private var maxSkillMetricDollars: Double {
-        let skills = store.snapshot.skills
+        let skills = panelSnapshot.skills
         switch skillsMetric {
         case .total: return 0
         case .average: return skills.map(\.averageCostDollars).max() ?? 0
@@ -942,7 +1349,7 @@ struct UsagePanel: View {
 
     private var visibleSessions: [SessionUsage] {
         // Roots only — subagents live under their parent in session detail.
-        var sessions = store.snapshot.rootSessions
+        var sessions = panelSnapshot.rootSessions
         if settings.hideArchivedSessions {
             sessions = sessions.filter { !$0.isArchived }
         }
@@ -959,7 +1366,7 @@ struct UsagePanel: View {
     }
 
     private func openSession(_ session: SessionUsage) {
-        let resolved = store.snapshot.session(id: session.conversationId) ?? session
+        let resolved = panelSnapshot.session(id: session.conversationId) ?? session
         panelTabRaw = UsageTab.sessions.rawValue
         sectionSearchText = ""
         isSectionSearchPresented = false
@@ -1009,13 +1416,13 @@ struct UsagePanel: View {
 
                 HStack(spacing: 8) {
                     Button {
-                        Task { await store.refresh() }
+                        Task { await refreshSources() }
                         MenuBarPanelKeeper.keepOpen()
                     } label: {
                         footerIcon("arrow.clockwise")
                     }
                     .buttonStyle(.borderless)
-                    .disabled(store.isLoading)
+                    .disabled(panelIsLoading)
                     .keyboardShortcut("r")
                     .help("Refresh")
                     .glassEffect(.regular.interactive())

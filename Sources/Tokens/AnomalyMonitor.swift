@@ -3,7 +3,7 @@ import UserNotifications
 
 @MainActor
 final class AnomalyMonitor {
-    private var lastNotificationAt: Date?
+    private var lastNotificationAt: [UsageSource: Date] = [:]
     private var center: UNUserNotificationCenter {
         UNUserNotificationCenter.current()
     }
@@ -22,28 +22,74 @@ final class AnomalyMonitor {
         }
     }
 
-    func evaluate(snapshot: UsageSnapshot, settings: SettingsStore) async {
-        let thresholdCents = settings.anomalyThresholdDollars * 100
-        guard snapshot.recentCostCents >= thresholdCents else { return }
-
-        let cooldown = TimeInterval(settings.anomalyCooldownMinutes * 60)
-        if let last = lastNotificationAt, Date().timeIntervalSince(last) < cooldown {
-            return
+    nonisolated static func shouldNotify(
+        source: UsageSource,
+        recentCostCents: Double,
+        thresholdCents: Double,
+        lastNotificationAt: [UsageSource: Date],
+        now: Date,
+        cooldown: TimeInterval
+    ) -> Bool {
+        guard recentCostCents >= thresholdCents else { return false }
+        if let last = lastNotificationAt[source], now.timeIntervalSince(last) < cooldown {
+            return false
         }
+        return true
+    }
+
+    nonisolated static func notificationContent(
+        source: UsageSource,
+        recentDollars: Double,
+        windowMinutes: Int
+    ) -> (title: String, body: String) {
+        switch source {
+        case .cursor:
+            return (
+                "Burnrate spike",
+                String(
+                    format: "%@ in the last %d minutes",
+                    MoneyFormat.dollars(recentDollars),
+                    windowMinutes
+                )
+            )
+        case .claudeCode:
+            return (
+                "Burnrate spike · Claude Code",
+                String(
+                    format: "%@ estimated in the last %d minutes",
+                    MoneyFormat.estimated(recentDollars),
+                    windowMinutes
+                )
+            )
+        }
+    }
+
+    func evaluate(
+        snapshot: UsageSnapshot,
+        settings: SettingsStore,
+        source: UsageSource = .cursor
+    ) async {
+        let now = Date()
+        guard Self.shouldNotify(
+            source: source,
+            recentCostCents: snapshot.recentCostCents,
+            thresholdCents: settings.anomalyThresholdDollars * 100,
+            lastNotificationAt: lastNotificationAt,
+            now: now,
+            cooldown: TimeInterval(settings.anomalyCooldownMinutes * 60)
+        ) else { return }
 
         let allowed = await ensureAuthorized()
         guard allowed else { return }
 
+        let content = Self.notificationContent(
+            source: source,
+            recentDollars: snapshot.recentDollars,
+            windowMinutes: settings.anomalyWindowMinutes
+        )
         do {
-            try await postNotification(
-                title: "Burnrate spike",
-                body: String(
-                    format: "%@ in the last %d minutes",
-                    MoneyFormat.dollars(snapshot.recentDollars),
-                    settings.anomalyWindowMinutes
-                )
-            )
-            lastNotificationAt = Date()
+            try await postNotification(title: content.title, body: content.body)
+            lastNotificationAt[source] = Date()
         } catch {
             // Ignore delivery failures for automatic alerts.
         }
