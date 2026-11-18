@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.60.12
+
+- Claude Code plan limits no longer bring up a Keychain password prompt every time Claude Code renews its login. Burnrate now reads the login with the same macOS tool Claude Code uses, so "Always Allow" is no longer needed.
+
 ## 0.60.11
 
 - Track Claude Code next to Cursor. The panel switches between them when both are present, and opens on Claude Code alone when Cursor is not signed in. The two amounts are never added.
