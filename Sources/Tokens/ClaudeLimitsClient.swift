@@ -70,17 +70,28 @@ enum ClaudeLimitsClient {
 
     /// Generic password for service `Claude Code-credentials`. The token stays
     /// in memory for this call and is never written or logged.
+    ///
+    /// Read through `/usr/bin/security`, not `SecItemCopyMatching`. Claude Code
+    /// rewrites the item with that tool on every token refresh, which resets the
+    /// partition list to `apple-tool:` and makes macOS prompt Burnrate again even
+    /// after "Always Allow". The tool itself stays trusted, so this never prompts.
     static func copyKeychainData() -> Data? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "Claude Code-credentials",
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        var result: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        guard status == errSecSuccess, let data = result as? Data else { return nil }
-        return data
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        process.arguments = ["find-generic-password", "-s", "Claude Code-credentials", "-w"]
+        let stdout = Pipe()
+        process.standardOutput = stdout
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+        } catch {
+            return nil
+        }
+        let output = stdout.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        let trimmed = output.prefix { $0 != UInt8(ascii: "\n") }
+        return trimmed.isEmpty ? nil : Data(trimmed)
     }
 
     private static let session: URLSession = {
