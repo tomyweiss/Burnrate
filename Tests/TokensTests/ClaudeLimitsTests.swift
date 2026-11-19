@@ -320,6 +320,85 @@ import TokensCore
     #expect(harness.store.limitsError == ClaudeLimitsClient.loginExpired)
 }
 
+@Test @MainActor func claudeLimitsExpiredLoginIsRenewedThenFetched() async throws {
+    let harness = try LimitsHarness()
+    defer { harness.cleanup() }
+    harness.settings.claudeLimitsEnabled = true
+    harness.probe.data = try claudeLimitsKeychain(token: "token-old", expiresAtMs: 1_600_000_000_000)
+    harness.probe.renewed = try claudeLimitsKeychain(token: "token-new", expiresAtMs: 1_800_000_000_000)
+
+    await harness.store.refresh()
+
+    #expect(harness.probe.renewals == 1)
+    #expect(harness.probe.fetches == ["token-new"])
+    #expect(harness.store.limitsError == nil)
+}
+
+@Test @MainActor func claudeLimitsRejectedTokenIsRenewedOnceThenRetried() async throws {
+    let harness = try LimitsHarness()
+    defer { harness.cleanup() }
+    harness.settings.claudeLimitsEnabled = true
+    harness.probe.data = try claudeLimitsKeychain(token: "token-a", expiresAtMs: 1_800_000_000_000)
+    harness.probe.rejectedTokens = ["token-a"]
+    harness.probe.renewed = try claudeLimitsKeychain(token: "token-b", expiresAtMs: 1_800_000_000_000)
+
+    await harness.store.refresh()
+
+    #expect(harness.probe.renewals == 1)
+    #expect(harness.probe.fetches == ["token-a", "token-b"])
+    #expect(harness.store.limitsError == nil)
+}
+
+@Test @MainActor func claudeLimitsFailedRenewalWaitsBeforeTryingAgain() async throws {
+    let harness = try LimitsHarness()
+    defer { harness.cleanup() }
+    harness.settings.claudeLimitsEnabled = true
+    harness.probe.data = try claudeLimitsKeychain(token: "token-old", expiresAtMs: 1_600_000_000_000)
+
+    await harness.store.refresh()
+    harness.probe.now = harness.probe.now.addingTimeInterval(120)
+    await harness.store.refresh()
+    #expect(harness.probe.renewals == 1)
+    #expect(harness.store.limitsError == ClaudeLimitsClient.loginExpired)
+
+    harness.probe.now = harness.probe.now.addingTimeInterval(ClaudeLimitsClient.renewInterval)
+    await harness.store.refresh()
+    #expect(harness.probe.renewals == 2)
+}
+
+@Test func claudeOAuthRefreshBodyCarriesRefreshTokenAndScopes() throws {
+    let data = try JSONSerialization.data(withJSONObject: [
+        "claudeAiOauth": ["accessToken": "a", "refreshToken": "r1", "expiresAt": 1, "scopes": ["user:profile", "user:inference"]],
+    ])
+    let body = try #require(ClaudeOAuthRefresh.requestBody(from: data))
+    let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: String])
+    #expect(json["grant_type"] == "refresh_token")
+    #expect(json["refresh_token"] == "r1")
+    #expect(json["client_id"] == ClaudeOAuthRefresh.clientID)
+    #expect(json["scope"] == "user:profile user:inference")
+}
+
+@Test func claudeOAuthRefreshMergeKeepsOtherFields() throws {
+    let data = try JSONSerialization.data(withJSONObject: [
+        "mcpOAuth": ["server": ["token": "keep"]],
+        "claudeAiOauth": ["accessToken": "a", "refreshToken": "r1", "expiresAt": 1, "subscriptionType": "team"],
+    ])
+    let reply = try JSONSerialization.data(withJSONObject: [
+        "access_token": "a2", "expires_in": 28800, "refresh_token_expires_in": 100,
+    ])
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    let merged = try #require(ClaudeOAuthRefresh.merge(response: reply, into: data, now: now))
+    let json = try #require(try JSONSerialization.jsonObject(with: merged) as? [String: Any])
+    let oauth = try #require(json["claudeAiOauth"] as? [String: Any])
+    #expect(oauth["accessToken"] as? String == "a2")
+    #expect(oauth["refreshToken"] as? String == "r1")
+    #expect((oauth["expiresAt"] as? NSNumber)?.int64Value == 1_700_028_800_000)
+    #expect((oauth["refreshTokenExpiresAt"] as? NSNumber)?.int64Value == 1_700_000_100_000)
+    #expect(oauth["subscriptionType"] as? String == "team")
+    #expect((json["mcpOAuth"] as? [String: Any]) != nil)
+    #expect(ClaudeOAuthToken.extract(from: merged, now: now) == .valid(accessToken: "a2"))
+}
+
 @Test @MainActor func claudeLimitsSuccessSetsWindows() async throws {
     let harness = try LimitsHarness()
     defer { harness.cleanup() }
@@ -417,6 +496,9 @@ private final class LimitsProbe {
     var fetchError: Error?
     var limits = ClaudeLimits(fiveHour: nil, weekly: nil)
     var now = Date(timeIntervalSince1970: 1_700_000_000)
+    var renewals = 0
+    var renewed: Data?
+    var rejectedTokens: Set<String> = []
 
     func dependency() -> ClaudePlanLimits {
         ClaudePlanLimits(
@@ -426,8 +508,14 @@ private final class LimitsProbe {
             },
             fetch: { token in
                 self.fetches.append(token)
+                if self.rejectedTokens.contains(token) { throw ClaudeLimitsClientError.httpStatus(401) }
                 if let fetchError = self.fetchError { throw fetchError }
                 return self.limits
+            },
+            renew: { _ in
+                self.renewals += 1
+                if let renewed = self.renewed { self.data = renewed }
+                return self.renewed
             },
             now: { self.now }
         )

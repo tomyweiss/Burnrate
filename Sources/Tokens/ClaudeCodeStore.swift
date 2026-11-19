@@ -28,6 +28,7 @@ final class ClaudeCodeStore {
     private let projectsRoot: URL
     private let planLimits: ClaudePlanLimits
     private var lastLimitsFetchAt: Date?
+    private var lastRenewAt: Date?
     private var pollTask: Task<Void, Never>?
     private var refreshGeneration = 0
     private var refreshInFlight = false
@@ -193,7 +194,8 @@ final class ClaudeCodeStore {
     }
 
     /// At most once per refresh, and not again for 60 seconds. A failed call
-    /// keeps the previous windows and sets `limitsError`. The token is never refreshed.
+    /// keeps the previous windows and sets `limitsError`. An expired or rejected
+    /// login is renewed once, at most every `ClaudeLimitsClient.renewInterval`.
     private func refreshPlanLimits() async {
         guard settings.claudeLimitsEnabled else {
             clearPlanLimits()
@@ -206,37 +208,60 @@ final class ClaudeCodeStore {
             return
         }
 
-        guard let data = planLimits.readKeychain() else {
+        guard var data = planLimits.readKeychain() else {
             limitsError = ClaudeLimitsClient.noLogin
             return
         }
-        switch ClaudeOAuthToken.extract(from: data, now: now) {
-        case .expired:
-            limitsError = ClaudeLimitsClient.loginExpired
-        case .unreadable:
+        var renewed = false
+        if ClaudeOAuthToken.extract(from: data, now: now) == .expired {
+            guard let fresh = await renewLogin(data, now: now) else {
+                limitsError = ClaudeLimitsClient.loginExpired
+                return
+            }
+            data = fresh
+            renewed = true
+        }
+        guard case .valid(var accessToken) = ClaudeOAuthToken.extract(from: data, now: now) else {
             limitsError = ClaudeLimitsClient.unavailable
-        case .valid(let accessToken):
-            lastLimitsFetchAt = now
+            return
+        }
+        lastLimitsFetchAt = now
+        do {
+            let fetched: ClaudeLimits
             do {
-                let fetched = try await planLimits.fetch(accessToken)
-                guard settings.claudeLimitsEnabled else {
-                    clearPlanLimits()
-                    return
-                }
-                limits = fetched
-                limitsError = nil
-            } catch {
-                guard settings.claudeLimitsEnabled else {
-                    clearPlanLimits()
-                    return
-                }
-                if case ClaudeLimitsClientError.httpStatus(401) = error {
-                    limitsError = ClaudeLimitsClient.loginExpired
-                } else {
-                    limitsError = ClaudeLimitsClient.unavailable
-                }
+                fetched = try await planLimits.fetch(accessToken)
+            } catch ClaudeLimitsClientError.httpStatus(401) where !renewed {
+                guard let fresh = await renewLogin(data, now: now),
+                      case .valid(let token) = ClaudeOAuthToken.extract(from: fresh, now: now)
+                else { throw ClaudeLimitsClientError.httpStatus(401) }
+                accessToken = token
+                fetched = try await planLimits.fetch(accessToken)
+            }
+            guard settings.claudeLimitsEnabled else {
+                clearPlanLimits()
+                return
+            }
+            limits = fetched
+            limitsError = nil
+        } catch {
+            guard settings.claudeLimitsEnabled else {
+                clearPlanLimits()
+                return
+            }
+            if case ClaudeLimitsClientError.httpStatus(401) = error {
+                limitsError = ClaudeLimitsClient.loginExpired
+            } else {
+                limitsError = ClaudeLimitsClient.unavailable
             }
         }
+    }
+
+    private func renewLogin(_ data: Data, now: Date) async -> Data? {
+        if let lastRenewAt, now.timeIntervalSince(lastRenewAt) < ClaudeLimitsClient.renewInterval {
+            return nil
+        }
+        lastRenewAt = now
+        return await planLimits.renew(data)
     }
 
     private func progressHandler(generation: Int) -> @Sendable (Int, Int) -> Void {

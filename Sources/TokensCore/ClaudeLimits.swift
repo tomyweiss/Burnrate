@@ -211,3 +211,70 @@ public enum ClaudeOAuthToken: Equatable, Sendable {
         return Date(timeIntervalSince1970: raw / 1000)
     }
 }
+
+/// Renewing the `claudeAiOauth` login the way Claude Code does, so the Keychain
+/// item stays usable by both apps. Claude Code desktop passes its own token to
+/// the CLI through the environment and never renews this item, so it goes stale.
+public enum ClaudeOAuthRefresh {
+    public static let tokenURL = URL(string: "https://platform.claude.com/v1/oauth/token")!
+    public static let clientID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+
+    public static func refreshToken(in data: Data) -> String? {
+        guard let oauth = oauth(in: data),
+              let token = oauth["refreshToken"] as? String,
+              !token.isEmpty
+        else { return nil }
+        return token
+    }
+
+    /// JSON body for the token endpoint, or nil when the item has no refresh token.
+    public static func requestBody(from data: Data) -> Data? {
+        guard let oauth = oauth(in: data), let token = refreshToken(in: data) else { return nil }
+        var body: [String: Any] = [
+            "grant_type": "refresh_token",
+            "refresh_token": token,
+            "client_id": clientID,
+        ]
+        if let scopes = oauth["scopes"] as? [String], !scopes.isEmpty {
+            body["scope"] = scopes.joined(separator: " ")
+        }
+        return try? JSONSerialization.data(withJSONObject: body)
+    }
+
+    /// The Keychain payload with the renewed tokens merged in. Every other field,
+    /// including `mcpOAuth`, is kept. A response without `refresh_token` keeps the old one.
+    public static func merge(response: Data, into data: Data, now: Date) -> Data? {
+        guard var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              var oauth = json["claudeAiOauth"] as? [String: Any],
+              let reply = try? JSONSerialization.jsonObject(with: response) as? [String: Any],
+              let accessToken = reply["access_token"] as? String, !accessToken.isEmpty,
+              let expiresIn = seconds(reply["expires_in"])
+        else { return nil }
+        let nowMs = (now.timeIntervalSince1970 * 1000).rounded()
+        oauth["accessToken"] = accessToken
+        oauth["expiresAt"] = Int64(nowMs + expiresIn * 1000)
+        if let refresh = reply["refresh_token"] as? String, !refresh.isEmpty {
+            oauth["refreshToken"] = refresh
+        }
+        if let refreshExpiresIn = seconds(reply["refresh_token_expires_in"]) {
+            oauth["refreshTokenExpiresAt"] = Int64(nowMs + refreshExpiresIn * 1000)
+        }
+        if let scope = reply["scope"] as? String, !scope.isEmpty {
+            oauth["scopes"] = scope.split(separator: " ").map(String.init)
+        }
+        json["claudeAiOauth"] = oauth
+        return try? JSONSerialization.data(withJSONObject: json)
+    }
+
+    private static func oauth(in data: Data) -> [String: Any]? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return json["claudeAiOauth"] as? [String: Any]
+    }
+
+    private static func seconds(_ value: Any?) -> Double? {
+        guard let value, !(value is Bool), let number = value as? NSNumber else { return nil }
+        let raw = number.doubleValue
+        guard raw.isFinite, raw > 0 else { return nil }
+        return raw
+    }
+}

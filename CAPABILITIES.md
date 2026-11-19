@@ -80,7 +80,7 @@ No Dock icon. Cursor auth comes from the local IDE login. Claude Code spend is r
 - Cursor session names / workspaces from local composer metadata
 - Claude Code from `~/.claude/projects` (session and subagent `.jsonl`). Incremental index at `~/Library/Application Support/Burnrate/claude-index.json`. Never uploaded
 - Claude Code cost is local token counts × a bundled Anthropic API list-price table, including separate 5-minute and 1-hour cache-write prices. Unknown models: tokens shown, cost excluded
-- Plan limits (opt-in): `Claude Code-credentials` Keychain item, read in memory only, never stored or refreshed. `GET https://api.anthropic.com/api/oauth/usage` at most once a minute. Does not consume model usage
+- Plan limits (opt-in): `Claude Code-credentials` Keychain item, read in memory only. When the token is expired or rejected, renewed with its refresh token (`POST https://platform.claude.com/v1/oauth/token`, at most every 5 minutes) and written back to the same item. `GET https://api.anthropic.com/api/oauth/usage` at most once a minute. Does not consume model usage
 
 ### CLI
 
