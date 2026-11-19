@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.60.13
+
+- Claude Code plan limits keep working when you only use Claude Code from the Claude desktop app. The desktop app never renews the login Burnrate reads, so the gauges went blank about 8 hours after you last ran `claude` in Terminal. Burnrate now renews that login itself and saves it back for Claude Code, at most every 5 minutes, and keeps Claude Code's token if it renewed first.
+
 ## 0.60.12
 
 - Claude Code plan limits no longer bring up a Keychain password prompt every time Claude Code renews its login. Burnrate now reads the login with the same macOS tool Claude Code uses, so "Always Allow" is no longer needed.

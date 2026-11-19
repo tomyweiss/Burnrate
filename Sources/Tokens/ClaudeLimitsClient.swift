@@ -6,11 +6,14 @@ import TokensCore
 struct ClaudePlanLimits {
     var readKeychain: @MainActor () -> Data?
     var fetch: @MainActor (String) async throws -> ClaudeLimits
+    /// Renews the login in the Keychain item and returns the new payload, or nil.
+    var renew: @MainActor (Data) async -> Data?
     var now: @MainActor () -> Date
 
     @MainActor static let live = ClaudePlanLimits(
         readKeychain: { ClaudeLimitsClient.copyKeychainData() },
         fetch: { try await ClaudeLimitsClient.fetch(accessToken: $0) },
+        renew: { await ClaudeLimitsClient.renew(data: $0) },
         now: { Date() }
     )
 }
@@ -25,9 +28,10 @@ struct ClaudePlanLimits {
 /// https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor/issues/202
 enum ClaudeLimitsClient {
     static let unavailable = "Limits unavailable"
-    static let loginExpired = "Claude Code login expired. Run Claude Code to renew it."
+    static let loginExpired = "Claude Code login expired and could not be renewed. Run claude in Terminal to sign in again."
     static let noLogin = "No Claude Code login found. Sign in to Claude Code."
     static let minimumInterval: TimeInterval = 60
+    static let renewInterval: TimeInterval = 300
     static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 
     static func makeRequest(accessToken: String, userAgent: String) -> URLRequest {
@@ -69,7 +73,7 @@ enum ClaudeLimitsClient {
     }
 
     /// Generic password for service `Claude Code-credentials`. The token stays
-    /// in memory for this call and is never written or logged.
+    /// in memory for this call, is never logged, and is only written back by `renew`.
     ///
     /// Read through `/usr/bin/security`, not `SecItemCopyMatching`. Claude Code
     /// rewrites the item with that tool on every token refresh, which resets the
@@ -92,6 +96,79 @@ enum ClaudeLimitsClient {
         guard process.terminationStatus == 0 else { return nil }
         let trimmed = output.prefix { $0 != UInt8(ascii: "\n") }
         return trimmed.isEmpty ? nil : Data(trimmed)
+    }
+
+    /// Renews with the refresh token and writes the result back the way Claude Code
+    /// does. If Claude Code renewed meanwhile, its item wins and is returned unchanged.
+    @MainActor static func renew(data: Data) async -> Data? {
+        guard let usedRefresh = ClaudeOAuthRefresh.refreshToken(in: data),
+              let body = ClaudeOAuthRefresh.requestBody(from: data)
+        else { return nil }
+        var request = URLRequest(url: ClaudeOAuthRefresh.tokenURL, timeoutInterval: 30)
+        request.httpMethod = "POST"
+        request.httpBody = body
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(userAgent(), forHTTPHeaderField: "User-Agent")
+
+        let reply: Data
+        do {
+            let (responseData, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+                reportFailure("Claude Code login renewal failed (HTTP \(status))")
+                return nil
+            }
+            reply = responseData
+        } catch {
+            reportFailure("Claude Code login renewal failed")
+            return nil
+        }
+
+        guard let current = copyKeychainData() else { return nil }
+        if ClaudeOAuthRefresh.refreshToken(in: current) != usedRefresh {
+            return current
+        }
+        guard let merged = ClaudeOAuthRefresh.merge(response: reply, into: current, now: Date()),
+              writeKeychainData(merged)
+        else {
+            reportFailure("Claude Code login renewal could not be saved")
+            return nil
+        }
+        return merged
+    }
+
+    /// Same command Claude Code runs, so the item's access list and partition list
+    /// stay as Claude Code expects. Like Claude Code, short payloads go through
+    /// `security -i` stdin to stay out of process arguments; `security -i` truncates
+    /// lines past about 4 KB, so longer payloads (with `mcpOAuth`) go in argv.
+    private static func writeKeychainData(_ data: Data) -> Bool {
+        let hex = data.map { String(format: "%02x", $0) }.joined()
+        let account = NSUserName()
+        let service = "Claude Code-credentials"
+        let command = "add-generic-password -U -a \"\(account)\" -s \"\(service)\" -X \"\(hex)\"\n"
+        let useStdin = command.utf8.count <= 4000
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        process.arguments = useStdin
+            ? ["-i"]
+            : ["add-generic-password", "-U", "-a", account, "-s", service, "-X", hex]
+        let stdin = Pipe()
+        process.standardInput = stdin
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+        } catch {
+            return false
+        }
+        if useStdin {
+            stdin.fileHandleForWriting.write(Data(command.utf8))
+        }
+        try? stdin.fileHandleForWriting.close()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return false }
+        return ClaudeOAuthRefresh.refreshToken(in: copyKeychainData() ?? Data())
+            == ClaudeOAuthRefresh.refreshToken(in: data)
     }
 
     private static let session: URLSession = {
