@@ -211,7 +211,8 @@ enum Aggregator {
         events: [UsageEvent],
         now: Date = Date(),
         rates: SpendRates = .unavailable,
-        grokLibrary: GrokBotStore.Library = .disk
+        grokLibrary: GrokBotStore.Library = .disk,
+        cursorLocalCatalogs: Bool = true
     ) -> [String: [CommunitySkillSpend]] {
         let startMs = now.addingTimeInterval(-Double(CommunityPayloadBuilder.analyticsFetchHours) * 3600)
             .timeIntervalSince1970 * 1000
@@ -228,7 +229,8 @@ enum Aggregator {
         var parentByChild = conversationParents(
             conversationIds: knownConversationIds,
             events: events,
-            library: grokLibrary
+            library: grokLibrary,
+            cursorLocalCatalogs: cursorLocalCatalogs
         )
         let discoveredParents = Set(parentByChild.values)
         let missingParents = discoveredParents.subtracting(knownConversationIds)
@@ -237,7 +239,8 @@ enum Aggregator {
             parentByChild = conversationParents(
                 conversationIds: knownConversationIds,
                 events: events,
-                library: grokLibrary
+                library: grokLibrary,
+                cursorLocalCatalogs: cursorLocalCatalogs
             )
             knownConversationIds.formUnion(parentByChild.values)
         }
@@ -256,7 +259,8 @@ enum Aggregator {
             startMs: startMs,
             endMs: endMs,
             rates: rates,
-            library: grokLibrary
+            library: grokLibrary,
+            cursorLocalCatalogs: cursorLocalCatalogs
         )
 
         var rawByDay: [String: [(name: String, invocationCount: Int, spendCents: Int)]] = [:]

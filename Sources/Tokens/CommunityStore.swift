@@ -15,7 +15,11 @@ final class CommunityStore {
     private let client: CommunityClient
     private let interactionTracker: InteractionTracker
     private weak var usageStore: UsageStore?
+    private weak var claudeCodeStore: ClaudeCodeStore?
     private var lastUploadAt: Date?
+    /// Claude Code slice of the last successful upload. A change bypasses the
+    /// 5-minute throttle so it is not left out of a snapshot Cursor just sent.
+    private var lastUploadedClaudeFingerprint: Int?
     private let uploadThrottle: TimeInterval = 5 * 60
     private var didResetCommunityCredentials = false
     private var rankRequestGeneration = 0
@@ -36,6 +40,10 @@ final class CommunityStore {
 
     func setUsageStore(_ store: UsageStore?) {
         usageStore = store
+    }
+
+    func setClaudeCodeStore(_ store: ClaudeCodeStore?) {
+        claudeCodeStore = store
     }
 
     var displayNickname: String {
@@ -172,10 +180,30 @@ final class CommunityStore {
         await refreshRank()
     }
 
-    private func uploadSnapshotIfNeeded(force: Bool) async {
+    /// Called after Claude Code usage changes. Uploads when the combined snapshot
+    /// changed, including inside the Cursor throttle, so both sources land together.
+    func handleClaudeRefreshIfNeeded() async {
+        refreshCursorDisplayName()
+        await migrateNicknameToCursorDefaultIfNeeded()
+        if await uploadSnapshotIfNeeded(force: false) {
+            await refreshRank()
+        }
+    }
+
+    @discardableResult
+    private func uploadSnapshotIfNeeded(force: Bool) async -> Bool {
         guard let participantId = settings.communityParticipantId,
-              let nickname = cursorDisplayName else { return }
-        _ = await uploadSnapshot(participantId: participantId, nickname: nickname, force: force)
+              let nickname = cursorDisplayName else { return false }
+        let claudeFingerprint = Self.uploadFingerprint(claudeCodeStore?.communityAnalyticsEvents ?? [])
+        let claudeChanged = claudeFingerprint != lastUploadedClaudeFingerprint
+        if !force, !claudeChanged, let lastUploadAt, Date().timeIntervalSince(lastUploadAt) < uploadThrottle {
+            return false
+        }
+        return await uploadSnapshot(
+            participantId: participantId,
+            nickname: nickname,
+            force: force || claudeChanged
+        )
     }
 
     @discardableResult
@@ -188,6 +216,7 @@ final class CommunityStore {
             let payload = try buildSnapshotPayload(participantId: participantId, nickname: nickname)
             try await client.postSnapshot(payload)
             lastUploadAt = Date()
+            lastUploadedClaudeFingerprint = Self.uploadFingerprint(claudeCodeStore?.communityAnalyticsEvents ?? [])
             lastError = nil
             clearPendingNicknameReconciliation()
             settings.communitySupersededParticipantId = nil
@@ -272,8 +301,26 @@ final class CommunityStore {
         rankIsStale = true
     }
 
+    private func combinedCommunityEvents() -> [CommunityAnalyticsEvent] {
+        (usageStore?.communityAnalyticsEvents ?? []) + (claudeCodeStore?.communityAnalyticsEvents ?? [])
+    }
+
+    private static func uploadFingerprint(_ events: [CommunityAnalyticsEvent]) -> Int {
+        var cents = 0.0
+        var tokens = 0
+        for event in events {
+            cents += event.costCents
+            tokens += event.tokenInput &+ event.tokenOutput &+ event.tokenCacheRead &+ event.tokenCacheWrite
+        }
+        var hasher = Hasher()
+        hasher.combine(events.count)
+        hasher.combine(Int(cents.rounded()))
+        hasher.combine(tokens)
+        return hasher.finalize()
+    }
+
     private func buildSnapshotPayload(participantId: String, nickname: String) throws -> CommunitySnapshotPayload {
-        let events = usageStore?.communityAnalyticsEvents ?? []
+        let events = combinedCommunityEvents()
         guard !events.isEmpty else {
             throw CommunityError.apiMessage("No recent usage data to share yet.")
         }
@@ -302,7 +349,10 @@ final class CommunityStore {
                 return engagement
             },
             dailySkills: { [self] day in
-                usageStore?.communityDailySkills[day] ?? []
+                CommunitySkillCap.merge([
+                    usageStore?.communityDailySkills[day] ?? [],
+                    claudeCodeStore?.communityDailySkills[day] ?? [],
+                ])
             },
             nicknameSource: "cursor",
             clientConfig: settings.communityClientConfig(

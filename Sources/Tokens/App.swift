@@ -26,7 +26,9 @@ struct TokensApp: App {
         }
         let community = CommunityStore(settings: settings, interactionTracker: interactionTracker)
         store.setCommunityStore(community)
+        claudeCodeStore.setCommunityStore(community)
         community.setUsageStore(store)
+        community.setClaudeCodeStore(claudeCodeStore)
         Task { await community.migrateNicknameToCursorDefaultIfNeeded() }
         store.start()
         claudeCodeStore.start()

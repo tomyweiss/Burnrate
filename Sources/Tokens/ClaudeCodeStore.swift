@@ -17,6 +17,13 @@ final class ClaudeCodeStore {
     private(set) var sessionCount = 0
     /// Transcript `.jsonl` path keyed by conversation id (`sessionId` or `sessionId:agent-…`).
     private(set) var transcriptPaths: [String: String] = [:]
+    /// Estimated list-price cents since this billing cycle started. Nil before the
+    /// first successful index.
+    private(set) var cycleSpendCents: Double?
+    /// Estimated Claude Code usage for the community snapshot. Combined with Cursor
+    /// under the same participant before upload.
+    private(set) var communityAnalyticsEvents: [CommunityAnalyticsEvent] = []
+    private(set) var communityDailySkills: [String: [CommunitySkillSpend]] = [:]
     /// Last successful 5-hour and weekly windows. Kept when a later fetch fails.
     private(set) var limits: ClaudeLimits?
     /// Set when the opt-in limits call cannot be made or fails. Spend keeps working.
@@ -33,6 +40,11 @@ final class ClaudeCodeStore {
     private var refreshGeneration = 0
     private var refreshInFlight = false
     private var installedObserver: (@MainActor (Bool) -> Void)?
+    private weak var communityStore: CommunityStore?
+
+    func setCommunityStore(_ store: CommunityStore?) {
+        communityStore = store
+    }
 
     func setInstalledObserver(_ observer: @escaping @MainActor (Bool) -> Void) {
         installedObserver = observer
@@ -132,13 +144,24 @@ final class ClaudeCodeStore {
             hasCompletedFetch = true
             isLoading = false
             indexingProgress = nil
+            await communityStore?.handleClaudeRefreshIfNeeded()
             return
         }
 
         let now = Date()
         let window = settings.usageWindow
         let range = window.dateRange(now: now)
-        let startMs = range.start.timeIntervalSince1970 * 1000
+        let communityStart = CommunityPayloadBuilder.eventFetchStart(
+            displayWindowStart: range.start,
+            now: now
+        )
+        let cycleStart = UsageTimeWindow(
+            preset: .thisBilling,
+            timeZone: settings.resolvedTimeZone,
+            billingDayOfMonth: settings.billingDayOfMonth
+        ).dateRange(now: now).start
+        let fetchStart = min(communityStart, cycleStart)
+        let fetchStartMs = fetchStart.timeIntervalSince1970 * 1000
 
         let installed = ClaudeTranscriptIndex.isClaudeCodeInstalled(root: projectsRoot)
         guard generation == refreshGeneration else { return }
@@ -150,17 +173,18 @@ final class ClaudeCodeStore {
             hasCompletedFetch = true
             isLoading = false
             indexingProgress = nil
+            await communityStore?.handleClaudeRefreshIfNeeded()
             return
         }
 
         isLoading = true
         let files = await index.refresh(
-            sinceMs: startMs,
+            sinceMs: fetchStartMs,
             progress: progressHandler(generation: generation)
         )
         guard generation == refreshGeneration else { return }
 
-        let fresh = files.filter { $0.mtime.timeIntervalSince1970 * 1000 >= startMs }
+        let fresh = files.filter { $0.mtime.timeIntervalSince1970 * 1000 >= fetchStartMs }
         let recentWindowMinutes = settings.anomalyWindowMinutes
 
         let indexed = await Task.detached(priority: .userInitiated) {
@@ -176,13 +200,22 @@ final class ClaudeCodeStore {
                 cursorLocalCatalogs: false,
                 extraMeta: built.meta
             )
-            return (snapshot, built.unpricedModels)
+            let skills = Aggregator.communityDailySkills(
+                events: built.events,
+                now: now,
+                grokLibrary: built.library,
+                cursorLocalCatalogs: false
+            )
+            return (snapshot, built.unpricedModels, built.events, skills)
         }.value
         guard generation == refreshGeneration else { return }
 
-        let (next, unpriced) = indexed
+        let (next, unpriced, events, skills) = indexed
         snapshot = next
         unpricedModels = unpriced
+        communityAnalyticsEvents = UsageStore.communityAnalyticsEvents(from: events, now: now)
+        communityDailySkills = skills
+        cycleSpendCents = Self.cycleSpendCents(events: events, since: cycleStart, until: now)
         sessionCount = Set(files.map(\.sessionId)).count
         transcriptPaths = Self.transcriptPaths(in: files)
         lastError = nil
@@ -191,6 +224,7 @@ final class ClaudeCodeStore {
         indexingProgress = nil
         isSpikeActive = next.recentCostCents >= settings.anomalyThresholdDollars * 100
         await anomalyMonitor?.evaluate(snapshot: next, settings: settings, source: .claudeCode)
+        await communityStore?.handleClaudeRefreshIfNeeded()
     }
 
     /// At most once per refresh, and not again for 60 seconds. A failed call
@@ -295,6 +329,19 @@ final class ClaudeCodeStore {
         isSpikeActive = false
         lastError = nil
         transcriptPaths = [:]
+        communityAnalyticsEvents = []
+        communityDailySkills = [:]
+        cycleSpendCents = nil
+    }
+
+    /// List-price cents for events inside the billing cycle. Unpriced models add nothing.
+    static func cycleSpendCents(events: [UsageEvent], since cycleStart: Date, until now: Date) -> Double {
+        let startMs = cycleStart.timeIntervalSince1970 * 1000
+        let endMs = now.timeIntervalSince1970 * 1000
+        return events.reduce(0) { total, event in
+            guard event.timestampMs >= startMs, event.timestampMs <= endMs else { return total }
+            return total + event.costCents(using: .unavailable)
+        }
     }
 }
 

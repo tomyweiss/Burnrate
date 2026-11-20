@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.60.14
+
+- Community is one leaderboard, available from both Cursor and Claude Code. Cursor spend and estimated Claude Code spend for the same person are added together. Session transcripts and prompts stay on this Mac.
+- Claude Code shows Spend this cycle: estimated list-price spend since the billing cycle started. Extra, when that pool is on, is the on-demand amount Anthropic has billed and is not added to the estimate.
+- The Included allowance heading is gone. The pool rings sit directly above Spend this cycle.
+
 ## 0.60.13
 
 - Claude Code plan limits keep working when you only use Claude Code from the Claude desktop app. The desktop app never renews the login Burnrate reads, so the gauges went blank about 8 hours after you last ran `claude` in Terminal. Burnrate now renews that login itself and saves it back for Claude Code, at most every 5 minutes, and keeps Claude Code's token if it renewed first.

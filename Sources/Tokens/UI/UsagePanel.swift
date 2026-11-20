@@ -169,24 +169,20 @@ private struct IncludedPoolsGauges<Timeline: View>: View {
     // MARK: Allowance
 
     private var allowanceCluster: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            clusterHeader("Included allowance")
-
-            GaugeWrapLayout(spacing: ringSpacing) {
-                percentGauge("Cursor models", percent: pools?.cursorModelsPercent)
-                    .help("Share of the Cursor models pool used this billing cycle")
-                if showsOtherModelsRing {
-                    percentGauge("Other models", percent: pools?.otherModelsPercent)
-                        .help("Share of the Other models pool used this billing cycle")
-                }
-                if let grokBot {
-                    percentGauge(
-                        "Grok Bot",
-                        percent: grokBot.percentUsed,
-                        detail: grokBot.resetCaption().map { "resets \($0)" }
-                    )
-                    .help("Share of the Grok Bot weekly included pool used")
-                }
+        GaugeWrapLayout(spacing: ringSpacing) {
+            percentGauge("Cursor models", percent: pools?.cursorModelsPercent)
+                .help("Share of the Cursor models pool used this billing cycle")
+            if showsOtherModelsRing {
+                percentGauge("Other models", percent: pools?.otherModelsPercent)
+                    .help("Share of the Other models pool used this billing cycle")
+            }
+            if let grokBot {
+                percentGauge(
+                    "Grok Bot",
+                    percent: grokBot.percentUsed,
+                    detail: grokBot.resetCaption().map { "resets \($0)" }
+                )
+                .help("Share of the Grok Bot weekly included pool used")
             }
         }
     }
@@ -704,6 +700,7 @@ struct UsagePanel: View {
             weeklyOpus: claudeCode.limits?.weeklyOpus,
             weeklySonnet: claudeCode.limits?.weeklySonnet,
             extraUsage: claudeCode.limits?.extraUsage,
+            cycleSpendCents: claudeCode.hasCompletedFetch ? claudeCode.cycleSpendCents : nil,
             limitsMessage: claudeCode.limitsError,
             onEnablePlanLimits: {
                 settings.claudeLimitsEnabled = true
@@ -720,7 +717,7 @@ struct UsagePanel: View {
             ),
             statusIsWarning: stale && indexing == nil,
             windowChrome: { windowChrome },
-            trailing: { sourceTrailingControls(showsCommunity: false) }
+            trailing: { sourceTrailingControls(showsCommunity: true) }
         )
     }
 
