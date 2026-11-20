@@ -30,7 +30,7 @@ transcripts already on this Mac and shown the same way, as an estimate.
 - **At-a-glance total** — the selected window, in the menu bar. Claude Code is optional and shown with `~`
 - **Spike alerts** — a macOS notification when a source crosses your threshold (default $10 / 10 min). Each source is checked on its own
 - **Zero setup** — Cursor uses the signed-in IDE session. Claude Code is read from `~/.claude/projects`. Nothing to paste
-- **Privacy-minded** — no analytics by default, no model calls that consume usage. Community stays Cursor-only and shares anonymous 24h aggregates only if you opt in. Claude Code data is never uploaded
+- **Privacy-minded** — no analytics by default, no model calls that consume usage. Community is one opt-in leaderboard: anonymous 24h aggregates of Cursor spend and estimated Claude Code spend for the same person. Session transcripts and prompts are never uploaded
 
 ## Install
 
@@ -183,10 +183,10 @@ behavior: [CAPABILITIES.md](CAPABILITIES.md).
 - When Cursor encrypts that token, Burnrate reads the "Cursor Safe Storage" Keychain password to decrypt it in memory. macOS asks once per launch unless you choose **Always Allow**; it may ask twice (app access, then team access), so choose Always Allow both times. The grant is tied to Burnrate's signing team and survives updates
 - Fetches usage over HTTPS from Cursor's dashboard endpoints using that session
 - Session names and workspace folders come from **local** Cursor composer metadata (and cloud agent cache for `bc-*` sessions)
-- Reads `~/.claude/projects` locally (session transcripts and subagent transcripts). The index stays in Application Support. Claude Code data is never uploaded
+- Reads `~/.claude/projects` locally (session transcripts and subagent transcripts). The index stays in Application Support. Community, if you opt in, uploads anonymous spend aggregates from those transcripts, not the transcripts themselves
 - **Plan limits (opt-in, off by default):** reads the `Claude Code-credentials` Keychain item in memory only. It calls `GET https://api.anthropic.com/api/oauth/usage` at most once a minute. The request does not consume model usage. It reads the item through `/usr/bin/security`, the same tool Claude Code uses, so macOS doesn't prompt. Claude Code desktop never renews that item, so when the token has expired or is rejected, Burnrate renews it with the refresh token (`POST https://platform.claude.com/v1/oauth/token`, at most every 5 minutes) and writes the result back to the same item the way Claude Code does, keeping every other field. If Claude Code renewed first, its token is kept. If renewal fails, the gauges say the login expired and spend still works
 - No analytics; no model calls that consume Cursor or Claude usage
-- **Community (opt-in):** uploads anonymous rolling 24h Cursor spend + per-model costs to the Burnrate community API when you enable sharing; never session titles, prompts, Cursor identity, or any Claude Code data. Turning sharing off deletes your server row. You only see cohort data if you share. The chip is hidden when Cursor is not the selected source
+- **Community (opt-in):** one leaderboard. Uploads anonymous rolling 24h spend and per-model costs for Cursor and estimated Claude Code usage, added together for the same person, when you enable sharing. Never session titles, prompts, or Cursor identity. Claude Code dollars in that total are the same list-price estimates as the panel, not a bill. Turning sharing off deletes your server row. You only see cohort data if you share. The chip is on both sources
 - Self-updates use Sparkle (EdDSA). Auto-check is daily. Burnrate-dev does not auto-update from GitHub
 
 ## Self-updates

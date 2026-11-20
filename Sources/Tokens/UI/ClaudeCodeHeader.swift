@@ -73,6 +73,8 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
     var weeklyOpus: ClaudeLimitWindow?
     var weeklySonnet: ClaudeLimitWindow?
     var extraUsage: ClaudeExtraUsage?
+    /// Estimated list-price cents since the billing cycle started. Nil until indexed.
+    var cycleSpendCents: Double? = nil
     var limitsMessage: String?
     var onEnablePlanLimits: (() -> Void)? = nil
     var stats: [PanelStat] = []
@@ -149,6 +151,9 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
                 planLimitRings
                     .fixedSize(horizontal: false, vertical: true)
 
+                cycleSpend
+                    .fixedSize(horizontal: false, vertical: true)
+
                 if !stats.isEmpty {
                     PanelStatsGrid(stats: stats)
                         .layoutPriority(0)
@@ -183,6 +188,80 @@ struct ClaudeCodeHeader<WindowChrome: View, Trailing: View>: View {
 
     private static var ringSpacing: CGFloat { 12 }
     private static var noteWidth: CGFloat { 150 }
+    private static var estimatedTint: Color { .accentColor }
+    private static var extraTint: Color { .orange }
+
+    /// Extra usage is Anthropic's billed on-demand amount. It is shown beside the
+    /// estimate and is not added to it.
+    private var extraSpendDollars: Double? {
+        guard showsPlanLimits, limitsMessage == nil else { return nil }
+        return extraUsage?.usedDollars
+    }
+
+    private var cycleSpend: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Spend this cycle")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                Text(cycleSpendCents.map { MoneyFormat.estimated($0 / 100) } ?? "—")
+                    .font(.subheadline.weight(.semibold).monospacedDigit())
+                    .lineLimit(1)
+            }
+
+            cycleSpendBar
+
+            HStack(spacing: 14) {
+                cycleLegend(
+                    "Estimated",
+                    text: cycleSpendCents.map { MoneyFormat.estimated($0 / 100) } ?? "—",
+                    tint: Self.estimatedTint,
+                    loaded: cycleSpendCents != nil
+                )
+                if let extraSpendDollars {
+                    cycleLegend(
+                        "Extra",
+                        text: MoneyFormat.dollars(extraSpendDollars),
+                        tint: Self.extraTint,
+                        loaded: true
+                    )
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(cycleSpendAccessibility)
+        .help("Estimated list-price spend since this billing cycle started. Extra is on-demand usage Anthropic has billed this month, and is not included in the total.")
+    }
+
+    private var cycleSpendBar: some View {
+        Capsule()
+            .fill((cycleSpendCents ?? 0) > 0 ? Self.estimatedTint : Color.secondary.opacity(0.25))
+            .frame(height: 10)
+    }
+
+    private func cycleLegend(_ title: String, text: String, tint: Color, loaded: Bool) -> some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(loaded ? tint : Color.secondary.opacity(0.45))
+                .frame(width: 7, height: 7)
+            Text(title)
+                .foregroundStyle(.secondary)
+            Text(text)
+                .fontWeight(.medium)
+                .monospacedDigit()
+        }
+        .font(.caption)
+        .lineLimit(1)
+    }
+
+    private var cycleSpendAccessibility: String {
+        guard let cycleSpendCents else { return "Spend this cycle, not loaded" }
+        let estimated = MoneyFormat.estimated(cycleSpendCents / 100)
+        guard let extraSpendDollars else { return "Spend this cycle \(estimated)" }
+        return "Spend this cycle \(estimated). Extra \(MoneyFormat.dollars(extraSpendDollars))"
+    }
 
     /// Placeholder `5h` / `Weekly` rings stand in until limits load, and while
     /// plan limits are off or unavailable, so the header always has its gauges.

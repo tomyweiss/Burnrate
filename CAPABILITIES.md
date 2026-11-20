@@ -49,9 +49,9 @@ No Dock icon. Cursor auth comes from the local IDE login. Claude Code spend is r
 
 ### Community (opt-in)
 
-- Cursor only. Claude Code events are never uploaded. The chip is hidden when Cursor is not selected
+- One leaderboard for Cursor and Claude Code. The same person's spend is added together. The chip is on both sources
 - Locked until you enable sharing
-- Uploads anonymous 24h Cursor spend + per-model cost breakdown (no session/prompt data)
+- Uploads anonymous 24h spend + per-model cost breakdown for both sources (no session/prompt data). Claude Code amounts are the local list-price estimates
 - Share-to-view: cohort rank, median, and near-you list only when sharing is on
 - Optional fun nickname (Shuffle / Clear); opt-out deletes server data
 

@@ -87,4 +87,64 @@ public enum CommunitySkillCap {
             ),
         ]
     }
+
+    /// Sum skill rows that were capped separately (Cursor and Claude Code), then cap once.
+    public static func merge(_ groups: [[CommunitySkillSpend]]) -> [CommunitySkillSpend] {
+        var named: [(name: String, invocationCount: Int, spendCents: Int)] = []
+        var otherInvocations = 0
+        var otherSpend = 0
+        for skill in groups.joined() {
+            if skill.name == otherBucketName {
+                otherInvocations += max(0, skill.invocationCount)
+                otherSpend += max(0, skill.spendCents)
+            } else {
+                named.append((
+                    name: skill.name,
+                    invocationCount: skill.invocationCount,
+                    spendCents: skill.spendCents
+                ))
+            }
+        }
+
+        var capped = cap(named)
+        guard otherInvocations > 0 || otherSpend > 0 else { return capped }
+
+        if let index = capped.firstIndex(where: { $0.name == otherBucketName }) {
+            let existing = capped[index]
+            capped[index] = CommunitySkillSpend(
+                name: otherBucketName,
+                invocationCount: existing.invocationCount + otherInvocations,
+                spendCents: existing.spendCents + otherSpend
+            )
+            return capped
+        }
+
+        let carried = CommunitySkillSpend(
+            name: otherBucketName,
+            invocationCount: otherInvocations,
+            spendCents: otherSpend
+        )
+        guard capped.count >= maxSkills, let smallest = smallestIndex(in: capped) else {
+            return capped + [carried]
+        }
+        let dropped = capped.remove(at: smallest)
+        return capped + [
+            CommunitySkillSpend(
+                name: otherBucketName,
+                invocationCount: carried.invocationCount + dropped.invocationCount,
+                spendCents: carried.spendCents + dropped.spendCents
+            ),
+        ]
+    }
+
+    private static func smallestIndex(in skills: [CommunitySkillSpend]) -> Int? {
+        skills.indices.min { lhs, rhs in
+            let left = skills[lhs]
+            let right = skills[rhs]
+            if left.spendCents == right.spendCents {
+                return left.invocationCount < right.invocationCount
+            }
+            return left.spendCents < right.spendCents
+        }
+    }
 }

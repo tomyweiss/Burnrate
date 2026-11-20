@@ -112,6 +112,56 @@ import Testing
     #expect(store.unpricedModels == ["zeta-unknown"])
     #expect(store.isSpikeActive)
     #expect(store.burnLevel == .critical)
+    #expect(abs((store.cycleSpendCents ?? -1) - 400) < 0.000_001)
+}
+
+@Test @MainActor func claudeCodeStoreCycleSpendKeepsUsageFromEarlierInTheBillingCycle() async throws {
+    let fixture = try ClaudeStoreFixture()
+    defer { fixture.cleanup() }
+    let settings = claudeStoreSettings(fixture.defaults)
+    let now = Date()
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = settings.resolvedTimeZone
+    let yesterday = try #require(calendar.date(byAdding: .day, value: -1, to: now))
+    settings.billingDayOfMonth = calendar.component(.day, from: yesterday)
+    let cycleStart = UsageTimeWindow(
+        preset: .thisBilling,
+        timeZone: settings.resolvedTimeZone,
+        billingDayOfMonth: settings.billingDayOfMonth
+    ).dateRange(now: now).start
+    let earlier = cycleStart.addingTimeInterval(60 * 60)
+    #expect(earlier < calendar.startOfDay(for: now))
+
+    let todayLine = try claudeStoreUsageLine(
+        id: "today-msg",
+        sessionId: "sess-today",
+        model: "claude-opus-5-5",
+        timestamp: claudeStoreTimestamp(now.addingTimeInterval(-60)),
+        input: 1_000_000,
+        output: 0
+    )
+    let earlierLine = try claudeStoreUsageLine(
+        id: "earlier-msg",
+        sessionId: "sess-earlier",
+        model: "claude-opus-5-5",
+        timestamp: claudeStoreTimestamp(earlier),
+        input: 1_000_000,
+        output: 0
+    )
+    try fixture.write("proj/sess-today.jsonl", todayLine + "\n", mtime: now)
+    try fixture.write("proj/sess-earlier.jsonl", earlierLine + "\n", mtime: earlier)
+
+    let store = ClaudeCodeStore(
+        settings: settings,
+        anomalyMonitor: nil,
+        projectsRoot: fixture.root,
+        cacheURL: fixture.cacheURL
+    )
+    await store.refresh()
+
+    #expect(store.snapshot.eventCount == 1)
+    #expect(abs(store.snapshot.windowCostCents - 400) < 0.000_001)
+    #expect(abs((store.cycleSpendCents ?? -1) - 800) < 0.000_001)
 }
 
 @Test @MainActor func disablingClaudeCodeClearsTheSnapshot() async throws {

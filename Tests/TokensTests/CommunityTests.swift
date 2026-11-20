@@ -246,6 +246,57 @@ import Testing
     #expect(capped[0].spendCents == 150)
 }
 
+@Test func payloadBuilderAddsCursorAndClaudeSpendForTheSameUser() {
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    let recent = now.timeIntervalSince1970 * 1000 - 60_000
+    let cursor = [
+        CommunityAnalyticsEvent(
+            timestampMs: recent,
+            model: "gpt-5",
+            costCents: 200,
+            billingKind: .usageBased
+        ),
+        CommunityAnalyticsEvent(
+            timestampMs: recent - 1_000,
+            model: "gpt-5",
+            costCents: 25,
+            billingKind: .included
+        ),
+    ]
+    let claude = [
+        CommunityAnalyticsEvent(
+            timestampMs: recent - 2_000,
+            model: "claude-sonnet",
+            costCents: 50,
+            billingKind: .unknown
+        ),
+    ]
+    let payload = CommunityPayloadBuilder.build(
+        participantId: "test-uuid",
+        membershipSecret: String(repeating: "s", count: 32),
+        nickname: "Ada",
+        events: cursor + claude,
+        now: now,
+        nicknameSource: "cursor",
+        clientConfig: CommunityClientConfig(
+            timelinePreset: "today",
+            refreshIntervalSeconds: 60,
+            anomalyThresholdDollars: 10,
+            anomalyWindowMinutes: 10,
+            hideAmountInMenuBar: false,
+            autoCheckForUpdates: true,
+            launchAtLogin: false,
+            hiddenTabs: [],
+            customTimezone: false,
+            billingDayOfMonth: 1
+        )
+    )
+
+    #expect(payload.spendCents == 275)
+    #expect(payload.models.first { $0.name == "gpt-5" }?.spendCents == 225)
+    #expect(payload.models.first { $0.name == "claude-sonnet" }?.spendCents == 50)
+}
+
 @Test func communitySkillCapFoldsOverflowIntoOther() {
     let skills = (0..<(CommunitySkillCap.maxSkills + 3)).map { index in
         (name: "skill-\(index)", invocationCount: 1, spendCents: CommunitySkillCap.maxSkills + 3 - index)
@@ -255,6 +306,17 @@ import Testing
     let other = capped.first { $0.name == CommunitySkillCap.otherBucketName }
     #expect(other?.invocationCount == 3)
     #expect(other?.spendCents == 6)
+}
+
+@Test func communitySkillCapMergeSumsTheSameSkillFromBothSources() {
+    let merged = CommunitySkillCap.merge([
+        [CommunitySkillSpend(name: "/Review", invocationCount: 1, spendCents: 10)],
+        [CommunitySkillSpend(name: "review", invocationCount: 2, spendCents: 5)],
+    ])
+    #expect(merged.count == 1)
+    #expect(merged[0].name == "review")
+    #expect(merged[0].invocationCount == 3)
+    #expect(merged[0].spendCents == 15)
 }
 
 @Test func payloadBuilderOmitsSkillsWithoutDailySkillsCallback() {
