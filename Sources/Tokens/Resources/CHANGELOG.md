@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.60.15
+
+- Burnrate now tells you when an update is out. The daily check posts a notification and shows a banner at the top of the panel. Before, it could find an update and say nothing until you checked by hand in Settings.
+- If Burnrate already downloaded an update in the background, the banner offers Restart to Update instead of waiting for you to quit the app.
+- The panel is simpler and shorter. Cursor and Claude Code are two cards at the top. Each card shows that source's spend for the window, the burn pill, and a small chart. Click a card to see that source.
+- Included usage and plan limits are rows instead of rings: a name, a bar, the percent used, and the reset time when there is one. This cycle is the last row.
+- The Cursor card always shows window spend. Before, the big figure followed the menu bar figures.
+- Keep awake is a labelled button in the top row, next to Community. Idle, the cup is violet. It turns green and shows the time left while the Mac is held awake. Settings, Stats, Refresh, and Quit are in the ··· menu at the top right. The footer is gone, so the list has more room. The stat tiles and the token line moved to Stats.
+- The first time you open the panel, a short note explains Keep awake. It goes away when you dismiss it or start a trip, and it waits if the Claude Code hint is showing.
+- Sort and search are on the tab row.
+- Settings opens as a short list that shows each current value. Sources, Menu bar, Spike alert, Panel, Data, and Updates each open their own page. Launch at login and Blur session & prompt titles are switches on the list.
+
 ## 0.60.14
 
 - Community is one leaderboard, available from both Cursor and Claude Code. Cursor spend and estimated Claude Code spend for the same person are added together. Session transcripts and prompts stay on this Mac.

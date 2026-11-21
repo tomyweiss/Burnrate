@@ -118,19 +118,28 @@ import Testing
     )
 }
 
-@Test func sourceSwitcherTitlesUseEachSourceStyle() {
+@Test func sourceCardFiguresUseEachSourceStyle() {
     #expect(
-        PanelSourceResolver.segmentTitle(source: .cursor, windowDollars: 12.4, isPlaceholder: false)
-            == "Cursor  $12.40"
+        PanelSourceResolver.windowFigure(source: .cursor, windowDollars: 12.4, isPlaceholder: false)
+            == "$12.40"
     )
     #expect(
-        PanelSourceResolver.segmentTitle(source: .claudeCode, windowDollars: 31.2, isPlaceholder: false)
-            == "Claude Code  ~$31.20"
+        PanelSourceResolver.windowFigure(source: .claudeCode, windowDollars: 31.2, isPlaceholder: false)
+            == "~$31.20"
     )
     #expect(
-        PanelSourceResolver.segmentTitle(source: .claudeCode, windowDollars: 0, isPlaceholder: true)
-            == "Claude Code  ~$—.——"
+        PanelSourceResolver.windowFigure(source: .cursor, windowDollars: 0, isPlaceholder: true)
+            == "$—.——"
     )
+    #expect(
+        PanelSourceResolver.windowFigure(source: .claudeCode, windowDollars: 0, isPlaceholder: true)
+            == "~$—.——"
+    )
+}
+
+@Test func sourceCardTitlesMarkClaudeCodeAsEstimated() {
+    #expect(PanelSourceResolver.cardTitle(for: .cursor) == "Cursor")
+    #expect(PanelSourceResolver.cardTitle(for: .claudeCode) == "Claude Code · estimated")
 }
 
 @Test func indexingCaptionMatchesTheStatusSlotCopy() {

@@ -27,7 +27,10 @@ struct RootPanel: View {
     @Bindable var updates: UpdateManager
     @Bindable var community: CommunityStore
     var interactionTracker: InteractionTracker
+    var awake: AwakeSessionController
     @State private var route: PanelRoute = .usage
+    /// The open Settings page. Nil is the Settings list.
+    @State private var settingsPage: SettingsPage?
     @State private var changeLogHighlightVersion: String?
     @State private var changeLogReleaseNotes: String?
     @Namespace private var glassNamespace
@@ -46,11 +49,11 @@ struct RootPanel: View {
         return source?.costStyle ?? .billed
     }
 
-    private let panelWidth: CGFloat = 540
+    private let panelWidth: CGFloat = 500
 
-    /// List tabs are 820pt. Bench keeps the taller scatter.
+    /// List tabs are 620pt. Bench keeps a taller scatter.
     private var panelHeight: CGFloat {
-        route == .usage && panelTabRaw == UsageTab.bench.rawValue ? 860 : 820
+        route == .usage && panelTabRaw == UsageTab.bench.rawValue ? 660 : 620
     }
 
     var body: some View {
@@ -60,7 +63,7 @@ struct RootPanel: View {
                 UsagePanel(
                     store: store,
                     settings: settings,
-                    glassNamespace: glassNamespace,
+                    updates: updates,
                     onOpenSettings: { route = .settings },
                     onOpenCommunity: { route = .community },
                     onOpenChangeLog: { version, notes in
@@ -70,13 +73,15 @@ struct RootPanel: View {
                     },
                     onUsageTabChange: { tab in
                         interactionTracker.recordTabChange(tab.rawValue)
-                    }
+                    },
+                    awake: awake
                 )
             case .settings:
                 SettingsPanel(
                     settings: settings,
                     updates: updates,
                     store: store,
+                    page: $settingsPage,
                     onBack: { route = .usage },
                     onOpenChangeLog: {
                         changeLogHighlightVersion = nil
@@ -119,10 +124,14 @@ struct RootPanel: View {
         .onDisappear {
             MenuBarPanelKeeper.panelDidHide()
             route = .usage
+            settingsPage = nil
         }
         .onChange(of: route) { oldRoute, newRoute in
             MenuBarPanelKeeper.keepOpen()
             guard oldRoute != newRoute else { return }
+            if newRoute == .usage {
+                settingsPage = nil
+            }
             interactionTracker.recordTabChange(newRoute.interactionKey)
         }
         .onChange(of: settings.billingDayOfMonth) { _, _ in

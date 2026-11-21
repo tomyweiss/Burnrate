@@ -20,19 +20,19 @@ No Dock icon. Cursor auth comes from the local IDE login. Claude Code spend is r
 - Warning triangle when any enabled source has an error, while keeping the last known amount
 - Polls on a timer (default 60s; 15s–10m presets). Plan limits are not requested more than once a minute
 
-### Usage panel (540×820)
+### Usage panel (500×620)
 
-- **Source switcher** — Cursor | Claude Code, only when both are enabled and detected. Each segment shows that source's window figure. Selection is remembered. Claude-only (no Cursor login) opens on Claude Code with no switcher.
-- **Hero** matches the status-bar figures for Cursor. A percent-only choice keeps the timeline dollar total smaller underneath. Claude Code uses `~` and the caption "Estimated at API list prices · not your bill".
-- **Plan limits** — off by default. When on, 5-hour, weekly, and per-model weekly gauges sit above the token line, plus extra usage when that pool is on. The token line is always shown. A model with no price adds "No price for <model>. Tokens shown, cost excluded".
+- **Top row** — timeline picker (Today, Last 24h, Last 7d, This billing, Custom; shared by both sources), the **Keep awake** button, the **Community** button, and the **···** menu.
+- **Source cards** — one card per enabled and detected source. Each shows the window spend, a burn pill for rolling-window spend (tinted by severity), and a small sparkline of the window. Clicking a card selects that source; the selection is remembered. With one source the card is full width and not a button. The Cursor card is always window spend. The Claude Code card is titled "Claude Code · estimated" and its amounts use `~`.
+- **Bucket rows** — name, bar, percent used, and reset time when known. Cursor: Cursor models, Other models (when the period has that bucket), Grok Bot (when present). Claude Code: 5h limit, Weekly limit, Opus weekly, Sonnet weekly, Extra usage, for the windows Anthropic reports.
+- **Plan limits** — off by default. While off, the Claude Code rows are replaced by a **Show plan limits** button. A sign-in problem shows its message in that row.
+- **This cycle** — the last row. Cursor splits Included and On-demand. Claude Code is the list-price estimate, with Extra when that pool is on.
+- Captions under the rows only when needed: a model with no price ("No price for <model>. Tokens shown, cost excluded"), indexing, offline or stale data, and why keep-awake stopped.
 - **One-time hint** — "Burnrate now tracks Claude Code", with Show in menu bar and Dismiss, the first time Claude Code is detected while Cursor is signed in and Claude spend is off.
-- **Timeline picker** — Today, Last 24h, Last 7d, This billing. Shared by both sources.
-- **Burn pill** (glass) for rolling-window spend, tinted by severity. Claude Code amounts use `~`.
-- **Sparkline** for the active window (hourly or daily buckets)
-- Caption only while indexing, or when data is offline or stale
-- Tabs: **Models** | **Sessions** | **Skills** | **Feed** | **Bench** (Bench is 540×860)
-- **Community** opens from a trophy chip in the header (next to the timeline). Cursor scope only.
-- Footer: Settings (glass), Refresh, overflow menu (Dashboard / Quit)
+- Tabs: **Models** | **Sessions** | **Skills** | **Feed** | **Bench** (Bench is 500×660). Sort and search are on the tab row.
+- **Community** opens from the trophy button in the top row. One button for both sources.
+- **Keep awake** — a labelled cup button in the top row. Idle, it is violet, reads "Keep awake", and offers the durations. While a trip runs it turns green, reads "Awake · 28m", and offers Stop. It reads "Starting…" while macOS asks for the password. When the row is too narrow it drops the title and keeps the cup and the time left. The first time the panel opens, a note explains the button until you dismiss it or start a trip. That note waits while the Claude Code hint is showing.
+- **··· menu** — Settings, Stats (the stat tiles and the token line), Refresh (⌘R), Quit (⌘Q). There is no footer.
 
 ### Models tab
 
@@ -63,14 +63,13 @@ No Dock icon. Cursor auth comes from the local IDE login. Claude Code spend is r
 
 ### Settings
 
+- Opens as a list. Each row shows its current value and opens a page. **Launch at login** and **Blur session & prompt titles** are switches on the list
 - **Sources** — enable Cursor and Claude Code (on by default). Labels show signed-in / session count. **Show plan limits** is off by default
-- Timeline window picker (Today / 24h / 7d / This billing)
-- Billing day stepper (1–31, when This billing is selected)
-- Timezone picker (System or searchable IANA list)
-- Poll interval picker
-- Native steppers for spike rules
-- Launch at login
-- Status bar grouped by source. Cursor: window spend, Cursor models, Other models, Grok Bot. Claude Code: spend (estimated), and, only while plan limits are on, session limit (5h) and weekly limit
+- **Menu bar** — a preview, then the figures grouped by source. Cursor: window spend, Cursor models, Other models, Grok Bot. Claude Code: spend (estimated), and, only while plan limits are on, session limit (5h) and weekly limit
+- **Spike alert** — native steppers for threshold, window, and cooldown, plus Test notification
+- **Panel** — which tabs are visible, and the session display options
+- **Data** — poll interval, timezone (System or searchable IANA list), billing day (1–31, when This billing is selected or Claude Code is enabled), and the custom date range when that window is selected
+- **Updates** — auto-check, Check for Updates, and the change log
 - About + dashboard link
 
 ### Auth & data

@@ -37,269 +37,26 @@ enum CostMetric: String, CaseIterable, Identifiable {
         case .median: "Med $"
         }
     }
-}
 
-/// Ring used by the Cursor included pools and the Claude Code plan limits.
-struct PercentGauge: View {
-    let title: String
-    let percent: Double?
-    var detail: String? = nil
-    var diameter: CGFloat
-
-    private static var ringWidth: CGFloat { 9 }
-
-    /// Header content width: the 540pt panel minus 16pt padding on each side.
-    static let headerContentWidth: CGFloat = 508
-
-    /// Largest ring that fits `count` rings in one header row with at least
-    /// `spacing` between rings and at both edges, between 72 and 120pt.
-    /// `reserving` is the width of one more item sharing the row.
-    static func fittedDiameter(count: Int, spacing: CGFloat, reserving: CGFloat = 0) -> CGFloat {
-        guard count > 0 else { return 120 }
-        let items = count + (reserving > 0 ? 1 : 0)
-        let fit = (headerContentWidth - reserving - spacing * CGFloat(items + 1)) / CGFloat(count)
-        return min(120, max(72, fit.rounded(.down)))
-    }
-
-    var body: some View {
-        let shown = percent.map(IncludedPools.displayPercent)
-        let fill = shown.map { min(CGFloat($0), 100) / 100 } ?? 0
-        let tint = Self.tint(percent)
-
-        VStack(spacing: 6) {
-            ZStack {
-                Circle()
-                    .stroke(Color.secondary.opacity(0.25), lineWidth: Self.ringWidth)
-                Circle()
-                    .trim(from: 0, to: fill)
-                    .stroke(tint, style: StrokeStyle(lineWidth: Self.ringWidth, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                VStack(spacing: 0) {
-                    Text(shown.map { "\($0)%" } ?? "—")
-                        .font(.title3.weight(.semibold).monospacedDigit())
-                        .minimumScaleFactor(0.6)
-                        .lineLimit(1)
-                    if shown != nil {
-                        Text("used")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.horizontal, diameter < 80 ? 4 : 12)
-            }
-            .frame(width: diameter, height: diameter)
-
-            VStack(spacing: 1) {
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                if let detail {
-                    Text(detail)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                }
-            }
-            .frame(width: diameter)
+    /// Name in the sort menu beside the tabs.
+    var menuTitle: String {
+        switch self {
+        case .total: "Total"
+        case .average: "Average"
+        case .median: "Median"
         }
-        .frame(width: diameter)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityText(shown: shown))
-    }
-
-    private func accessibilityText(shown: Int?) -> String {
-        let base = shown.map { "\(title), \($0) percent used" } ?? "\(title), not loaded"
-        guard let detail else { return base }
-        return "\(base), \(detail)"
-    }
-
-    /// Orange once the pool is exhausted, because usage past that point
-    /// flows into on-demand spend (also orange).
-    private static func tint(_ percent: Double?) -> Color {
-        guard let percent else { return Color.secondary.opacity(0.45) }
-        return percent >= 100 ? .orange : .accentColor
     }
 }
 
-/// Allowance rings, then this cycle's included vs on-demand bar on its own row.
-/// The sparkline is drawn above the block. Blue is included; orange is on-demand.
-private struct IncludedPoolsGauges<Timeline: View>: View {
-    /// Nil until Cursor reports the pools. The rings stay on screen either way.
-    let pools: IncludedPools?
-    /// Team spend when calibrated. Matches the cycle caption.
-    let spendSummary: SpendSummary?
-    /// usage-summary totals, used until team spend is available.
-    let cycleSpend: CycleSpend?
-    /// Weekly Grok Bot allowance. Hidden when this account has none.
-    let grokBot: GrokBotUsage?
-    /// Rendered under the spend legend; should be vertically flexible.
-    @ViewBuilder let timeline: () -> Timeline
-
-    /// The Other Models ring stays up while pools are still loading. Once a
-    /// period reports no separate bucket, the ring comes down.
-    private var showsOtherModelsRing: Bool {
-        pools?.hasOtherModelsBucket ?? true
-    }
-
-    private var ringCount: Int {
-        var count = 1
-        if showsOtherModelsRing { count += 1 }
-        if grokBot != nil { count += 1 }
-        return count
-    }
-
-    private var ringSpacing: CGFloat { 24 }
-    private var ringSize: CGFloat { PercentGauge.fittedDiameter(count: ringCount, spacing: ringSpacing) }
-    private static var includedTint: Color { .accentColor }
-    private static var onDemandTint: Color { .orange }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            allowanceCluster
-            spendCluster
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .fixedSize(horizontal: false, vertical: true)
-    }
-
-    // MARK: Allowance
-
-    private var allowanceCluster: some View {
-        GaugeWrapLayout(spacing: ringSpacing) {
-            percentGauge("Cursor models", percent: pools?.cursorModelsPercent)
-                .help("Share of the Cursor models pool used this billing cycle")
-            if showsOtherModelsRing {
-                percentGauge("Other models", percent: pools?.otherModelsPercent)
-                    .help("Share of the Other models pool used this billing cycle")
-            }
-            if let grokBot {
-                percentGauge(
-                    "Grok Bot",
-                    percent: grokBot.percentUsed,
-                    detail: grokBot.resetCaption().map { "resets \($0)" }
-                )
-                .help("Share of the Grok Bot weekly included pool used")
-            }
-        }
-    }
-
-    private func percentGauge(_ title: String, percent: Double?, detail: String? = nil) -> some View {
-        PercentGauge(title: title, percent: percent, detail: detail, diameter: ringSize)
-    }
-
-    // MARK: Spend
-
-    private var split: SpendSplit? {
-        if let spendSummary {
-            return SpendSplit(includedCents: spendSummary.includedCents, onDemandCents: spendSummary.onDemandCents)
-        }
-        if let cycleSpend {
-            return SpendSplit(includedCents: cycleSpend.includedCents, onDemandCents: cycleSpend.onDemandCents)
-        }
-        return nil
-    }
-
-    private var spendCluster: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline) {
-                    clusterHeader("Spend this cycle")
-                    Spacer(minLength: 8)
-                    Text(split.map { MoneyFormat.string($0.totalCents / 100, style: costStyle) } ?? "—")
-                        .font(.subheadline.weight(.semibold).monospacedDigit())
-                        .lineLimit(1)
-                }
-
-                spendBar
-
-                HStack(spacing: 14) {
-                    legendItem("Included", cents: split?.includedCents, tint: Self.includedTint)
-                    legendItem("On-demand", cents: split?.onDemandCents, tint: Self.onDemandTint)
-                }
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(spendAccessibility)
-            .help("How this cycle's spend splits between the included allowance and on-demand")
-
-            timeline()
-        }
-    }
-
-    private var spendBar: some View {
-        GeometryReader { proxy in
-            let width = proxy.size.width
-            let included = width * (split?.includedFraction ?? 0)
-            let onDemand = width * (split?.onDemandFraction ?? 0)
-
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(Color.secondary.opacity(0.25))
-                HStack(spacing: included > 0 && onDemand > 0 ? 2 : 0) {
-                    if included > 0 {
-                        Rectangle().fill(Self.includedTint).frame(width: included)
-                    }
-                    if onDemand > 0 {
-                        Rectangle().fill(Self.onDemandTint).frame(width: onDemand)
-                    }
-                }
-                .clipShape(Capsule())
-            }
-        }
-        .frame(height: 10)
-    }
-
-    private func legendItem(_ title: String, cents: Double?, tint: Color) -> some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(cents == nil ? Color.secondary.opacity(0.45) : tint)
-                .frame(width: 7, height: 7)
-            Text(title)
-                .foregroundStyle(.secondary)
-            Text(cents.map { MoneyFormat.string($0 / 100, style: costStyle) } ?? "—")
-                .fontWeight(.medium)
-                .monospacedDigit()
-        }
-        .font(.caption)
-        .lineLimit(1)
-    }
-
-    private var spendAccessibility: String {
-        guard let split else { return "Spend this cycle, not loaded" }
-        let total = MoneyFormat.string(split.totalCents / 100, style: costStyle)
-        let included = MoneyFormat.string(split.includedCents / 100, style: costStyle)
-        let onDemand = MoneyFormat.string(split.onDemandCents / 100, style: costStyle)
-        return "Spend this cycle \(total): \(included) included, \(onDemand) on-demand"
-    }
-
-    // MARK: Shared
-
-    @Environment(\.costStyle) private var costStyle
-
-    private func clusterHeader(_ title: String) -> some View {
-        Text(title)
-            .font(.subheadline.weight(.medium))
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-    }
-}
-
-/// Reserves the hint and the footer at their ideal heights, then keeps 220pt for the
-/// tabs. A shortfall first drops stats-tile padding; past that the header scrolls
-/// instead of cropping. Subviews are hint, header measurer, header, tabs, footer.
+/// Reserves the hint at its ideal height, then keeps 220pt for the tabs. When the
+/// header cannot fit above that floor it scrolls instead of cropping.
+/// Subviews are hint, header measurer, header, tabs.
 struct UsagePanelColumn: Layout {
     var tabMinimum: CGFloat
 
-    /// Two rows × 8pt of vertical tile padding. The grid can shed all of it before scrolling.
-    static let statsPaddingRelief: CGFloat = 16
-
-    /// True when the header still overflows the space between the hint and the footer
-    /// after the stats grid has dropped its padding and the tabs have kept `tabFloor`.
+    /// True when the header overflows the space under the hint once the tabs have kept `tabFloor`.
     static func headerNeedsScroll(headerIdeal: CGFloat, available: CGFloat, tabFloor: CGFloat) -> Bool {
-        headerIdeal + tabFloor > available + statsPaddingRelief
+        headerIdeal + tabFloor > available
     }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
@@ -312,13 +69,12 @@ struct UsagePanelColumn: Layout {
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        guard subviews.count == 5 else { return }
+        guard subviews.count == 4 else { return }
         let width = bounds.width
         let unconstrained = ProposedViewSize(width: width, height: nil)
         let hint = subviews[0].sizeThatFits(unconstrained)
         let headerIdeal = subviews[1].sizeThatFits(unconstrained).height
-        let footer = subviews[4].sizeThatFits(unconstrained)
-        let remaining = max(bounds.height - hint.height - footer.height, 0)
+        let remaining = max(bounds.height - hint.height, 0)
 
         let headerHeight: CGFloat
         let tabHeight: CGFloat
@@ -353,12 +109,6 @@ struct UsagePanelColumn: Layout {
             anchor: .topLeading,
             proposal: ProposedViewSize(width: width, height: tabHeight)
         )
-        y += tabHeight
-        subviews[4].place(
-            at: CGPoint(x: bounds.minX, y: y),
-            anchor: .topLeading,
-            proposal: ProposedViewSize(width: width, height: footer.height)
-        )
     }
 }
 
@@ -370,7 +120,7 @@ private struct HeaderIdealHeightKey: PreferenceKey {
 }
 
 /// Shows the header at its natural height when it fits. Scrolls it inside the
-/// slot the column reserved when it does not, after stats padding has been shed.
+/// slot the column reserved when it does not.
 private struct HeaderScrollSlot<Content: View>: View {
     var idealHeight: CGFloat
     var tabMinimum: CGFloat
@@ -400,11 +150,12 @@ private struct HeaderScrollSlot<Content: View>: View {
 struct UsagePanel: View {
     @Bindable var store: UsageStore
     @Bindable var settings: SettingsStore
-    var glassNamespace: Namespace.ID
+    var updates: UpdateManager
     var onOpenSettings: () -> Void
     var onOpenCommunity: () -> Void
     var onOpenChangeLog: (_ highlightVersion: String?, _ releaseNotes: String?) -> Void
     var onUsageTabChange: (UsageTab) -> Void = { _ in }
+    var awake: AwakeSessionController
 
     @AppStorage("panelTab") private var panelTabRaw = UsageTab.models.rawValue
     @State private var expandedModels: Set<String> = []
@@ -417,6 +168,7 @@ struct UsagePanel: View {
     @State private var sectionSearchText = ""
     @State private var isSectionSearchPresented = false
     @State private var showCustomRangePicker = false
+    @State private var showsStats = false
     @State private var headerIdealHeight: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.costStyle) private var costStyle
@@ -501,6 +253,13 @@ struct UsagePanel: View {
             // Each slot is a VStack, not a Group: an empty Group adds no subview,
             // and the column places subviews by position.
             VStack(spacing: 0) {
+                if let pendingUpdate = updates.pendingUpdate {
+                    UpdateBanner(update: pendingUpdate) {
+                        updates.openPendingUpdate()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                }
                 if showsClaudeCodeHint {
                     ClaudeCodeHint(
                         onShowInMenuBar: {
@@ -512,6 +271,14 @@ struct UsagePanel: View {
                             MenuBarPanelKeeper.keepOpen()
                         }
                     )
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                }
+                if showsAwakeIntro {
+                    AwakeIntroCard {
+                        settings.dismissAwakeIntro()
+                        MenuBarPanelKeeper.keepOpen()
+                    }
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
                 }
@@ -546,13 +313,8 @@ struct UsagePanel: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .layoutPriority(1)
-
-            footer
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .fixedSize(horizontal: false, vertical: true)
-                .layoutPriority(2)
         }
+        .background { keyboardShortcuts }
         .onDisappear {
             sessionPath = []
             selectedSkill = nil
@@ -573,8 +335,8 @@ struct UsagePanel: View {
     private var paddedHeader: some View {
         header
             .padding(.horizontal, 16)
-            .padding(.top, 14)
-            .padding(.bottom, 10)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
     }
 
     private func openChangeLog(version: String? = nil, releaseNotes: String? = nil) {
@@ -595,63 +357,56 @@ struct UsagePanel: View {
         )
     }
 
-    private var headerFigures: StatusBarFigures.Header {
-        StatusBarFigures.header(store.statusBarInput)
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if visibleSources.count == 2 {
-                SourceSwitcher(
-                    selection: panelSourceSelection,
-                    cursorTitle: segmentTitle(for: .cursor),
-                    claudeTitle: segmentTitle(for: .claudeCode)
-                )
-                .onChange(of: panelSourceRaw) { _, _ in
-                    MenuBarPanelKeeper.keepOpen()
-                }
-                .fixedSize(horizontal: false, vertical: true)
-            }
-
-            switch displayedSource {
-            case .claudeCode:
-                claudeHeader
-            case .cursor:
-                cursorHeader
-            case nil:
-                EmptyView()
-            }
-        }
-    }
-
-    private func segmentTitle(for source: UsageSource) -> String {
-        let snapshot = source == .claudeCode ? claudeCode.snapshot : store.snapshot
-        let isPlaceholder: Bool
-        if source == .claudeCode {
-            isPlaceholder = !claudeCode.hasCompletedFetch && claudeCode.lastError == nil
-        } else {
-            isPlaceholder = !store.hasCompletedFetch && store.lastError == nil
-        }
-        return PanelSourceResolver.segmentTitle(
-            source: source,
-            windowDollars: snapshot.windowDollars,
-            isPlaceholder: isPlaceholder
+    private var showsAwakeIntro: Bool {
+        AwakeIntroCard.shouldShow(
+            dismissed: settings.awakeIntroDismissed,
+            claudeCodeHintShowing: showsClaudeCodeHint
         )
     }
 
-    @ViewBuilder
-    private var windowChrome: some View {
-        if panelSnapshot.window.preset == .thisBilling {
-            Text("Since \(panelSnapshot.window.sparklineStartLabel())")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        } else if settings.usageTimelinePreset == .custom {
-            customRangeButton
+    // MARK: - Header
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            topBar
+
+            if let displayedSource {
+                SourceSwitcher(selection: panelSourceSelection, cards: sourceCards(showing: displayedSource))
+                    .onChange(of: panelSourceRaw) { _, _ in
+                        MenuBarPanelKeeper.keepOpen()
+                    }
+
+                VStack(alignment: .leading, spacing: BucketLayout.rowSpacing) {
+                    switch displayedSource {
+                    case .claudeCode: claudeBuckets
+                    case .cursor: cursorBuckets
+                    }
+                }
+
+                headerNotes
+            }
         }
     }
 
-    private func sourceTrailingControls(showsCommunity: Bool) -> some View {
+    /// Timeline on the left. Keep awake, Community (shared by both sources), and the
+    /// actions menu on the right. Keep awake drops its title when the row is too narrow.
+    private var topBar: some View {
+        ViewThatFits(in: .horizontal) {
+            topBarRow(awakeShowsTitle: true)
+            topBarRow(awakeShowsTitle: false)
+        }
+    }
+
+    private func topBarRow(awakeShowsTitle: Bool) -> some View {
         HStack(alignment: .center, spacing: 8) {
+            timelinePicker
+            windowChrome
+
+            Spacer(minLength: 4)
+
+            AwakeButton(awake: awake, showsTitle: awakeShowsTitle) {
+                settings.dismissAwakeIntro()
+            }
             if AppIdentity.isDevBuild {
                 Text("DEV")
                     .font(.caption2.weight(.bold))
@@ -661,10 +416,20 @@ struct UsagePanel: View {
                     .background(Capsule().fill(Color.orange))
                     .accessibilityLabel("Development build")
             }
-            if showsCommunity {
-                communityButton
-            }
-            timelinePicker
+            communityButton
+            moreMenu
+        }
+    }
+
+    @ViewBuilder
+    private var windowChrome: some View {
+        if panelSnapshot.window.preset == .thisBilling {
+            Text("Since \(panelSnapshot.window.sparklineStartLabel())")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        } else if settings.usageTimelinePreset == .custom {
+            customRangeButton
         }
     }
 
@@ -673,176 +438,281 @@ struct UsagePanel: View {
         await claudeCode.refresh()
     }
 
-    private var claudeHeader: some View {
-        let recent = claudeCode.snapshot.recentDollars
-        let indexing = claudeCode.indexingProgress
-        let stale = PanelSourceResolver.isStale(
-            hasCompletedFetch: claudeCode.hasCompletedFetch,
-            fetchedAt: claudeCode.snapshot.fetchedAt,
-            refreshIntervalSeconds: settings.refreshIntervalSeconds
+    // MARK: Source cards
+
+    /// Both cards when both sources are visible. Otherwise only the source on screen,
+    /// which can be Cursor showing a sign-in error.
+    private func sourceCards(showing displayed: UsageSource) -> [SourceCard] {
+        let sources = visibleSources.count == 2 ? visibleSources : [displayed]
+        return sources.map { source in
+            switch source {
+            case .cursor: cursorCard
+            case .claudeCode: claudeCard
+            }
+        }
+    }
+
+    private var cursorCard: SourceCard {
+        let recent = store.snapshot.recentDollars
+        return SourceCard(
+            source: .cursor,
+            figure: PanelSourceResolver.windowFigure(
+                source: .cursor,
+                windowDollars: store.snapshot.windowDollars,
+                isPlaceholder: !store.hasCompletedFetch && store.lastError == nil
+            ),
+            isLoading: store.isLoading,
+            burnText: recent > 0
+                ? "▲ \(MoneyFormat.dollars(recent)) · \(settings.anomalyWindowMinutes)m"
+                : nil,
+            burnTint: store.burnLevel.swiftUIColor,
+            burnHelp: "Spend in the last \(settings.anomalyWindowMinutes) minutes (your spike window)",
+            sparklineCostCents: store.snapshot.sparklineCostCents,
+            window: store.snapshot.window
         )
-        let hero = !claudeCode.hasCompletedFetch && claudeCode.lastError == nil
-            ? PanelSourceResolver.placeholderEstimated
-            : MoneyFormat.estimated(claudeCode.snapshot.windowDollars)
-        return ClaudeCodeHeader(
-            hero: hero,
+    }
+
+    private var claudeCard: SourceCard {
+        let recent = claudeCode.snapshot.recentDollars
+        return SourceCard(
+            source: .claudeCode,
+            figure: PanelSourceResolver.windowFigure(
+                source: .claudeCode,
+                windowDollars: claudeCode.snapshot.windowDollars,
+                isPlaceholder: !claudeCode.hasCompletedFetch && claudeCode.lastError == nil
+            ),
             isLoading: claudeCode.isLoading,
             burnText: recent > 0
                 ? "▲ \(MoneyFormat.estimated(recent)) · \(settings.anomalyWindowMinutes)m"
                 : nil,
             burnTint: claudeCode.burnLevel.swiftUIColor,
+            burnHelp: "Estimated spend in the last \(settings.anomalyWindowMinutes) minutes (your spike window)",
             sparklineCostCents: claudeCode.snapshot.sparklineCostCents,
-            window: claudeCode.snapshot.window,
-            tokenLine: ClaudeTokenLine.string(snapshot: claudeCode.snapshot),
-            showsPlanLimits: settings.claudeLimitsEnabled,
+            window: claudeCode.snapshot.window
+        )
+    }
+
+    // MARK: Buckets
+
+    private var cursorMeters: [BucketMeter] {
+        CursorBucketMeters.make(pools: store.includedPools, grokBot: store.grokBotUsage)
+    }
+
+    /// Sign-in problems replace the limit rows with a note. A generic limits
+    /// failure keeps the last rows and shows no note.
+    private var claudeLimitsBlocked: Bool {
+        guard let message = claudeCode.limitsError else { return false }
+        return message != ClaudeLimitsClient.unavailable
+    }
+
+    private var claudeMeters: [BucketMeter] {
+        let meters = ClaudeLimitGauges.make(
             fiveHour: claudeCode.limits?.fiveHour,
             weekly: claudeCode.limits?.weekly,
             weeklyOpus: claudeCode.limits?.weeklyOpus,
             weeklySonnet: claudeCode.limits?.weeklySonnet,
-            extraUsage: claudeCode.limits?.extraUsage,
-            cycleSpendCents: claudeCode.hasCompletedFetch ? claudeCode.cycleSpendCents : nil,
-            limitsMessage: claudeCode.limitsError,
-            onEnablePlanLimits: {
-                settings.claudeLimitsEnabled = true
-                Task { await claudeCode.refresh() }
-                MenuBarPanelKeeper.keepOpen()
-            },
-            stats: PanelStats.make(snapshot: claudeCode.snapshot, style: costStyle),
-            unpricedCaption: ClaudeTokenLine.unpricedCaption(claudeCode.unpricedModels),
-            statusCaption: PanelSourceResolver.statusCaption(
-                indexing: indexing,
-                fetchedAt: claudeCode.snapshot.fetchedAt,
-                isShowingCachedData: false,
-                isStale: stale
-            ),
-            statusIsWarning: stale && indexing == nil,
-            windowChrome: { windowChrome },
-            trailing: { sourceTrailingControls(showsCommunity: true) }
+            extraUsage: claudeCode.limits?.extraUsage
         )
+        return meters.isEmpty ? ClaudeLimitGauges.placeholders : meters
     }
 
-    private var cursorHeader: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .center, spacing: 8) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(alignment: .center, spacing: 8) {
-                        Text(headerFigures.hero)
-                            .font(.system(size: 34, weight: .semibold, design: .rounded))
-                            .monospacedDigit()
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.65)
-                            .contentTransition(reduceMotion ? .identity : .numericText())
-                            .animation(reduceMotion ? nil : .snappy, value: headerFigures.hero)
-                            .accessibilityElement(children: .ignore)
-                            .accessibilityLabel(headerFigures.accessibilityLabel)
+    /// Rows Claude Code puts above its cycle row: one note, or its limits.
+    private var claudeMeterRowCount: Int {
+        settings.claudeLimitsEnabled && !claudeLimitsBlocked ? claudeMeters.count : 1
+    }
 
-                        Color.clear
-                            .frame(width: 16, height: 16)
-                            .overlay {
-                                if store.isLoading {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                }
-                            }
-                            .accessibilityHidden(!store.isLoading)
+    /// With both sources visible, each reserves the taller one's rows, so the
+    /// cycle row and the tabs stay put when switching between them.
+    private var reservedMetersHeight: CGFloat {
+        guard visibleSources.count == 2 else { return 0 }
+        return BucketLayout.metersHeight(rows: max(cursorMeters.count, claudeMeterRowCount))
+    }
 
-                        if !headerFigures.showsTimelineSpendBelow, store.snapshot.recentDollars > 0 {
-                            burnPill
-                        }
+    private var cursorSplit: SpendSplit? {
+        if let summary = store.spendSummary {
+            return SpendSplit(includedCents: summary.includedCents, onDemandCents: summary.onDemandCents)
+        }
+        if let cycle = store.cycleSpend {
+            return SpendSplit(includedCents: cycle.includedCents, onDemandCents: cycle.onDemandCents)
+        }
+        return nil
+    }
 
-                        if !headerFigures.companions.isEmpty {
-                            Text(headerFigures.companions.joined(separator: " · "))
-                                .font(.title3.weight(.semibold))
-                                .monospacedDigit()
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.65)
-                                .accessibilityHidden(true)
-                        }
-                    }
+    @ViewBuilder
+    private var cursorBuckets: some View {
+        let split = cursorSplit
 
-                    if let caption = headerFigures.caption {
-                        Text(caption)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                            .truncationMode(.tail)
-                            .help(caption)
-                    }
-
-                    if headerFigures.showsTimelineSpendBelow {
-                        HStack(alignment: .center, spacing: 8) {
-                            Text(headerFigures.timelineSpend)
-                                .font(.title3.weight(.semibold))
-                                .monospacedDigit()
-                                .lineLimit(1)
-                                .accessibilityLabel("Window spend \(headerFigures.timelineSpend)")
-                            if store.snapshot.recentDollars > 0 {
-                                burnPill
-                            }
-                        }
-                    }
-                }
-                .layoutPriority(1)
-
-                Spacer(minLength: 4)
-
-                HStack(alignment: .center, spacing: 8) {
-                    if AppIdentity.isDevBuild {
-                        Text("DEV")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(Color.orange))
-                            .accessibilityLabel("Development build")
-                    }
-
-                    communityButton
-
-                    timelinePicker
-                }
-                .layoutPriority(0)
+        VStack(alignment: .leading, spacing: BucketLayout.rowSpacing) {
+            ForEach(cursorMeters, id: \.title) { meter in
+                BucketMeterRow(meter: meter)
             }
-            .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(minHeight: reservedMetersHeight, alignment: .top)
 
-            if store.snapshot.window.preset == .thisBilling {
-                Text("Since \(store.snapshot.window.sparklineStartLabel())")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else if settings.usageTimelinePreset == .custom {
-                customRangeButton
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            SparklineView(
-                sparklineCostCents: store.snapshot.sparklineCostCents,
-                window: store.snapshot.window,
-                now: Date()
+        CycleSpendRow(
+            total: split.map { MoneyFormat.dollars($0.totalCents / 100) },
+            segments: [
+                SpendBar.Segment(fraction: split?.includedFraction ?? 0, tint: .accentColor),
+                SpendBar.Segment(fraction: split?.onDemandFraction ?? 0, tint: .orange)
+            ],
+            accessibilityLabel: cursorCycleAccessibility(split),
+            help: "How this cycle's spend splits between the included allowance and on-demand"
+        ) {
+            SpendLegendItem(
+                title: "Included",
+                value: split.map { MoneyFormat.dollars($0.includedCents / 100) } ?? "—",
+                tint: .accentColor,
+                loaded: split != nil
             )
-            .fixedSize(horizontal: false, vertical: true)
+            SpendLegendItem(
+                title: "On-demand",
+                value: split.map { MoneyFormat.dollars($0.onDemandCents / 100) } ?? "—",
+                tint: .orange,
+                loaded: split != nil
+            )
+        }
+    }
 
-            IncludedPoolsGauges(
-                pools: store.includedPools,
-                spendSummary: store.spendSummary,
-                cycleSpend: store.cycleSpend,
-                grokBot: store.grokBotUsage
-            ) {
-                EmptyView()
+    private func cursorCycleAccessibility(_ split: SpendSplit?) -> String {
+        guard let split else { return "Spend this cycle, not loaded" }
+        let total = MoneyFormat.dollars(split.totalCents / 100)
+        let included = MoneyFormat.dollars(split.includedCents / 100)
+        let onDemand = MoneyFormat.dollars(split.onDemandCents / 100)
+        return "Spend this cycle \(total): \(included) included, \(onDemand) on-demand"
+    }
+
+    /// Extra usage is Anthropic's billed on-demand amount. It is shown beside the
+    /// estimate and is not added to it.
+    private var claudeExtraDollars: Double? {
+        guard settings.claudeLimitsEnabled, !claudeLimitsBlocked else { return nil }
+        return claudeCode.limits?.extraUsage?.usedDollars
+    }
+
+    @ViewBuilder
+    private var claudeBuckets: some View {
+        let cycleCents = claudeCode.hasCompletedFetch ? claudeCode.cycleSpendCents : nil
+        let extra = claudeExtraDollars
+
+        VStack(alignment: .leading, spacing: BucketLayout.rowSpacing) {
+            if !settings.claudeLimitsEnabled {
+                BucketNoteRow(title: "Plan limits") {
+                    Button("Show plan limits") {
+                        settings.claudeLimitsEnabled = true
+                        Task { await claudeCode.refresh() }
+                        MenuBarPanelKeeper.keepOpen()
+                    }
+                    .controlSize(.small)
+                    Text("Reads your Claude Code login from Keychain. macOS may ask once.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else if claudeLimitsBlocked, let note = claudeCode.limitsError {
+                BucketNoteRow(title: "Plan limits") {
+                    Text(note)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                ForEach(claudeMeters, id: \.title) { meter in
+                    BucketMeterRow(meter: meter)
+                }
             }
-            .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(minHeight: reservedMetersHeight, alignment: .top)
 
-            PanelStatsGrid(stats: PanelStats.make(snapshot: store.snapshot, style: costStyle))
-                .layoutPriority(0)
-
-            if let statusCaption {
-                Text(statusCaption)
-                    .font(.caption)
-                    .foregroundStyle(store.isStale ? Color.orange : Color.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        CycleSpendRow(
+            total: cycleCents.map { MoneyFormat.estimated($0 / 100) },
+            segments: [SpendBar.Segment(fraction: (cycleCents ?? 0) > 0 ? 1 : 0, tint: .accentColor)],
+            accessibilityLabel: claudeCycleAccessibility(cycleCents: cycleCents, extra: extra),
+            help: "Estimated list-price spend since this billing cycle started. Extra is on-demand usage Anthropic has billed this month, and is not included in the total."
+        ) {
+            SpendLegendItem(title: "Estimated at list prices", tint: .accentColor, loaded: cycleCents != nil)
+            if let extra {
+                SpendLegendItem(title: "Extra", value: MoneyFormat.dollars(extra), tint: .orange, loaded: true)
             }
         }
     }
+
+    private func claudeCycleAccessibility(cycleCents: Double?, extra: Double?) -> String {
+        guard let cycleCents else { return "Spend this cycle, not loaded" }
+        let estimated = "Spend this cycle, estimated \(MoneyFormat.dollars(cycleCents / 100))"
+        guard let extra else { return estimated }
+        return "\(estimated). Extra \(MoneyFormat.dollars(extra))"
+    }
+
+    // MARK: Notes
+
+    /// Only shown when the data needs a caveat; fresh data gets no caption.
+    private var cursorStatusCaption: String? {
+        if store.snapshot.fetchedAt == .distantPast {
+            return "Not refreshed yet"
+        }
+        if store.isShowingCachedData {
+            return "Offline · data from \(RelativeTimeFormat.clockTime(store.snapshot.fetchedAt))"
+        }
+        if store.isStale {
+            return "Data from \(RelativeTimeFormat.clockTime(store.snapshot.fetchedAt)) (stale)"
+        }
+        return nil
+    }
+
+    private var claudeIsStale: Bool {
+        PanelSourceResolver.isStale(
+            hasCompletedFetch: claudeCode.hasCompletedFetch,
+            fetchedAt: claudeCode.snapshot.fetchedAt,
+            refreshIntervalSeconds: settings.refreshIntervalSeconds
+        )
+    }
+
+    private var claudeStatusCaption: String? {
+        PanelSourceResolver.statusCaption(
+            indexing: claudeCode.indexingProgress,
+            fetchedAt: claudeCode.snapshot.fetchedAt,
+            isShowingCachedData: false,
+            isStale: claudeIsStale
+        )
+    }
+
+    /// Caveats under the buckets. Nothing is drawn when the data is fresh and priced.
+    @ViewBuilder
+    private var headerNotes: some View {
+        let status = showsClaudeBranch ? claudeStatusCaption : cursorStatusCaption
+        let statusIsWarning = showsClaudeBranch
+            ? claudeIsStale && claudeCode.indexingProgress == nil
+            : store.isStale
+        let unpriced = showsClaudeBranch ? ClaudeTokenLine.unpricedCaption(claudeCode.unpricedModels) : nil
+
+        if status != nil || unpriced != nil || awake.lastStopMessage != nil {
+            VStack(alignment: .leading, spacing: 2) {
+                if let unpriced {
+                    headerNote(unpriced)
+                        .help(unpriced)
+                }
+                if let status {
+                    headerNote(status)
+                        .foregroundStyle(statusIsWarning ? Color.orange : Color.secondary)
+                }
+                if let message = awake.lastStopMessage {
+                    headerNote(message)
+                }
+            }
+        }
+    }
+
+    private func headerNote(_ text: String) -> some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
+            .truncationMode(.tail)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    // MARK: Top bar controls
 
     private var communityButton: some View {
         Button {
@@ -926,34 +796,81 @@ struct UsagePanel: View {
         return "\(start.formatted(style)) – \(end.formatted(style))"
     }
 
-    private var burnPill: some View {
-        let tint = store.burnLevel.swiftUIColor
+    /// What used to sit in the footer, except keep awake, which has its own button.
+    private var moreMenu: some View {
+        Menu {
+            Button("Settings", systemImage: "gearshape") {
+                onOpenSettings()
+                MenuBarPanelKeeper.keepOpen()
+            }
+            Button("Stats", systemImage: "chart.bar") {
+                showsStats = true
+                MenuBarPanelKeeper.keepOpen()
+            }
+            .disabled(displayedSource == nil)
 
-        return Text(
-            "▲ \(MoneyFormat.string(store.snapshot.recentDollars, style: costStyle)) · \(settings.anomalyWindowMinutes)m"
-        )
-        .font(.subheadline.weight(.semibold).monospacedDigit())
-        .lineLimit(1)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .glassEffect(.regular.tint(tint))
-        .clipShape(Capsule())
-        .help("Spend in the last \(settings.anomalyWindowMinutes) minutes (your spike window)")
+            Divider()
+
+            Button("Refresh", systemImage: "arrow.clockwise") {
+                Task { await refreshSources() }
+                MenuBarPanelKeeper.keepOpen()
+            }
+            .disabled(panelIsLoading)
+
+            Divider()
+
+            Button("Quit", systemImage: "power") {
+                NSApplication.shared.terminate(nil)
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.body.weight(.semibold))
+                .frame(width: 28, height: 26)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .foregroundStyle(.secondary)
+        .help("Settings, stats, keep awake, refresh, quit")
+        .accessibilityLabel("More")
+        .popover(isPresented: $showsStats, arrowEdge: .bottom) {
+            statsPopover
+        }
     }
 
-    /// Only shown when the data needs a caveat; fresh data gets no caption.
-    private var statusCaption: String? {
-        if store.snapshot.fetchedAt == .distantPast {
-            return "Not refreshed yet"
+    /// The window's figures that no longer sit in the header.
+    private var statsPopover: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            PanelStatsGrid(stats: PanelStats.make(snapshot: panelSnapshot, style: costStyle))
+            PanelTokenLine(text: ClaudeTokenLine.string(snapshot: panelSnapshot))
         }
-        if store.isShowingCachedData {
-            return "Offline · data from \(RelativeTimeFormat.clockTime(store.snapshot.fetchedAt))"
-        }
-        if store.isStale {
-            return "Data from \(RelativeTimeFormat.clockTime(store.snapshot.fetchedAt)) (stale)"
-        }
-        return nil
+        .padding(12)
+        .frame(width: 400)
+        .environment(\.blurSensitiveContent, settings.blurSensitiveContent)
     }
+
+    /// ⌘R and ⌘Q. The actions live in a menu now, and a menu's shortcuts only work while it is open.
+    private var keyboardShortcuts: some View {
+        Group {
+            Button("Refresh") {
+                Task { await refreshSources() }
+                MenuBarPanelKeeper.keepOpen()
+            }
+            .keyboardShortcut("r")
+            .disabled(panelIsLoading)
+
+            Button("Quit") {
+                NSApplication.shared.terminate(nil)
+            }
+            .keyboardShortcut("q")
+        }
+        .opacity(0)
+        .frame(width: 0, height: 0)
+        .accessibilityHidden(true)
+    }
+
+    // MARK: - Content
 
     @ViewBuilder
     private var content: some View {
@@ -1113,27 +1030,9 @@ struct UsagePanel: View {
 
     // MARK: - Tab + filter controls
 
+    /// Tabs, the sort menu, and search on one row. Opening search swaps the tabs for the field.
     private var controlRow: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            PillPicker(
-                selection: panelTab,
-                options: visibleTabs.map { tab in
-                    PillPicker.Option(value: tab, title: tab.title)
-                },
-                size: .controlBar,
-                fillsWidth: true
-            )
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .onChange(of: panelTabRaw) { oldTab, newTab in
-                MenuBarPanelKeeper.keepOpen()
-                guard oldTab != newTab else { return }
-                sectionSearchText = ""
-                isSectionSearchPresented = false
-                if let tab = UsageTab(rawValue: newTab) {
-                    onUsageTabChange(tab)
-                }
-            }
-
+        Group {
             if showsSectionSearch {
                 SectionSearchControl(
                     text: $sectionSearchText,
@@ -1141,31 +1040,52 @@ struct UsagePanel: View {
                     placeholder: searchPlaceholder,
                     reduceMotion: reduceMotion
                 ) {
-                    if hasTrailingControl {
-                        trailingControlPicker
-                            .fixedSize()
+                    HStack(spacing: 8) {
+                        tabPicker
+                        if hasSortMenu {
+                            sortMenu
+                        }
                     }
                 }
-            } else if hasTrailingControl {
-                HStack {
-                    Spacer()
-                    trailingControlPicker
-                        .fixedSize()
-                }
+            } else {
+                tabPicker
             }
         }
         .padding(.horizontal, 12)
-        .padding(.top, 10)
-        .padding(.bottom, 8)
+        .padding(.vertical, 8)
         .zIndex(1)
         .animation(reduceMotion ? nil : .snappy, value: panelTabRaw)
+        .onChange(of: panelTabRaw) { oldTab, newTab in
+            MenuBarPanelKeeper.keepOpen()
+            guard oldTab != newTab else { return }
+            sectionSearchText = ""
+            isSectionSearchPresented = false
+            if let tab = UsageTab(rawValue: newTab) {
+                onUsageTabChange(tab)
+            }
+        }
+        .onChange(of: modelsMetricRaw) { _, _ in MenuBarPanelKeeper.keepOpen() }
+        .onChange(of: skillsMetricRaw) { _, _ in MenuBarPanelKeeper.keepOpen() }
+        .onChange(of: sessionsSortRaw) { _, _ in MenuBarPanelKeeper.keepOpen() }
+    }
+
+    private var tabPicker: some View {
+        PillPicker(
+            selection: panelTab,
+            options: visibleTabs.map { tab in
+                PillPicker.Option(value: tab, title: tab.title)
+            },
+            size: .controlBar,
+            fillsWidth: true
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var showsSectionSearch: Bool {
         panelTab.wrappedValue != .bench
     }
 
-    private var hasTrailingControl: Bool {
+    private var hasSortMenu: Bool {
         switch panelTab.wrappedValue {
         case .models, .sessions:
             return true
@@ -1208,73 +1128,45 @@ struct UsagePanel: View {
         return panelSnapshot.prompts.filter { ListSearch.prompt($0, query: sectionSearchText) }
     }
 
-    @ViewBuilder
-    private var trailingControlPicker: some View {
-        switch panelTab.wrappedValue {
-        case .models:
-            costMetricPicker(selection: $modelsMetricRaw)
-        case .skills where !panelSnapshot.skills.isEmpty:
-            costMetricPicker(selection: $skillsMetricRaw)
-        case .skills:
-            EmptyView()
-        case .sessions:
-            sessionsSortPicker
-        case .bench:
-            EmptyView()
-        case .feed:
-            EmptyView()
+    /// Sort order for Sessions, or the cost figure for Models and Skills.
+    private var sortMenu: some View {
+        Menu {
+            switch panelTab.wrappedValue {
+            case .models:
+                costMetricPicker(selection: $modelsMetricRaw)
+            case .skills:
+                costMetricPicker(selection: $skillsMetricRaw)
+            case .sessions:
+                Picker("Sort by", selection: $sessionsSortRaw) {
+                    ForEach(SessionPromptSort.pillPickerOptions) { option in
+                        Text(option.title).tag(option.value.rawValue)
+                    }
+                }
+                .pickerStyle(.inline)
+            case .feed, .bench:
+                EmptyView()
+            }
+        } label: {
+            Image(systemName: "arrow.up.arrow.down")
+                .font(.caption.weight(.semibold))
+                .frame(width: 26, height: 26)
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.borderless)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .foregroundStyle(.secondary)
+        .help(panelTab.wrappedValue == .sessions ? "Sort sessions" : "Choose the cost figure")
+        .accessibilityLabel(panelTab.wrappedValue == .sessions ? "Sort sessions" : "Cost figure")
     }
 
     private func costMetricPicker(selection: Binding<String>) -> some View {
-        PillPicker(
-            selection: Binding(
-                get: { CostMetric(rawValue: selection.wrappedValue) ?? .total },
-                set: { selection.wrappedValue = $0.rawValue }
-            ),
-            options: [
-                PillPicker.Option(
-                    value: .total,
-                    title: "Total",
-                    icon: "sum",
-                    help: "Total"
-                ),
-                PillPicker.Option(
-                    value: .average,
-                    title: "Avg",
-                    icon: "divide",
-                    help: "Average"
-                ),
-                PillPicker.Option(
-                    value: .median,
-                    title: "Med",
-                    icon: "chart.bar.xaxis",
-                    help: "Median"
-                ),
-            ],
-            size: .compact,
-            style: .flat
-        )
-        .fixedSize()
-        .onChange(of: selection.wrappedValue) { _, _ in
-            MenuBarPanelKeeper.keepOpen()
+        Picker("Cost per row", selection: selection) {
+            ForEach(CostMetric.allCases) { metric in
+                Text(metric.menuTitle).tag(metric.rawValue)
+            }
         }
-    }
-
-    private var sessionsSortPicker: some View {
-        PillPicker(
-            selection: Binding(
-                get: { SessionPromptSort(rawValue: sessionsSortRaw) ?? .newest },
-                set: { sessionsSortRaw = $0.rawValue }
-            ),
-            options: SessionPromptSort.pillPickerOptions,
-            size: .compact,
-            style: .flat
-        )
-        .fixedSize()
-        .onChange(of: sessionsSortRaw) { _, _ in
-            MenuBarPanelKeeper.keepOpen()
-        }
+        .pickerStyle(.inline)
     }
 
     // MARK: - Cost metric (Total vs Avg)
@@ -1389,76 +1281,5 @@ struct UsagePanel: View {
             }
         }
         MenuBarPanelKeeper.keepOpen()
-    }
-
-    private var footer: some View {
-        GlassEffectContainer {
-            HStack {
-                Button {
-                    onOpenSettings()
-                    MenuBarPanelKeeper.keepOpen()
-                } label: {
-                    footerIcon("gearshape")
-                }
-                .buttonStyle(.borderless)
-                .help("Settings")
-                .glassEffect(.regular.interactive())
-                .glassEffectID("settings-gear", in: glassNamespace)
-
-                Spacer()
-
-                signature
-
-                Spacer()
-
-                HStack(spacing: 8) {
-                    Button {
-                        Task { await refreshSources() }
-                        MenuBarPanelKeeper.keepOpen()
-                    } label: {
-                        footerIcon("arrow.clockwise")
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(panelIsLoading)
-                    .keyboardShortcut("r")
-                    .help("Refresh")
-                    .glassEffect(.regular.interactive())
-
-                    Button {
-                        NSApplication.shared.terminate(nil)
-                    } label: {
-                        footerIcon("power")
-                    }
-                    .buttonStyle(.borderless)
-                    .keyboardShortcut("q")
-                    .help("Quit")
-                    .glassEffect(.regular.interactive())
-                }
-            }
-        }
-        .foregroundStyle(.primary.opacity(0.9))
-    }
-
-    private var signature: some View {
-        HStack(spacing: 3) {
-            Text("Powered by")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-            Link(destination: URL(string: "https://getdrift.ai")!) {
-                Text("Drift Security")
-                    .font(.caption2.weight(.medium))
-                    .underline()
-                    .foregroundStyle(.secondary)
-            }
-            .help("getdrift.ai")
-        }
-    }
-
-    private func footerIcon(_ systemName: String) -> some View {
-        Image(systemName: systemName)
-            .font(.body.weight(.medium))
-            .imageScale(.medium)
-            .frame(width: 30, height: 30, alignment: .center)
-            .contentShape(Rectangle())
     }
 }

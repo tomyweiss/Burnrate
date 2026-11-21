@@ -20,14 +20,6 @@ import Testing
     #expect(store.menuAmountText == "—")
     #expect(store.menuAmountAccessibilityText == "Cursor models not loaded")
 
-    let header = StatusBarFigures.header(store.statusBarInput)
-    #expect(header.hero == "—")
-    #expect(header.caption == "Cursor models used this cycle")
-    #expect(header.showsTimelineSpendBelow == true)
-
     settings.statusBarShowsCursorModels = false
     #expect(store.menuAmountText == nil)
-    let hiddenHeader = StatusBarFigures.header(store.statusBarInput)
-    #expect(hiddenHeader.hero == "$—.——")
-    #expect(hiddenHeader.showsTimelineSpendBelow == false)
 }

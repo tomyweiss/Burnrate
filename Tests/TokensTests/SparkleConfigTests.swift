@@ -13,3 +13,21 @@ import Testing
     let sparkle = SparkleUpdateController(startUpdater: true)
     #expect(!sparkle.isAvailable)
 }
+
+@Test func backgroundUpdateIsKeptUntilTheUserAttendsToIt() {
+    let available = UpdateManager.pendingUpdate(after: .available(version: "0.60.15"), current: nil)
+    #expect(available == .available(version: "0.60.15"))
+    #expect(UpdateManager.pendingUpdate(after: .attended, current: available) == nil)
+}
+
+@Test func downloadedUpdateStaysReadyUntilRelaunch() {
+    let ready = UpdateManager.pendingUpdate(after: .readyToInstall(version: "0.60.15"), current: nil)
+    #expect(ready == .readyToInstall(version: "0.60.15"))
+    #expect(UpdateManager.pendingUpdate(after: .attended, current: ready) == ready)
+    #expect(UpdateManager.pendingUpdate(after: .available(version: "0.60.15"), current: ready) == ready)
+}
+
+@Test func pendingUpdateCopy() {
+    #expect(UpdateManager.PendingUpdate.available(version: "1.2").title == "Burnrate 1.2 is available")
+    #expect(UpdateManager.PendingUpdate.readyToInstall(version: "1.2").actionTitle == "Restart to Update")
+}

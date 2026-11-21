@@ -2,29 +2,74 @@ import AppKit
 import Foundation
 import Sparkle
 
-/// Hides floating menu bar panels before Sparkle shows its modal alerts.
-private final class SparkleUserDriverDelegate: NSObject, SPUStandardUserDriverDelegate {
+/// What a background update check found, reported to `UpdateManager`.
+enum SparkleUpdateEvent: Equatable {
+    /// A scheduled check found an update and left showing it to the app.
+    case available(version: String)
+    /// Sparkle downloaded the update silently and would install it on quit.
+    case readyToInstall(version: String)
+    /// The user brought the update alert into focus, or the session ended.
+    case attended
+}
+
+/// Hides floating menu bar panels before Sparkle shows its modal alerts, and
+/// hands scheduled updates to the app. Burnrate is a menu bar app, so Sparkle
+/// would otherwise put scheduled alerts behind other apps, and an update it
+/// downloads silently would only install when the app quits.
+///
+/// Sparkle calls both delegates on the main thread.
+@MainActor
+private final class SparkleDelegate: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandardUserDriverDelegate {
+    var onEvent: ((SparkleUpdateEvent) -> Void)?
+    var installOnQuitHandler: (() -> Void)?
+
+    // MARK: SPUStandardUserDriverDelegate
+
     func standardUserDriverWillShowModalAlert() {
-        runOnMain {
-            NSApp.activate(ignoringOtherApps: true)
-            MenuBarPanelKeeper.hidePanelsForModalAlert()
-        }
+        NSApp.activate(ignoringOtherApps: true)
+        MenuBarPanelKeeper.hidePanelsForModalAlert()
     }
 
     func standardUserDriverDidShowModalAlert() {
-        runOnMain {
-            MenuBarPanelKeeper.restorePanelsAfterModalAlert()
-        }
+        MenuBarPanelKeeper.restorePanelsAfterModalAlert()
     }
 
-    private func runOnMain(_ work: @MainActor () -> Void) {
-        if Thread.isMainThread {
-            MainActor.assumeIsolated(work)
-        } else {
-            DispatchQueue.main.sync {
-                MainActor.assumeIsolated(work)
-            }
-        }
+    var supportsGentleScheduledUpdateReminders: Bool { true }
+
+    func standardUserDriverShouldHandleShowingScheduledUpdate(
+        _ update: SUAppcastItem,
+        andInImmediateFocus immediateFocus: Bool
+    ) -> Bool {
+        immediateFocus
+    }
+
+    func standardUserDriverWillHandleShowingUpdate(
+        _ handleShowingUpdate: Bool,
+        forUpdate update: SUAppcastItem,
+        state: SPUUserUpdateState
+    ) {
+        guard !handleShowingUpdate else { return }
+        onEvent?(.available(version: update.displayVersionString))
+    }
+
+    func standardUserDriverDidReceiveUserAttention(forUpdate update: SUAppcastItem) {
+        onEvent?(.attended)
+    }
+
+    func standardUserDriverWillFinishUpdateSession() {
+        onEvent?(.attended)
+    }
+
+    // MARK: SPUUpdaterDelegate
+
+    func updater(
+        _ updater: SPUUpdater,
+        willInstallUpdateOnQuit item: SUAppcastItem,
+        immediateInstallationBlock immediateInstallHandler: @escaping () -> Void
+    ) -> Bool {
+        installOnQuitHandler = immediateInstallHandler
+        onEvent?(.readyToInstall(version: item.displayVersionString))
+        return true
     }
 }
 
@@ -34,7 +79,7 @@ private final class SparkleUserDriverDelegate: NSObject, SPUStandardUserDriverDe
 @MainActor
 final class SparkleUpdateController {
     private let updaterController: SPUStandardUpdaterController?
-    private let userDriverDelegate = SparkleUserDriverDelegate()
+    private let delegate = SparkleDelegate()
 
     /// - Parameter startUpdater: Production enablement. Still false for
     ///   Burnrate-dev and while `SUPublicEDKey` is the placeholder.
@@ -45,8 +90,8 @@ final class SparkleUpdateController {
         if shouldStart {
             updaterController = SPUStandardUpdaterController(
                 startingUpdater: true,
-                updaterDelegate: nil,
-                userDriverDelegate: userDriverDelegate
+                updaterDelegate: delegate,
+                userDriverDelegate: delegate
             )
         } else {
             updaterController = nil
@@ -54,6 +99,11 @@ final class SparkleUpdateController {
     }
 
     var isAvailable: Bool { updaterController != nil }
+
+    var onEvent: ((SparkleUpdateEvent) -> Void)? {
+        get { delegate.onEvent }
+        set { delegate.onEvent = newValue }
+    }
 
     var automaticallyChecksForUpdates: Bool {
         get { updaterController?.updater.automaticallyChecksForUpdates ?? false }
@@ -65,8 +115,18 @@ final class SparkleUpdateController {
         set { updaterController?.updater.updateCheckInterval = newValue }
     }
 
+    /// Also brings a scheduled update that is waiting in the background into focus.
     func checkForUpdates() {
         NSApp.activate(ignoringOtherApps: true)
         updaterController?.checkForUpdates(nil)
+    }
+
+    /// Installs an update Sparkle already downloaded, then relaunches.
+    /// Returns false when no downloaded update is waiting.
+    @discardableResult
+    func installDownloadedUpdate() -> Bool {
+        guard let handler = delegate.installOnQuitHandler else { return false }
+        handler()
+        return true
     }
 }

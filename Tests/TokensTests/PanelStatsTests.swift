@@ -62,16 +62,12 @@ import Testing
     #expect(average?.accessibilityLabel(valuesHidden: true) == "Avg / session, hidden")
 }
 
-@Test func headerScrollsOnlyAfterStatsPaddingCannotSaveTheTabFloor() {
+@Test func headerScrollsOnlyWhenItCannotFitAboveTheTabFloor() {
     let floor: CGFloat = 220
-    let relief = UsagePanelColumn.statsPaddingRelief
 
     #expect(UsagePanelColumn.headerNeedsScroll(headerIdeal: 400, available: 700, tabFloor: floor) == false)
     #expect(UsagePanelColumn.headerNeedsScroll(headerIdeal: 400, available: 620, tabFloor: floor) == false)
-
-    let withinRelief = 400 + floor - relief
-    #expect(UsagePanelColumn.headerNeedsScroll(headerIdeal: 400, available: withinRelief, tabFloor: floor) == false)
-    #expect(UsagePanelColumn.headerNeedsScroll(headerIdeal: 400, available: withinRelief - 1, tabFloor: floor) == true)
+    #expect(UsagePanelColumn.headerNeedsScroll(headerIdeal: 400, available: 619, tabFloor: floor) == true)
 }
 
 @Test func panelStatsPerHourUsesAtLeastOneHour() {
@@ -194,13 +190,4 @@ private func panelSession(_ id: String, parent: String? = nil) -> SessionUsage {
         parentConversationId: parent,
         childConversationIds: []
     )
-}
-
-@Test func gaugeDiameterFillsOneHeaderRow() {
-    #expect(PercentGauge.fittedDiameter(count: 2, spacing: 12) == 120)
-    #expect(PercentGauge.fittedDiameter(count: 3, spacing: 24) == 120)
-    #expect(PercentGauge.fittedDiameter(count: 4, spacing: 16) == 107)
-    #expect(PercentGauge.fittedDiameter(count: 5, spacing: 12) == 87)
-    #expect(PercentGauge.fittedDiameter(count: 8, spacing: 16) == 72)
-    #expect(PercentGauge.fittedDiameter(count: 2, spacing: 12, reserving: 150) == 120)
 }

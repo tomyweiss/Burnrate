@@ -1,315 +1,455 @@
 import SwiftUI
 
+/// A page opened from the Settings list.
+enum SettingsPage: String, CaseIterable, Identifiable {
+    case sources
+    case menuBar
+    case spikeAlert
+    case panel
+    case data
+    case updates
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .sources: "Sources"
+        case .menuBar: "Menu bar"
+        case .spikeAlert: "Spike alert"
+        case .panel: "Panel"
+        case .data: "Data"
+        case .updates: "Updates"
+        }
+    }
+}
+
+/// A short list of topics, each showing its current value. Selecting one opens its page.
 struct SettingsPanel: View {
     @Bindable var settings: SettingsStore
     @Bindable var updates: UpdateManager
     @Bindable var store: UsageStore
+    /// Nil shows the list. Held by the root so returning from the change log reopens Updates.
+    @Binding var page: SettingsPage?
     var onBack: () -> Void
     var onOpenChangeLog: () -> Void
     @Environment(ClaudeCodeStore.self) private var claudeCode
 
     var body: some View {
-        settingsForm
+        VStack(spacing: 0) {
+            header
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+
+            Divider()
+
+            Form {
+                switch page {
+                case nil: listSections
+                case .sources: sourcesSections
+                case .menuBar: menuBarSections
+                case .spikeAlert: spikeAlertSections
+                case .panel: panelSections
+                case .data: dataSections
+                case .updates: updatesSections
+                }
+            }
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+
+            if page == nil {
+                signature
+                    .padding(.bottom, 12)
+            }
+        }
+        .onAppear { MenuBarPanelKeeper.keepOpen() }
     }
 
-    private var settingsForm: some View {
-        VStack(spacing: 0) {
-            ZStack {
-                Text("Settings")
-                    .font(.headline)
+    private var header: some View {
+        ZStack {
+            Text(page?.title ?? "Settings")
+                .font(.headline)
 
-                HStack {
-                    Button {
+            HStack {
+                Button {
+                    if page == nil {
                         onBack()
-                        MenuBarPanelKeeper.keepOpen()
-                    } label: {
-                        Label("Usage", systemImage: "chevron.left")
+                    } else {
+                        page = nil
                     }
-                    .buttonStyle(.plain)
+                    MenuBarPanelKeeper.keepOpen()
+                } label: {
+                    Label(page == nil ? "Usage" : "Settings", systemImage: "chevron.left")
+                }
+                .buttonStyle(.plain)
 
-                    Spacer()
+                Spacer()
 
-                    Text(appVersion)
+                if page == nil {
+                    Text(AppIdentity.versionLabel)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+        }
+    }
 
-            Divider()
+    // MARK: - List
 
-            Form {
-                Section("Sources") {
-                    Toggle(
-                        PanelSourceResolver.cursorSettingsLabel(signedIn: store.isCursorAvailable),
-                        isOn: $settings.cursorEnabled
-                    )
-                    .onChange(of: settings.cursorEnabled) { _, enabled in
-                        if enabled {
-                            Task { await store.refresh() }
-                        }
-                        MenuBarPanelKeeper.keepOpen()
-                    }
-
-                    Toggle(
-                        PanelSourceResolver.claudeSettingsLabel(
-                            installed: claudeCode.isInstalled,
-                            sessionCount: claudeCode.sessionCount
-                        ),
-                        isOn: $settings.claudeCodeEnabled
-                    )
-                    .onChange(of: settings.claudeCodeEnabled) { _, _ in
-                        Task { await claudeCode.refresh() }
-                        MenuBarPanelKeeper.keepOpen()
-                    }
-
-                    Toggle("Show plan limits", isOn: $settings.claudeLimitsEnabled)
-                        .onChange(of: settings.claudeLimitsEnabled) { _, enabled in
-                            if enabled {
-                                Task { await claudeCode.refresh() }
-                            } else {
-                                claudeCode.clearPlanLimits()
-                            }
-                            MenuBarPanelKeeper.keepOpen()
-                        }
-                    Text("Reads your Claude Code login from Keychain to fetch your 5-hour and weekly limits. macOS may ask for permission once.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .onAppear {
-                    Task { await claudeCode.refreshInstallStatus() }
-                }
-
-                Section("General") {
-                    Picker("Poll every", selection: $settings.refreshIntervalSeconds) {
-                        ForEach(SettingsStore.refreshIntervalOptions, id: \.self) { seconds in
-                            Text(SettingsStore.intervalLabel(seconds)).tag(seconds)
-                        }
-                    }
-                    .onChange(of: settings.refreshIntervalSeconds) { _, _ in
-                        MenuBarPanelKeeper.keepOpen()
-                    }
-
-                    timezonePicker
-
-                    Toggle("Launch at login", isOn: $settings.launchAtLogin)
-                        .onChange(of: settings.launchAtLogin) { _, _ in
-                            MenuBarPanelKeeper.keepOpen()
-                        }
-                }
-
-                Section("Status bar") {
-                    statusBarHeading("Cursor")
-                    Toggle("Window spend", isOn: $settings.statusBarShowsWindowSpend)
-                        .onChange(of: settings.statusBarShowsWindowSpend) { _, _ in
-                            MenuBarPanelKeeper.keepOpen()
-                        }
-                    Toggle("Cursor models", isOn: $settings.statusBarShowsCursorModels)
-                        .onChange(of: settings.statusBarShowsCursorModels) { _, _ in
-                            MenuBarPanelKeeper.keepOpen()
-                        }
-                    Toggle("Other models", isOn: $settings.statusBarShowsOtherModels)
-                        .onChange(of: settings.statusBarShowsOtherModels) { _, _ in
-                            MenuBarPanelKeeper.keepOpen()
-                        }
-                    Toggle("Grok Bot", isOn: $settings.statusBarShowsGrokBot)
-                        .onChange(of: settings.statusBarShowsGrokBot) { _, _ in
-                            MenuBarPanelKeeper.keepOpen()
-                        }
-
-                    statusBarHeading("Claude Code")
-                    Toggle("Spend (estimated)", isOn: claudeSpendBinding)
-                        .onChange(of: settings.statusBarClaudeSpendPreference) { _, _ in
-                            MenuBarPanelKeeper.keepOpen()
-                        }
-                    if settings.claudeLimitsEnabled {
-                        Toggle("Session limit (5h)", isOn: $settings.statusBarShowsClaudeFiveHour)
-                            .onChange(of: settings.statusBarShowsClaudeFiveHour) { _, _ in
-                                MenuBarPanelKeeper.keepOpen()
-                            }
-                        Toggle("Weekly limit", isOn: $settings.statusBarShowsClaudeWeekly)
-                            .onChange(of: settings.statusBarShowsClaudeWeekly) { _, _ in
-                                MenuBarPanelKeeper.keepOpen()
-                            }
-                    }
-                    Text("Choose what appears next to the flame. Cursor figures also appear in the panel header. Turning all of them off leaves the flame alone while the panel still shows window spend.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section("Privacy") {
-                    Toggle("Blur session & prompt titles", isOn: $settings.blurSensitiveContent)
-                        .onChange(of: settings.blurSensitiveContent) { _, _ in
-                            MenuBarPanelKeeper.keepOpen()
-                        }
-                    Toggle("Show location subtitle", isOn: $settings.showLocationSubtitle)
-                        .onChange(of: settings.showLocationSubtitle) { _, _ in
-                            MenuBarPanelKeeper.keepOpen()
-                        }
-                    Toggle("Hide archived sessions", isOn: $settings.hideArchivedSessions)
-                        .onChange(of: settings.hideArchivedSessions) { _, _ in
-                            MenuBarPanelKeeper.keepOpen()
-                        }
-                }
-
-                Section("Usage panel") {
-                    ForEach(UsageTab.allCases) { tab in
-                        Toggle(tab.title, isOn: usageTabVisibilityBinding(tab))
-                            .disabled(
-                                settings.isUsageTabVisible(tab)
-                                    && settings.visibleUsageTabs.count == 1
-                            )
-                    }
-                    Text("Choose which tabs appear in the main panel. At least one tab must stay visible.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section("Spike alert") {
-                    Stepper(value: $settings.anomalyThresholdDollars, in: 1...100, step: 1) {
-                        Text("Threshold \(MoneyFormat.dollars(settings.anomalyThresholdDollars))")
-                    }
-                    .onChange(of: settings.anomalyThresholdDollars) { _, _ in
-                        MenuBarPanelKeeper.keepOpen()
-                    }
-
-                    Stepper(value: $settings.anomalyWindowMinutes, in: 1...60, step: 1) {
-                        Text("Window \(settings.anomalyWindowMinutes) min")
-                    }
-                    .onChange(of: settings.anomalyWindowMinutes) { _, _ in
-                        MenuBarPanelKeeper.keepOpen()
-                    }
-
-                    Stepper(value: $settings.anomalyCooldownMinutes, in: 1...120, step: 1) {
-                        Text("Cooldown \(settings.anomalyCooldownMinutes) min")
-                    }
-                    .onChange(of: settings.anomalyCooldownMinutes) { _, _ in
-                        MenuBarPanelKeeper.keepOpen()
-                    }
-
-                    Text(
-                        String(
-                            format: "Alert when ≥ %@ is spent in %d minutes.",
-                            MoneyFormat.dollars(settings.anomalyThresholdDollars),
-                            settings.anomalyWindowMinutes
-                        )
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                    Button("Test notification") {
-                        Task { await store.sendTestNotification() }
-                        MenuBarPanelKeeper.keepOpen()
-                    }
-
-                    if let feedback = store.notificationFeedback {
-                        Text(feedback)
-                            .font(.caption)
-                            .foregroundStyle(
-                                feedback.hasPrefix("Test notification")
-                                    ? Color.secondary
-                                    : Color.orange
-                            )
-                    }
-                }
-
-                Section("Updates") {
-                    if updates.isDevBuild {
-                        Text("Updates are disabled in Burnrate-dev. Reinstall with scripts/package.sh --dev.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Toggle("Check for updates automatically", isOn: $settings.autoCheckForUpdates)
-                            .onChange(of: settings.autoCheckForUpdates) { _, _ in
-                                updates.autoCheckIfNeeded()
-                                MenuBarPanelKeeper.keepOpen()
-                            }
-
-                        Button("Check for Updates…") {
-                            Task { await updates.checkForUpdates(userInitiated: true) }
-                        }
-
-                        if updates.usesSparkle {
-                            Text("Checks once a day. You’ll confirm before installing.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        if let status = updates.statusMessage {
-                            Text(status)
-                                .font(.caption)
-                                .foregroundStyle(updates.lastError == nil ? Color.secondary : Color.red)
-                        }
-                    }
-
-                    Button {
-                        onOpenChangeLog()
-                        MenuBarPanelKeeper.keepOpen()
-                    } label: {
-                        HStack {
-                            Text("Change log")
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                if settings.usageTimelinePreset == .thisBilling {
-                    Section("Timeline") {
-                        Stepper(value: $settings.billingDayOfMonth, in: 1...31) {
-                            Text("Billing day \(settings.billingDayOfMonth)")
-                        }
-                        .onChange(of: settings.billingDayOfMonth) { _, _ in
-                            Task { await store.refresh() }
-                            MenuBarPanelKeeper.keepOpen()
-                        }
-                    }
-                }
-
-                if settings.usageTimelinePreset == .custom {
-                    Section("Timeline") {
-                        DatePicker(
-                            "Start date",
-                            selection: $settings.customRangeStart,
-                            in: Date.distantPast...Date(),
-                            displayedComponents: [.date]
-                        )
-                        .onChange(of: settings.customRangeStart) { _, _ in
-                            Task { await store.refresh() }
-                            MenuBarPanelKeeper.keepOpen()
-                        }
-
-                        DatePicker(
-                            "End date",
-                            selection: $settings.customRangeEnd,
-                            in: settings.customRangeStart...Date(),
-                            displayedComponents: [.date]
-                        )
-                        .onChange(of: settings.customRangeEnd) { _, _ in
-                            Task { await store.refresh() }
-                            MenuBarPanelKeeper.keepOpen()
-                        }
-
-                        Text("Both dates are included. Future dates can't be selected.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+    @ViewBuilder
+    private var listSections: some View {
+        Section {
+            ForEach(SettingsPage.allCases) { item in
+                navigationRow(item.title, value: summary(for: item)) {
+                    page = item
                 }
             }
-            .formStyle(.grouped)
-            .scrollContentBackground(.hidden)
         }
-        .onAppear { MenuBarPanelKeeper.keepOpen() }
+
+        Section {
+            keepOpenToggle("Launch at login", isOn: $settings.launchAtLogin)
+            keepOpenToggle("Blur session & prompt titles", isOn: $settings.blurSensitiveContent)
+        }
     }
 
-    private var appVersion: String {
-        AppIdentity.versionLabel
+    private func summary(for item: SettingsPage) -> String {
+        switch item {
+        case .sources:
+            SettingsSummary.sources(
+                cursorEnabled: settings.cursorEnabled,
+                claudeEnabled: settings.claudeCodeEnabled
+            )
+        case .menuBar:
+            SettingsSummary.menuBar(menuBar.input)
+        case .spikeAlert:
+            SettingsSummary.spikeAlert(
+                thresholdDollars: settings.anomalyThresholdDollars,
+                windowMinutes: settings.anomalyWindowMinutes
+            )
+        case .panel:
+            SettingsSummary.panel(visibleTabCount: settings.visibleUsageTabs.count)
+        case .data:
+            SettingsSummary.data(
+                refreshIntervalSeconds: settings.refreshIntervalSeconds,
+                timezoneIdentifier: settings.usageTimezoneIdentifier
+            )
+        case .updates:
+            SettingsSummary.updates(
+                versionLabel: AppIdentity.versionLabel,
+                pendingTitle: updates.isDevBuild ? nil : updates.pendingUpdate?.title
+            )
+        }
     }
+
+    private var signature: some View {
+        HStack(spacing: 3) {
+            Text("Powered by")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+            Link(destination: URL(string: "https://getdrift.ai")!) {
+                Text("Drift Security")
+                    .font(.caption2.weight(.medium))
+                    .underline()
+                    .foregroundStyle(.secondary)
+            }
+            .help("getdrift.ai")
+        }
+    }
+
+    // MARK: - Sources
+
+    @ViewBuilder
+    private var sourcesSections: some View {
+        Section {
+            Toggle(
+                PanelSourceResolver.cursorSettingsLabel(signedIn: store.isCursorAvailable),
+                isOn: $settings.cursorEnabled
+            )
+            .onChange(of: settings.cursorEnabled) { _, enabled in
+                if enabled {
+                    Task { await store.refresh() }
+                }
+                MenuBarPanelKeeper.keepOpen()
+            }
+        }
+
+        Section {
+            Toggle(
+                PanelSourceResolver.claudeSettingsLabel(
+                    installed: claudeCode.isInstalled,
+                    sessionCount: claudeCode.sessionCount
+                ),
+                isOn: $settings.claudeCodeEnabled
+            )
+            .onChange(of: settings.claudeCodeEnabled) { _, _ in
+                Task { await claudeCode.refresh() }
+                MenuBarPanelKeeper.keepOpen()
+            }
+
+            if settings.claudeCodeEnabled {
+                Toggle("Show plan limits", isOn: $settings.claudeLimitsEnabled)
+                    .onChange(of: settings.claudeLimitsEnabled) { _, enabled in
+                        if enabled {
+                            Task { await claudeCode.refresh() }
+                        } else {
+                            claudeCode.clearPlanLimits()
+                        }
+                        MenuBarPanelKeeper.keepOpen()
+                    }
+                caption("Reads your Claude Code login from Keychain to fetch your 5-hour and weekly limits. macOS may ask for permission once.")
+            }
+        }
+        .onAppear {
+            Task { await claudeCode.refreshInstallStatus() }
+        }
+    }
+
+    // MARK: - Menu bar
+
+    private var menuBar: MenuBarState.Presentation {
+        MenuBarState.presentation(settings: settings, store: store, claudeCode: claudeCode)
+    }
+
+    @ViewBuilder
+    private var menuBarSections: some View {
+        Section {
+            LabeledContent("Preview") {
+                menuBarPreview
+            }
+        }
+
+        if settings.cursorEnabled {
+            Section("Cursor") {
+                keepOpenToggle("Window spend", isOn: $settings.statusBarShowsWindowSpend)
+                keepOpenToggle("Cursor models", isOn: $settings.statusBarShowsCursorModels)
+                keepOpenToggle("Other models", isOn: $settings.statusBarShowsOtherModels)
+                keepOpenToggle("Grok Bot", isOn: $settings.statusBarShowsGrokBot)
+            }
+        }
+
+        if settings.claudeCodeEnabled {
+            Section("Claude Code") {
+                Toggle("Spend (estimated)", isOn: claudeSpendBinding)
+                    .onChange(of: settings.statusBarClaudeSpendPreference) { _, _ in
+                        MenuBarPanelKeeper.keepOpen()
+                    }
+                if settings.claudeLimitsEnabled {
+                    keepOpenToggle("Session limit (5h)", isOn: $settings.statusBarShowsClaudeFiveHour)
+                    keepOpenToggle("Weekly limit", isOn: $settings.statusBarShowsClaudeWeekly)
+                }
+            }
+        }
+    }
+
+    /// The menu bar item as it looks with the current choices. Only the flame when nothing is on.
+    private var menuBarPreview: some View {
+        let bar = menuBar
+        return HStack(spacing: 5) {
+            Image(systemName: bar.burnLevel.symbolName)
+            if let text = bar.statusText {
+                Text(text)
+                    .monospacedDigit()
+                    .lineLimit(1)
+            }
+        }
+        .font(.callout.weight(.medium))
+        .foregroundStyle(.white)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(Color.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(bar.accessibilityText ?? "Flame only")
+    }
+
+    // MARK: - Spike alert
+
+    @ViewBuilder
+    private var spikeAlertSections: some View {
+        Section {
+            Stepper(value: $settings.anomalyThresholdDollars, in: 1...100, step: 1) {
+                Text("Threshold \(MoneyFormat.dollars(settings.anomalyThresholdDollars))")
+            }
+            .onChange(of: settings.anomalyThresholdDollars) { _, _ in
+                MenuBarPanelKeeper.keepOpen()
+            }
+
+            Stepper(value: $settings.anomalyWindowMinutes, in: 1...60, step: 1) {
+                Text("Window \(settings.anomalyWindowMinutes) min")
+            }
+            .onChange(of: settings.anomalyWindowMinutes) { _, _ in
+                MenuBarPanelKeeper.keepOpen()
+            }
+
+            Stepper(value: $settings.anomalyCooldownMinutes, in: 1...120, step: 1) {
+                Text("Cooldown \(settings.anomalyCooldownMinutes) min")
+            }
+            .onChange(of: settings.anomalyCooldownMinutes) { _, _ in
+                MenuBarPanelKeeper.keepOpen()
+            }
+
+            caption(
+                String(
+                    format: "Alert when ≥ %@ is spent in %d minutes.",
+                    MoneyFormat.dollars(settings.anomalyThresholdDollars),
+                    settings.anomalyWindowMinutes
+                )
+            )
+        }
+
+        Section {
+            Button("Test notification") {
+                Task { await store.sendTestNotification() }
+                MenuBarPanelKeeper.keepOpen()
+            }
+
+            if let feedback = store.notificationFeedback {
+                Text(feedback)
+                    .font(.caption)
+                    .foregroundStyle(
+                        feedback.hasPrefix("Test notification")
+                            ? Color.secondary
+                            : Color.orange
+                    )
+            }
+        }
+    }
+
+    // MARK: - Panel
+
+    @ViewBuilder
+    private var panelSections: some View {
+        Section("Tabs") {
+            ForEach(UsageTab.allCases) { tab in
+                Toggle(tab.title, isOn: usageTabVisibilityBinding(tab))
+                    .disabled(
+                        settings.isUsageTabVisible(tab)
+                            && settings.visibleUsageTabs.count == 1
+                    )
+            }
+            caption("At least one tab must stay visible.")
+        }
+
+        Section("Sessions") {
+            keepOpenToggle("Show location subtitle", isOn: $settings.showLocationSubtitle)
+            keepOpenToggle("Hide archived sessions", isOn: $settings.hideArchivedSessions)
+        }
+    }
+
+    // MARK: - Data
+
+    /// Billing day sets the This billing window and where Claude Code's cycle spend starts.
+    private var showsBillingDay: Bool {
+        settings.usageTimelinePreset == .thisBilling || settings.claudeCodeEnabled
+    }
+
+    @ViewBuilder
+    private var dataSections: some View {
+        Section {
+            Picker("Poll every", selection: $settings.refreshIntervalSeconds) {
+                ForEach(SettingsStore.refreshIntervalOptions, id: \.self) { seconds in
+                    Text(SettingsStore.intervalLabel(seconds)).tag(seconds)
+                }
+            }
+            .onChange(of: settings.refreshIntervalSeconds) { _, _ in
+                MenuBarPanelKeeper.keepOpen()
+            }
+
+            timezonePicker
+
+            if showsBillingDay {
+                Stepper(value: $settings.billingDayOfMonth, in: 1...31) {
+                    Text("Billing day \(settings.billingDayOfMonth)")
+                }
+                .onChange(of: settings.billingDayOfMonth) { _, _ in
+                    Task { await store.refresh() }
+                    MenuBarPanelKeeper.keepOpen()
+                }
+            }
+        }
+
+        if settings.usageTimelinePreset == .custom {
+            Section("Custom range") {
+                customRangePickers
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var customRangePickers: some View {
+        DatePicker(
+            "Start date",
+            selection: $settings.customRangeStart,
+            in: Date.distantPast...Date(),
+            displayedComponents: [.date]
+        )
+        .onChange(of: settings.customRangeStart) { _, _ in
+            Task { await store.refresh() }
+            MenuBarPanelKeeper.keepOpen()
+        }
+
+        DatePicker(
+            "End date",
+            selection: $settings.customRangeEnd,
+            in: settings.customRangeStart...Date(),
+            displayedComponents: [.date]
+        )
+        .onChange(of: settings.customRangeEnd) { _, _ in
+            Task { await store.refresh() }
+            MenuBarPanelKeeper.keepOpen()
+        }
+
+        caption("Both dates are included. Future dates can't be selected.")
+    }
+
+    // MARK: - Updates
+
+    @ViewBuilder
+    private var updatesSections: some View {
+        Section {
+            if updates.isDevBuild {
+                caption("Updates are disabled in Burnrate-dev. Reinstall with scripts/package.sh --dev.")
+            } else {
+                if let pendingUpdate = updates.pendingUpdate {
+                    HStack {
+                        Text(pendingUpdate.title)
+                        Spacer()
+                        Button(pendingUpdate.actionTitle) {
+                            updates.openPendingUpdate()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+
+                Toggle("Check for updates automatically", isOn: $settings.autoCheckForUpdates)
+                    .onChange(of: settings.autoCheckForUpdates) { _, _ in
+                        updates.autoCheckIfNeeded()
+                        MenuBarPanelKeeper.keepOpen()
+                    }
+
+                Button("Check for Updates…") {
+                    Task { await updates.checkForUpdates(userInitiated: true) }
+                }
+
+                if updates.usesSparkle {
+                    caption("Checks once a day and lets you know when an update is ready.")
+                }
+
+                if let status = updates.statusMessage {
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(updates.lastError == nil ? Color.secondary : Color.red)
+                }
+            }
+        }
+
+        Section {
+            navigationRow("Change log", value: nil) {
+                onOpenChangeLog()
+            }
+        }
+    }
+
+    // MARK: - Helpers
 
     /// Reads the effective Claude spend default, and writes the key only when
     /// the user changes the toggle.
@@ -325,11 +465,41 @@ struct SettingsPanel: View {
         )
     }
 
-    private func statusBarHeading(_ title: String) -> some View {
-        Text(title)
-            .font(.subheadline.weight(.semibold))
+    private func keepOpenToggle(_ title: String, isOn: Binding<Bool>) -> some View {
+        Toggle(title, isOn: isOn)
+            .onChange(of: isOn.wrappedValue) { _, _ in
+                MenuBarPanelKeeper.keepOpen()
+            }
+    }
+
+    private func caption(_ text: String) -> some View {
+        Text(text)
+            .font(.caption)
             .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// A row that opens another page, with the current value before the chevron.
+    private func navigationRow(_ title: String, value: String?, action: @escaping () -> Void) -> some View {
+        Button {
+            action()
+            MenuBarPanelKeeper.keepOpen()
+        } label: {
+            HStack(spacing: 6) {
+                Text(title)
+                Spacer(minLength: 8)
+                if let value {
+                    Text(value)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private var timezonePicker: some View {

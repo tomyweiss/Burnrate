@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Collapsible search: icon toggles an inline field; optional trailing controls hide while searching.
+/// Collapsible search: icon toggles an inline field that takes the place of the
+/// trailing controls. Those controls get the full width while search is closed.
 struct SectionSearchControl<Trailing: View>: View {
     @Binding var text: String
     @Binding var isPresented: Bool
@@ -27,12 +28,9 @@ struct SectionSearchControl<Trailing: View>: View {
             if isPresented {
                 SectionSearchField(text: $text, placeholder: placeholder)
                     .transition(.move(edge: .leading).combined(with: .opacity))
-            }
-
-            Spacer(minLength: 0)
-
-            if !isPresented {
+            } else {
                 trailing()
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
 
             Button(action: toggle) {

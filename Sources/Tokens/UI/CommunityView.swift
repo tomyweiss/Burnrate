@@ -78,10 +78,6 @@ struct CommunityView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                if community.isLoading {
-                    ProgressView()
-                        .controlSize(.small)
-                }
                 heroStats(rank)
                 distributionBar(rank)
             } else if community.isLoading {

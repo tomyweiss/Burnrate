@@ -35,6 +35,13 @@ struct CommunityPanel: View {
                     Spacer()
                 }
             }
+            .overlay(alignment: .trailing) {
+                if showsRefreshIndicator {
+                    ProgressView()
+                        .controlSize(.small)
+                        .accessibilityLabel("Refreshing")
+                }
+            }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
 
@@ -42,5 +49,12 @@ struct CommunityPanel: View {
 
             CommunityView(community: community)
         }
+    }
+
+    /// Rank is already on screen, so the spinner stays in the header overlay
+    /// and does not add a row in the content stack.
+    private var showsRefreshIndicator: Bool {
+        guard community.isLoading, let rank = community.rank else { return false }
+        return rank.rankWindow == community.selectedWindow
     }
 }

@@ -19,6 +19,7 @@ final class SettingsStore {
         static let statusBarShowsClaudeFiveHour = "statusBarShowsClaudeFiveHour"
         static let statusBarShowsClaudeWeekly = "statusBarShowsClaudeWeekly"
         static let claudeCodeHintDismissed = "claudeCodeHintDismissed"
+        static let awakeIntroDismissed = "awakeIntroDismissed"
         static let claudeLimitsEnabled = "claudeLimitsEnabled"
         static let autoCheckForUpdates = "autoCheckForUpdates"
         static let usageTimelinePreset = "usageTimelinePreset"
@@ -147,6 +148,11 @@ final class SettingsStore {
         didSet { defaults.set(claudeCodeHintDismissed, forKey: Keys.claudeCodeHintDismissed) }
     }
 
+    /// One-time Keep awake note. False until the user dismisses the card or starts a trip.
+    var awakeIntroDismissed: Bool {
+        didSet { defaults.set(awakeIntroDismissed, forKey: Keys.awakeIntroDismissed) }
+    }
+
     /// Claude spend for the menu bar. The stored default is off, but a key that
     /// has never been written reads as on when Cursor is unavailable and Claude
     /// Code is installed. Reading that case does not store `true`, so a later
@@ -165,6 +171,10 @@ final class SettingsStore {
 
     func dismissClaudeCodeHint() {
         claudeCodeHintDismissed = true
+    }
+
+    func dismissAwakeIntro() {
+        awakeIntroDismissed = true
     }
 
     /// True when the menu bar would show no figures. Uses the same Cursor
@@ -558,6 +568,7 @@ final class SettingsStore {
         statusBarShowsClaudeWeekly = defaults.bool(forKey: Keys.statusBarShowsClaudeWeekly)
         claudeLimitsEnabled = defaults.bool(forKey: Keys.claudeLimitsEnabled)
         claudeCodeHintDismissed = defaults.bool(forKey: Keys.claudeCodeHintDismissed)
+        awakeIntroDismissed = defaults.bool(forKey: Keys.awakeIntroDismissed)
         showLocationSubtitle = defaults.bool(forKey: Keys.showLocationSubtitle)
         hideArchivedSessions = defaults.bool(forKey: Keys.hideArchivedSessions)
         blurSensitiveContent = defaults.bool(forKey: Keys.blurSensitiveContent)

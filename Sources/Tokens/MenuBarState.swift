@@ -79,6 +79,50 @@ enum MenuBarState {
         )
     }
 
+    /// What the menu bar shows right now, read from the live stores.
+    /// A generic limits failure keeps the last percents. Sign-in problems hide them.
+    @MainActor
+    static func presentation(
+        settings: SettingsStore,
+        store: UsageStore,
+        claudeCode: ClaudeCodeStore
+    ) -> Presentation {
+        let limitsError = claudeCode.limitsError
+        let limitFiguresVisible = limitsError == nil || limitsError == ClaudeLimitsClient.unavailable
+        return presentation(
+            cursor: Cursor(
+                enabled: settings.cursorEnabled,
+                available: store.isCursorAvailable,
+                burnLevel: store.burnLevel,
+                showsWindowSpend: settings.statusBarShowsWindowSpend,
+                showsCursorModels: settings.statusBarShowsCursorModels,
+                showsOtherModels: settings.statusBarShowsOtherModels,
+                showsGrokBot: settings.statusBarShowsGrokBot,
+                windowDollars: store.snapshot.windowDollars,
+                spendIsPlaceholder: !store.hasCompletedFetch && store.lastError == nil,
+                cursorModelsPercent: store.includedPools?.cursorModelsPercent,
+                otherModelsPercent: store.includedPools?.otherModelsPercent,
+                grokBotPercent: store.grokBotUsage?.percentUsed
+            ),
+            claude: Claude(
+                installed: claudeCode.isInstalled,
+                enabled: settings.claudeCodeEnabled,
+                burnLevel: claudeCode.burnLevel,
+                showsSpend: settings.showsClaudeSpend(
+                    cursorAvailable: store.isCursorAvailable,
+                    claudeInstalled: claudeCode.isInstalled
+                ),
+                dollars: claudeCode.snapshot.windowDollars,
+                spendIsPlaceholder: !claudeCode.hasCompletedFetch && claudeCode.lastError == nil,
+                showsFiveHour: settings.statusBarShowsClaudeFiveHour,
+                fiveHourPercent: limitFiguresVisible ? claudeCode.limits?.fiveHour?.percentUsed : nil,
+                showsWeekly: settings.statusBarShowsClaudeWeekly,
+                weeklyPercent: limitFiguresVisible ? claudeCode.limits?.weekly?.percentUsed : nil,
+                limitsEnabled: settings.claudeLimitsEnabled
+            )
+        )
+    }
+
     /// The worse of the enabled sources. A disabled or missing source does not
     /// contribute its flame or its warning triangle.
     private static func combinedBurn(cursor: Cursor, claude: Claude, claudeVisible: Bool) -> BurnLevel {

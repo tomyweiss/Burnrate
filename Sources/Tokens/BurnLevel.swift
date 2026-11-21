@@ -61,10 +61,13 @@ enum BurnLevel: Equatable, Sendable {
 
     /// Menu-bar flame for this level. Burnrate-dev adds the gray dot.
     static func menuBarImage(for level: BurnLevel) -> NSImage {
-        if AppIdentity.isDevBuild {
-            return level.menuBarImageWithDevDot()
-        }
-        return level.menuBarImage()
+        menuBarImage(for: level, markingAwake: false)
+    }
+
+    static func menuBarImage(for level: BurnLevel, markingAwake awake: Bool) -> NSImage {
+        let base = AppIdentity.isDevBuild ? level.menuBarImageWithDevDot() : level.menuBarImage()
+        guard awake else { return base }
+        return base.withTrailingSymbol("bolt.fill")
     }
 
     /// Colored menu-bar image (`isTemplate = false` so tint is preserved).
@@ -110,6 +113,39 @@ enum BurnLevel: Equatable, Sendable {
         NSColor.secondaryLabelColor.setFill()
         NSBezierPath(ovalIn: dotRect).fill()
 
+        image.isTemplate = false
+        return image
+    }
+}
+
+private extension NSImage {
+    func withTrailingSymbol(_ name: String) -> NSImage {
+        let gap: CGFloat = 2
+        let markSize = NSSize(width: size.height * 0.55, height: size.height * 0.55)
+        let width = size.width + gap + markSize.width
+        let image = NSImage(size: NSSize(width: width, height: size.height))
+        image.lockFocus()
+        defer { image.unlockFocus() }
+        draw(
+            in: NSRect(x: 0, y: 0, width: size.width, height: size.height),
+            from: .zero,
+            operation: .sourceOver,
+            fraction: 1
+        )
+        let mark = NSImage(systemSymbolName: name, accessibilityDescription: "Awake")?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: markSize.height, weight: .bold))
+        mark?.isTemplate = false
+        mark?.draw(
+            in: NSRect(
+                x: size.width + gap,
+                y: (size.height - markSize.height) / 2,
+                width: markSize.width,
+                height: markSize.height
+            ),
+            from: .zero,
+            operation: .sourceOver,
+            fraction: 1
+        )
         image.isTemplate = false
         return image
     }
