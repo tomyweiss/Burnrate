@@ -56,15 +56,6 @@ enum StatusBarFigures {
         }
     }
 
-    struct Header: Equatable, Sendable {
-        var hero: String
-        var companions: [String]
-        var caption: String?
-        var showsTimelineSpendBelow: Bool
-        var timelineSpend: String
-        var accessibilityLabel: String
-    }
-
     static func statusText(_ input: Input) -> String? {
         let flags = Flags(input)
         guard flags.showsAny else { return nil }
@@ -75,22 +66,6 @@ enum StatusBarFigures {
         let flags = Flags(input)
         guard flags.showsAny else { return nil }
         return labeled(input, flags: flags)
-    }
-
-    static func header(_ input: Input) -> Header {
-        var flags = Flags(input)
-        if !flags.showsAny {
-            flags.spend = true
-        }
-        let parts = tokens(input, flags: flags)
-        return Header(
-            hero: parts[0],
-            companions: Array(parts.dropFirst()),
-            caption: poolCaption(flags),
-            showsTimelineSpendBelow: !flags.spend,
-            timelineSpend: spendText(input),
-            accessibilityLabel: labeled(input, flags: flags)
-        )
     }
 
     private struct Flags: Equatable {
@@ -167,14 +142,6 @@ enum StatusBarFigures {
         let number = percent.map { "\(IncludedPools.displayPercent($0))%" } ?? "—"
         guard let prefix else { return number }
         return "\(prefix) \(number)"
-    }
-
-    private static func poolCaption(_ flags: Flags) -> String? {
-        var parts: [String] = []
-        if flags.cursor { parts.append("Cursor models used this cycle") }
-        if flags.other { parts.append("Other models used this cycle") }
-        if flags.grok { parts.append("Grok Bot used this week") }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private static func labeled(_ input: Input, flags: Flags) -> String {

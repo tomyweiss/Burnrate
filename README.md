@@ -115,27 +115,32 @@ the figure off.
 ### The panel
 
 When Cursor is signed in, Claude Code data is present, and both sources are
-enabled, a **Cursor | Claude Code** switcher sits at the top.
-Each side shows that source's window total (`$12.40` or `~$31.20`). The rest of
-the panel follows the one you pick. The two amounts are never added, and the
-choice is remembered. If Cursor is not signed in, the panel opens on Claude
-Code with no switcher and no Community chip.
+enabled, two cards sit at the top: **Cursor** and **Claude Code · estimated**.
+Each card shows that source's window total (`$12.40` or `~$31.20`), a **burn
+pill** with spend in your rolling alert window (e.g. last 10 minutes), and a
+small **sparkline** of the active window. Click a card and the rest of the
+panel follows it. The two amounts are never added, and the choice is
+remembered. With one source, its card fills the row.
 
-In Cursor, the header shows the same figures you chose for the status bar (window spend
-and/or included-pool percents); when only percents are on, window spend appears
-on the line below. A **burn pill** shows spend in your rolling alert window
-(e.g. last 10 minutes), and an hourly/daily **sparkline** shows the shape of
-spend across the active window. A timeline picker switches between
-**Today**, **Last 24h**, **Last 7d**, and **This billing** (configurable
-billing day and timezone). The timeline is shared by both sources.
+Above the cards, a timeline picker switches between **Today**, **Last 24h**,
+**Last 7d**, and **This billing** (configurable billing day and timezone). The
+timeline is shared by both sources. On the same row: the **Keep awake** button,
+which keeps the Mac awake with the lid closed, shows violet while idle, and turns green with the time
+left while it runs, the **Community** button, and the **···**
+menu (Settings, Stats, Refresh, Quit).
+
+Under the cards, each bucket is a row: its name, a bar, the percent used, and
+the reset time when there is one. Cursor shows Cursor models, Other models, and
+Grok Bot. Claude Code shows the 5-hour, weekly, and per-model weekly limits when
+plan limits are on, plus extra usage when that pool is on. The last row is
+**This cycle**: included and on-demand spend for Cursor, the list-price estimate
+for Claude Code.
 
 In Claude Code, every estimated dollar starts with `~`; extra usage is
-Anthropic's own credit count, so it has none. Under the total: "Estimated at
-API list prices · not your bill". The header shows the estimated window total,
-a burn pill, and a token line. With plan limits on, 5-hour, weekly, and
-per-model weekly gauges sit above that token line, plus extra usage when that
-pool is on. A model with no list price shows its tokens and is
-left out of the cost ("No price for <model>. Tokens shown, cost excluded").
+Anthropic's own credit count, so it has none. A model with no list price shows
+its tokens and is left out of the cost ("No price for <model>. Tokens shown,
+cost excluded"). The stat tiles and the token line are under **Stats** in the
+**···** menu.
 
 Tabs slice the selected source:
 
@@ -144,18 +149,26 @@ Tabs slice the selected source:
 | **Models** | Cost share per model; expand for token detail and per-session rows |
 | **Sessions** | Chats across models. Cursor uses local Cursor data. A Claude Code session is one transcript; the workspace is its folder, and subagents open from the session |
 | **Skills** | Cost per slash command, with total / average / median views |
-| **Community** | Cursor only, from the header trophy chip. Opt-in anonymous 24h spend rank vs other sharers (share-to-view). Hidden on Claude Code |
+| **Community** | From the trophy button in the top row. One opt-in leaderboard for Cursor and Claude Code: anonymous 24h spend rank vs other sharers (share-to-view) |
 | **Feed** | Every prompt with its attributed cost, tokens, duration, and models |
 | **Bench** | Scatter chart comparing models, skills, or sessions on cost, speed, and volume — top-right is best |
 
 ### Settings
 
-**Sources** (enable Cursor and Claude Code; **Show plan limits** is off until
-you turn it on), timeline window, billing day, timezone, poll interval, spike
-threshold / window / cooldown, launch at login, status-bar figures grouped
-under Cursor and Claude Code, blur sensitive content (for demos and screen
-shares), test notification, and updates. Spike alerts use that same threshold,
-window, and cooldown for each source. A Claude Code alert is titled "Burnrate
+Settings opens as a list. Each row shows its current value and opens a page:
+
+- **Sources** — enable Cursor and Claude Code. **Show plan limits** is off
+  until you turn it on.
+- **Menu bar** — a preview and the figures to show, grouped under Cursor and
+  Claude Code.
+- **Spike alert** — threshold, window, cooldown, and a test notification.
+- **Panel** — which tabs are visible, and session display options.
+- **Data** — poll interval, timezone, billing day, and custom dates.
+- **Updates** — auto-check, check now, and the change log.
+
+**Launch at login** and **Blur session & prompt titles** (for demos and screen
+shares) are switches on the list. Spike alerts use the same threshold, window,
+and cooldown for each source. A Claude Code alert is titled "Burnrate
 spike · Claude Code" and says the amount is estimated.
 
 ## How it works

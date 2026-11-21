@@ -214,7 +214,7 @@ import TokensCore
         now: now,
         calendar: calendar
     )
-    #expect(all.map(\.title) == ["5h", "Weekly", "Opus wk", "Sonnet wk", "Extra"])
+    #expect(all.map(\.title) == ["5h limit", "Weekly limit", "Opus weekly", "Sonnet weekly", "Extra usage"])
     #expect(all.map(\.percent) == [62, 34, 80, 21, 24.8])
     try #require(all.count == 5)
     #expect(all[0].detail == "resets 3:40pm")
@@ -232,7 +232,7 @@ import TokensCore
         now: now,
         calendar: calendar
     )
-    #expect(partial.map(\.title) == ["5h", "Opus wk", "Extra"])
+    #expect(partial.map(\.title) == ["5h limit", "Opus weekly", "Extra usage"])
     try #require(partial.count == 3)
     #expect(partial[2].detail == nil)
 

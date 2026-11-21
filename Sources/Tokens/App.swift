@@ -3,16 +3,21 @@ import AppKit
 
 @main
 struct TokensApp: App {
+    @NSApplicationDelegateAdaptor(BurnrateAppDelegate.self) private var appDelegate
     @State private var settings: SettingsStore
     @State private var store: UsageStore
     @State private var claudeCodeStore: ClaudeCodeStore
     @State private var updates: UpdateManager
     @State private var community: CommunityStore
     @State private var interactionTracker: InteractionTracker
+    @State private var awake: AwakeSessionController
 
     init() {
         if CommandLine.arguments.contains("--status") {
             Self.runStatusAndExit()
+        }
+        if CommandLine.arguments.contains("--keep-awake") {
+            AwakeCommand.runAndExit()
         }
 
         let settings = SettingsStore()
@@ -38,6 +43,9 @@ struct TokensApp: App {
         _updates = State(initialValue: UpdateManager(settings: settings))
         _community = State(initialValue: community)
         _interactionTracker = State(initialValue: interactionTracker)
+        let awake = AwakeSessionController()
+        AwakeQuit.controller = awake
+        _awake = State(initialValue: awake)
     }
 
     private static func runStatusAndExit() -> Never {
@@ -96,7 +104,8 @@ struct TokensApp: App {
                 settings: settings,
                 updates: updates,
                 community: community,
-                interactionTracker: interactionTracker
+                interactionTracker: interactionTracker,
+                awake: awake
             )
                 .environment(claudeCodeStore)
                 .onAppear {
@@ -111,7 +120,7 @@ struct TokensApp: App {
     }
 
     private var menuBarLabel: some View {
-        let bar = menuBarPresentation
+        let bar = MenuBarState.presentation(settings: settings, store: store, claudeCode: claudeCodeStore)
         return Label {
             if let amount = bar.statusText {
                 Text(amount)
@@ -119,48 +128,8 @@ struct TokensApp: App {
                     .accessibilityLabel(bar.accessibilityText ?? amount)
             }
         } icon: {
-            Image(nsImage: BurnLevel.menuBarImage(for: bar.burnLevel))
+            Image(nsImage: BurnLevel.menuBarImage(for: bar.burnLevel, markingAwake: awake.isRunning))
         }
         .labelStyle(.titleAndIcon)
     }
-
-    private var menuBarPresentation: MenuBarState.Presentation {
-        MenuBarState.presentation(
-            cursor: MenuBarState.Cursor(
-                enabled: settings.cursorEnabled,
-                available: store.isCursorAvailable,
-                burnLevel: store.burnLevel,
-                showsWindowSpend: settings.statusBarShowsWindowSpend,
-                showsCursorModels: settings.statusBarShowsCursorModels,
-                showsOtherModels: settings.statusBarShowsOtherModels,
-                showsGrokBot: settings.statusBarShowsGrokBot,
-                windowDollars: store.snapshot.windowDollars,
-                spendIsPlaceholder: !store.hasCompletedFetch && store.lastError == nil,
-                cursorModelsPercent: store.includedPools?.cursorModelsPercent,
-                otherModelsPercent: store.includedPools?.otherModelsPercent,
-                grokBotPercent: store.grokBotUsage?.percentUsed
-            ),
-            claude: MenuBarState.Claude(
-                installed: claudeCodeStore.isInstalled,
-                enabled: settings.claudeCodeEnabled,
-                burnLevel: claudeCodeStore.burnLevel,
-                showsSpend: settings.showsClaudeSpend(
-                    cursorAvailable: store.isCursorAvailable,
-                    claudeInstalled: claudeCodeStore.isInstalled
-                ),
-                dollars: claudeCodeStore.snapshot.windowDollars,
-                spendIsPlaceholder: !claudeCodeStore.hasCompletedFetch && claudeCodeStore.lastError == nil,
-                showsFiveHour: settings.statusBarShowsClaudeFiveHour,
-                fiveHourPercent: claudeCodeStore.limitsError == nil
-                    ? claudeCodeStore.limits?.fiveHour?.percentUsed
-                    : nil,
-                showsWeekly: settings.statusBarShowsClaudeWeekly,
-                weeklyPercent: claudeCodeStore.limitsError == nil
-                    ? claudeCodeStore.limits?.weekly?.percentUsed
-                    : nil,
-                limitsEnabled: settings.claudeLimitsEnabled
-            )
-        )
-    }
-
 }

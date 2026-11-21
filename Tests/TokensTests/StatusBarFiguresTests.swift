@@ -109,40 +109,6 @@ private func figures(
     #expect(StatusBarFigures.accessibilityLabel(input) == "Window spend $—.——")
 }
 
-@Test func statusBarHeaderSpendOnly() {
-    let header = StatusBarFigures.header(figures(spend: true))
-    #expect(header.hero == "$12.40")
-    #expect(header.companions.isEmpty)
-    #expect(header.caption == nil)
-    #expect(header.showsTimelineSpendBelow == false)
-}
-
-@Test func statusBarHeaderAllOffMatchesSpend() {
-    let header = StatusBarFigures.header(figures(windowDollars: 0, spendIsPlaceholder: true))
-    #expect(header.hero == "$—.——")
-    #expect(header.companions.isEmpty)
-    #expect(header.caption == nil)
-    #expect(header.showsTimelineSpendBelow == false)
-    #expect(header.accessibilityLabel == "Window spend $—.——")
-}
-
-@Test func statusBarHeaderPercentOnlyKeepsTimelineSpendBelow() {
-    let header = StatusBarFigures.header(figures(cursor: true))
-    #expect(header.hero == "72%")
-    #expect(header.companions.isEmpty)
-    #expect(header.caption == "Cursor models used this cycle")
-    #expect(header.showsTimelineSpendBelow == true)
-    #expect(header.timelineSpend == "$12.40")
-}
-
-@Test func statusBarHeaderBothPercents() {
-    let header = StatusBarFigures.header(figures(cursor: true, other: true))
-    #expect(header.hero == "C 72%")
-    #expect(header.companions == ["O 45%"])
-    #expect(header.caption == "Cursor models used this cycle · Other models used this cycle")
-    #expect(header.showsTimelineSpendBelow == true)
-}
-
 @Test func statusBarGrokBotAloneOmitsLetter() {
     let input = figures(grok: true)
     #expect(StatusBarFigures.statusText(input) == "10%")
@@ -176,22 +142,6 @@ private func figures(
     let input = figures(grok: true, grokPercent: nil)
     #expect(StatusBarFigures.statusText(input) == "—")
     #expect(StatusBarFigures.accessibilityLabel(input) == "Grok Bot not loaded")
-}
-
-@Test func statusBarHeaderGrokBotWeekCaption() {
-    let header = StatusBarFigures.header(figures(grok: true))
-    #expect(header.hero == "10%")
-    #expect(header.caption == "Grok Bot used this week")
-    #expect(header.showsTimelineSpendBelow == true)
-}
-
-@Test func statusBarHeaderSpendStaysHero() {
-    let header = StatusBarFigures.header(figures(spend: true, cursor: true, other: true))
-    #expect(header.hero == "$12.40")
-    #expect(header.companions == ["C 72%", "O 45%"])
-    #expect(header.caption == "Cursor models used this cycle · Other models used this cycle")
-    #expect(header.showsTimelineSpendBelow == false)
-    #expect(header.timelineSpend == "$12.40")
 }
 
 @Test func statusBarCursorSpendOnly() {

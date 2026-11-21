@@ -79,8 +79,7 @@ enum PanelStats {
     }
 }
 
-/// Three columns by two rows. Vertical padding drops from 4 to 0 when the header
-/// is offered less than its ideal height, so the rings stay 88pt and the footer stays put.
+/// Three columns by two rows, shown in the Stats popover.
 struct PanelStatsGrid: View {
     let stats: [PanelStat]
 
@@ -93,22 +92,14 @@ struct PanelStatsGrid: View {
     ]
 
     var body: some View {
-        ViewThatFits(in: .vertical) {
-            grid(verticalPadding: 4)
-            grid(verticalPadding: 2)
-            grid(verticalPadding: 0)
-        }
-    }
-
-    private func grid(verticalPadding: CGFloat) -> some View {
         LazyVGrid(columns: Self.columns, spacing: 6) {
             ForEach(Array(stats.enumerated()), id: \.offset) { _, stat in
-                tile(stat, verticalPadding: verticalPadding)
+                tile(stat)
             }
         }
     }
 
-    private func tile(_ stat: PanelStat, verticalPadding: CGFloat) -> some View {
+    private func tile(_ stat: PanelStat) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(stat.title)
                 .font(.caption)
@@ -129,7 +120,7 @@ struct PanelStatsGrid: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, verticalPadding)
+        .padding(.vertical, 4)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)

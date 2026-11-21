@@ -6,6 +6,8 @@ struct SparklineView: View {
     let now: Date
     /// Fixed chart height. Nil lets the bars fill whatever height the parent offers.
     var chartHeight: CGFloat? = 36
+    /// The start and end captions under the bars. Off where the chart is too small for them.
+    var showsAxisLabels = true
 
     @State private var hoveredIndex: Int?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -83,13 +85,15 @@ struct SparklineView: View {
             .frame(maxHeight: chartHeight == nil ? .infinity : nil)
             .animation(reduceMotion ? nil : .snappy, value: hoveredIndex)
 
-            HStack {
-                Text(window.sparklineStartLabel(now: now))
-                Spacer()
-                Text(window.sparklineEndLabel)
+            if showsAxisLabels {
+                HStack {
+                    Text(window.sparklineStartLabel(now: now))
+                    Spacer()
+                    Text(window.sparklineEndLabel)
+                }
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
             }
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
         }
     }
 

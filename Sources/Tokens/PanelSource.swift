@@ -2,7 +2,6 @@ import Foundation
 
 /// Which panel source is visible, and how a missing Cursor login is treated.
 enum PanelSourceResolver {
-    static let estimatedCaption = "Estimated at API list prices · not your bill"
     static let estimatedHelp = "Estimated from local token counts × Anthropic list prices. Claude Code doesn't record charges. On Pro and Max you pay a flat rate; this is what the same usage would cost on the API."
     static let neitherSourceMessage = "No Cursor session or Claude Code data found. Sign in to Cursor, or run Claude Code once."
 
@@ -57,11 +56,20 @@ enum PanelSourceResolver {
     static let placeholderBilled = "$—.——"
     static let placeholderEstimated = "~$—.——"
 
-    static func segmentTitle(source: UsageSource, windowDollars: Double, isPlaceholder: Bool) -> String {
-        let amount = isPlaceholder
-            ? (source == .claudeCode ? placeholderEstimated : placeholderBilled)
-            : MoneyFormat.string(windowDollars, style: source.costStyle)
-        return "\(source.displayName)  \(amount)"
+    /// Window spend on a source card. Claude Code is estimated, so it carries `~`.
+    static func windowFigure(source: UsageSource, windowDollars: Double, isPlaceholder: Bool) -> String {
+        if isPlaceholder {
+            return source == .claudeCode ? placeholderEstimated : placeholderBilled
+        }
+        return MoneyFormat.string(windowDollars, style: source.costStyle)
+    }
+
+    /// Label above the figure on a source card.
+    static func cardTitle(for source: UsageSource) -> String {
+        switch source {
+        case .cursor: source.displayName
+        case .claudeCode: "\(source.displayName) · estimated"
+        }
     }
 
     static func indexingCaption(done: Int, total: Int) -> String {
