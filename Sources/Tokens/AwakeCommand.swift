@@ -20,7 +20,7 @@ enum AwakeCommand {
             let directory = argument("--directory"),
             AwakeTrip.isSessionDirectory(directory)
         else {
-            fputs("Usage: Tokens --keep-awake --seconds 1800|2700|5400 --directory /path/awake\n", stderr)
+            fputs("Usage: Tokens --keep-awake --seconds <300-28800, whole minutes> --directory /path/awake\n", stderr)
             return 2
         }
 

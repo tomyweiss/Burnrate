@@ -93,8 +93,33 @@ public enum AwakeTrip {
         "\(seconds / 60) min"
     }
 
+    /// Custom trips run in whole minutes, from 5 minutes to 8 hours.
+    public static let durationRange: ClosedRange<Int> = (5 * 60)...(8 * 60 * 60)
+
     public static func isAllowedDuration(_ seconds: Int) -> Bool {
-        durationChoices.contains(seconds)
+        durationRange.contains(seconds) && seconds % 60 == 0
+    }
+
+    /// Reads a typed duration as seconds: "45" and "45m" are minutes; "2h", "1h30", "1h 30m",
+    /// and "1:30" are hours and minutes. The result may still fall outside `durationRange`.
+    public static func parseDuration(_ text: String) -> Int? {
+        let compact = text.lowercased().filter { !$0.isWhitespace }
+        let minutes: Int?
+        if let match = compact.wholeMatch(of: #/(\d{1,4})(?:m|min)?/#) {
+            minutes = Int(match.1)
+        } else if let match = compact.wholeMatch(of: #/(\d{1,2}):(\d{2})/#) {
+            guard let hours = Int(match.1), let rest = Int(match.2), rest < 60 else { return nil }
+            minutes = hours * 60 + rest
+        } else if let match = compact.wholeMatch(of: #/(\d{1,2})h(?:(\d{1,2})(?:m|min)?)?/#) {
+            guard let hours = Int(match.1) else { return nil }
+            let rest = match.2.flatMap { Int($0) } ?? 0
+            guard rest < 60 else { return nil }
+            minutes = hours * 60 + rest
+        } else {
+            minutes = nil
+        }
+        guard let minutes, minutes > 0 else { return nil }
+        return minutes * 60
     }
 
     /// Cancel wins, then heat, then a low battery, then the timer.
@@ -201,6 +226,7 @@ public enum AwakeTrip {
 
     public static let adminPrompt = "Burnrate keeps this Mac awake until the timer ends, then turns sleep back on."
     public static let restorePrompt = "Burnrate turns sleep back on after an interrupted trip."
+    public static let foreignRestorePrompt = "Burnrate turns sleep back on. Another app had turned it off."
 
     public struct SessionFile: Codable, Equatable, Sendable {
         public var pid: Int32
@@ -234,7 +260,9 @@ public enum AwakeTrip {
         if seconds <= 0 { return "0m" }
         if seconds < 60 { return "\(seconds)s" }
         let minutes = Int((Double(seconds) / 60).rounded(.up))
-        return "\(minutes)m"
+        if minutes < 60 { return "\(minutes)m" }
+        let rest = minutes % 60
+        return rest == 0 ? "\(minutes / 60)h" : "\(minutes / 60)h \(rest)m"
     }
 
     public static func stopMessage(_ reason: StopReason) -> String {
@@ -262,9 +290,9 @@ public enum AwakeTrip {
         """
     }
 
-    public static func restoreSleepScript() -> String {
+    public static func restoreSleepScript(prompt: String = restorePrompt) -> String {
         """
-        do shell script "/usr/bin/pmset -a disablesleep 0" with administrator privileges with prompt \(appleQuoted(restorePrompt))
+        do shell script "/usr/bin/pmset -a disablesleep 0" with administrator privileges with prompt \(appleQuoted(prompt))
         """
     }
 

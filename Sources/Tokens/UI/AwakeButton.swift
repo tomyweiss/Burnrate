@@ -45,7 +45,7 @@ enum AwakeButtonState: Equatable {
 
     var menuHeading: String {
         switch self {
-        case .idle: "Stay awake with the lid closed. Sleep returns if the Mac gets hot."
+        case .idle: "Stay awake with the lid closed"
         case .starting: "Waiting for your password"
         case .running(let remaining): "Awake with the lid closed · \(remaining) left"
         }
@@ -132,10 +132,13 @@ struct AwakeButton: View {
                 } else {
                     ForEach(AwakeTrip.durationChoices, id: \.self) { seconds in
                         Button("For \(AwakeTrip.durationLabel(seconds))") {
-                            awake.start(seconds: seconds)
-                            if awake.holdsAwake {
-                                onTripStarted()
-                            }
+                            start(seconds: seconds)
+                        }
+                    }
+                    Button("Custom…") {
+                        if let seconds = awake.askCustomDuration() {
+                            start(seconds: seconds)
+                        } else {
                             MenuBarPanelKeeper.keepOpen()
                         }
                     }
@@ -149,5 +152,13 @@ struct AwakeButton: View {
         .fixedSize()
         .help(state.help)
         .accessibilityLabel(state.help)
+    }
+
+    private func start(seconds: Int) {
+        awake.start(seconds: seconds)
+        if awake.holdsAwake {
+            onTripStarted()
+        }
+        MenuBarPanelKeeper.keepOpen()
     }
 }

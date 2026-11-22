@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.60.16
+
+- Keep awake has a Custom option. Type how long to stay awake, like 2h, 1h30, or 75 minutes, from 5 minutes up to 8 hours. Burnrate remembers the last length you typed.
+- Trips longer than an hour show the time left in hours and minutes, such as 1h 24m.
+- The Keep awake menu heading is shorter.
+- When another app has already turned sleep off, Burnrate now offers to turn sleep back on. Before, the message had two buttons that both just closed it, and there was no way out from Burnrate.
+- The "Burnrate couldn't change sleep" message has a single OK button.
+
 ## 0.60.15
 
 - Burnrate now tells you when an update is out. The daily check posts a notification and shows a banner at the top of the panel. Before, it could find an update and say nothing until you checked by hand in Settings.
