@@ -52,6 +52,7 @@ final class AwakeSessionController {
     private var didOfferRestore = false
     private let defaults: UserDefaults
     private let warningKey = "lidAwakeWarningConfirmed"
+    private let customDurationKey = "lidAwakeCustomDuration"
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -97,6 +98,32 @@ final class AwakeSessionController {
         }
     }
 
+    /// Asks for a trip length. Returns seconds, or nil when the person cancels.
+    func askCustomDuration() -> Int? {
+        MenuBarPanelKeeper.hidePanelsForModalAlert()
+        defer { MenuBarPanelKeeper.restorePanelsAfterModalAlert() }
+        NSApp.activate()
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
+        field.placeholderString = "2h, 1h30, or 75"
+        field.stringValue = defaults.string(forKey: customDurationKey) ?? ""
+        let alert = NSAlert()
+        alert.messageText = "Keep awake for how long?"
+        alert.informativeText = "5 minutes to 8 hours."
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Start")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = field
+        while alert.runModal() == .alertFirstButtonReturn {
+            let text = field.stringValue.trimmingCharacters(in: .whitespaces)
+            if let seconds = AwakeTrip.parseDuration(text), AwakeTrip.isAllowedDuration(seconds) {
+                defaults.set(text, forKey: customDurationKey)
+                return seconds
+            }
+            alert.informativeText = "Enter 5 minutes to 8 hours, like 2h, 1h30, or 75."
+        }
+        return nil
+    }
+
     func stop() {
         let directory = Self.directory
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -114,7 +141,10 @@ final class AwakeSessionController {
             cancelTitle: "Not now"
         )
         guard turnOn else { return }
-        let script = AwakeTrip.restoreSleepScript()
+        turnSleepOn(AwakeTrip.restoreSleepScript())
+    }
+
+    private func turnSleepOn(_ script: String) {
         Task.detached {
             let result = PrivilegedShell.run(script)
             await self.finishRestore(result)
@@ -192,22 +222,31 @@ final class AwakeSessionController {
         case .restoreRequired:
             restoreIfNeeded()
         case .foreignSwitch:
-            _ = confirm(
+            let turnOn = confirm(
                 "Sleep is already off",
-                "Something else turned sleep off. Burnrate will leave that as it is.",
-                confirmTitle: "OK",
-                cancelTitle: "Close"
+                "Another app turned sleep off, so this Mac already stays awake. Turn sleep back on? You can start a trip after that.",
+                confirmTitle: "Turn sleep on",
+                cancelTitle: "Leave it off"
             )
+            if turnOn {
+                turnSleepOn(AwakeTrip.restoreSleepScript(prompt: AwakeTrip.foreignRestorePrompt))
+            }
         }
     }
 
     private func presentFailure() {
-        _ = confirm(
-            "Burnrate couldn't change sleep",
-            "macOS refused the sleep switch.",
-            confirmTitle: "OK",
-            cancelTitle: "Close"
-        )
+        inform("Burnrate couldn't change sleep", "macOS refused the sleep switch.")
+    }
+
+    private func inform(_ title: String, _ body: String) {
+        MenuBarPanelKeeper.hidePanelsForModalAlert()
+        defer { MenuBarPanelKeeper.restorePanelsAfterModalAlert() }
+        NSApp.activate()
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = body
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     private func confirmWarning() -> Bool {

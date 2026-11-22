@@ -79,6 +79,13 @@ private func sample(
     #expect(AwakeTrip.startBlock(for: .leaveForeignSwitchAlone) == .foreignSwitch)
 }
 
+@Test func awakeTripRestoreScriptNamesWhySleepComesBack() {
+    #expect(AwakeTrip.restoreSleepScript().contains(AwakeTrip.restorePrompt))
+    let foreign = AwakeTrip.restoreSleepScript(prompt: AwakeTrip.foreignRestorePrompt)
+    #expect(foreign.contains("/usr/bin/pmset -a disablesleep 0"))
+    #expect(foreign.contains(AwakeTrip.foreignRestorePrompt))
+}
+
 @Test func awakeTripReadsTheLivePmsetShapes() {
     let settings = """
     System-wide power settings:
@@ -201,4 +208,33 @@ private func sample(
     #expect(AwakeTrip.durationLabel(5_400) == "90 min")
     #expect(AwakeTrip.isAllowedDuration(2_700))
     #expect(!AwakeTrip.isAllowedDuration(60))
+}
+
+@Test func awakeTripAllowsCustomTripsInWholeMinutesUpToEightHours() {
+    #expect(AwakeTrip.isAllowedDuration(5 * 60))
+    #expect(AwakeTrip.isAllowedDuration(8 * 60 * 60))
+    #expect(!AwakeTrip.isAllowedDuration(4 * 60))
+    #expect(!AwakeTrip.isAllowedDuration(8 * 60 * 60 + 60))
+    #expect(!AwakeTrip.isAllowedDuration(10 * 60 + 30))
+}
+
+@Test func awakeTripReadsTypedDurations() {
+    #expect(AwakeTrip.parseDuration("75") == 75 * 60)
+    #expect(AwakeTrip.parseDuration("45m") == 45 * 60)
+    #expect(AwakeTrip.parseDuration(" 45 min ") == 45 * 60)
+    #expect(AwakeTrip.parseDuration("2h") == 2 * 3_600)
+    #expect(AwakeTrip.parseDuration("1h30") == 90 * 60)
+    #expect(AwakeTrip.parseDuration("1H 30M") == 90 * 60)
+    #expect(AwakeTrip.parseDuration("1:05") == 65 * 60)
+    #expect(AwakeTrip.parseDuration("1:75") == nil)
+    #expect(AwakeTrip.parseDuration("1h75") == nil)
+    #expect(AwakeTrip.parseDuration("0") == nil)
+    #expect(AwakeTrip.parseDuration("") == nil)
+    #expect(AwakeTrip.parseDuration("soon") == nil)
+}
+
+@Test func awakeTripShowsLongTripsInHours() {
+    let deadline = Date(timeIntervalSince1970: 10_000)
+    #expect(AwakeTrip.remainingLabel(until: deadline, now: deadline.addingTimeInterval(-3_600)) == "1h")
+    #expect(AwakeTrip.remainingLabel(until: deadline, now: deadline.addingTimeInterval(-5_000)) == "1h 24m")
 }
