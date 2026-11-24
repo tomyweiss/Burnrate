@@ -7,7 +7,7 @@ import Foundation
 /// https://github.com/FullFran/claudeops-tui/blob/main/docs/oauth-usage-endpoint.md
 /// and the percent-scale fix in
 /// https://github.com/Dicklesworthstone/coding_agent_account_manager/commit/65f1e175bc0167131657cdbcd3a42c94ad83a3e9
-public struct ClaudeLimitWindow: Sendable, Hashable {
+public struct ClaudeLimitWindow: Sendable, Hashable, Codable {
     public let percentUsed: Double
     public let resetsAt: Date?
 
@@ -19,7 +19,7 @@ public struct ClaudeLimitWindow: Sendable, Hashable {
 
 /// Pay-as-you-go credit pool from `extra_usage`. Amounts are major units
 /// (dollars). `percentUsed` is nil when the payload has no monthly limit.
-public struct ClaudeExtraUsage: Sendable, Hashable {
+public struct ClaudeExtraUsage: Sendable, Hashable, Codable {
     public let percentUsed: Double?
     public let usedDollars: Double?
     public let monthlyLimitDollars: Double?
@@ -48,7 +48,7 @@ public struct ClaudeExtraUsage: Sendable, Hashable {
 
 /// The 5-hour session window, the overall 7-day window, and the optional
 /// per-model weekly windows.
-public struct ClaudeLimits: Sendable, Hashable {
+public struct ClaudeLimits: Sendable, Hashable, Codable {
     public let fiveHour: ClaudeLimitWindow?
     public let weekly: ClaudeLimitWindow?
     public let weeklyOpus: ClaudeLimitWindow?

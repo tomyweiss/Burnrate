@@ -34,7 +34,10 @@ final class ClaudeCodeStore {
     private let index: ClaudeTranscriptIndex
     private let projectsRoot: URL
     private let planLimits: ClaudePlanLimits
+    private let limitsCacheURL: URL
     private var lastLimitsFetchAt: Date?
+    private var limitsRetryAt: Date?
+    private var limitsBackoff: TimeInterval = 0
     private var lastRenewAt: Date?
     private var pollTask: Task<Void, Never>?
     private var refreshGeneration = 0
@@ -71,6 +74,11 @@ final class ClaudeCodeStore {
         self.projectsRoot = projectsRoot
         self.planLimits = planLimits
         self.index = ClaudeTranscriptIndex(projectsRoot: projectsRoot, cacheURL: cacheURL)
+        self.limitsCacheURL = cacheURL.deletingLastPathComponent()
+            .appendingPathComponent("claude-limits.json")
+        if settings.claudeLimitsEnabled {
+            limits = Self.loadLimits(from: limitsCacheURL)
+        }
     }
 
     /// Drops cached windows when the user turns plan limits off.
@@ -78,6 +86,25 @@ final class ClaudeCodeStore {
         limits = nil
         limitsError = nil
         lastLimitsFetchAt = nil
+        limitsRetryAt = nil
+        limitsBackoff = 0
+        try? FileManager.default.removeItem(at: limitsCacheURL)
+    }
+
+    /// Last good windows from a previous launch, so a relaunch during a rate limit
+    /// still shows rows. Reset times may be in the past until the next fetch.
+    private static func loadLimits(from url: URL) -> ClaudeLimits? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(ClaudeLimits.self, from: data)
+    }
+
+    private func saveLimits(_ limits: ClaudeLimits) {
+        guard let data = try? JSONEncoder().encode(limits) else { return }
+        try? FileManager.default.createDirectory(
+            at: limitsCacheURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try? data.write(to: limitsCacheURL, options: .atomic)
     }
 
     func start() {
@@ -227,7 +254,8 @@ final class ClaudeCodeStore {
         await communityStore?.handleClaudeRefreshIfNeeded()
     }
 
-    /// At most once per refresh, and not again for 60 seconds. A failed call
+    /// At most once per refresh, and not again for 60 seconds. A 429 waits
+    /// `Retry-After` or a doubling backoff, whichever is longer. A failed call
     /// keeps the previous windows and sets `limitsError`. An expired or rejected
     /// login is renewed once, at most every `ClaudeLimitsClient.renewInterval`.
     private func refreshPlanLimits() async {
@@ -239,6 +267,9 @@ final class ClaudeCodeStore {
 
         let now = planLimits.now()
         if let lastLimitsFetchAt, now.timeIntervalSince(lastLimitsFetchAt) < ClaudeLimitsClient.minimumInterval {
+            return
+        }
+        if let limitsRetryAt, now < limitsRetryAt {
             return
         }
 
@@ -279,10 +310,20 @@ final class ClaudeCodeStore {
             }
             limits = fetched
             limitsError = nil
+            limitsRetryAt = nil
+            limitsBackoff = 0
+            saveLimits(fetched)
         } catch {
             guard settings.claudeLimitsEnabled else {
                 clearPlanLimits()
                 return
+            }
+            if case ClaudeLimitsClientError.rateLimited(let retryAfter) = error {
+                limitsBackoff = min(
+                    max(limitsBackoff * 2, ClaudeLimitsClient.minimumBackoff),
+                    ClaudeLimitsClient.maximumBackoff
+                )
+                limitsRetryAt = now.addingTimeInterval(max(retryAfter ?? 0, limitsBackoff))
             }
             if case ClaudeLimitsClientError.httpStatus(401) = error {
                 limitsError = ClaudeLimitsClient.loginExpired

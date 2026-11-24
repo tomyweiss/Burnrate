@@ -493,6 +493,68 @@ import TokensCore
     #expect(harness.store.limitsError == "Limits unavailable")
 }
 
+@Test @MainActor func claudeLimitsRateLimitBacksOffAndDoubles() async throws {
+    let harness = try LimitsHarness()
+    defer { harness.cleanup() }
+    harness.settings.claudeLimitsEnabled = true
+    harness.probe.data = try claudeLimitsKeychain(token: "token-a", expiresAtMs: 1_800_000_000_000)
+    harness.probe.fetchError = ClaudeLimitsClientError.rateLimited(retryAfter: nil)
+
+    await harness.store.refresh()
+    #expect(harness.probe.fetches.count == 1)
+    #expect(harness.store.limitsError == ClaudeLimitsClient.unavailable)
+
+    harness.probe.now = harness.probe.now.addingTimeInterval(119)
+    await harness.store.refresh()
+    #expect(harness.probe.fetches.count == 1)
+
+    harness.probe.now = harness.probe.now.addingTimeInterval(1)
+    await harness.store.refresh()
+    #expect(harness.probe.fetches.count == 2)
+
+    harness.probe.now = harness.probe.now.addingTimeInterval(239)
+    await harness.store.refresh()
+    #expect(harness.probe.fetches.count == 2)
+
+    harness.probe.fetchError = nil
+    harness.probe.now = harness.probe.now.addingTimeInterval(1)
+    await harness.store.refresh()
+    #expect(harness.probe.fetches.count == 3)
+    #expect(harness.store.limitsError == nil)
+
+    harness.probe.fetchError = ClaudeLimitsClientError.rateLimited(retryAfter: 600)
+    harness.probe.now = harness.probe.now.addingTimeInterval(60)
+    await harness.store.refresh()
+    harness.probe.now = harness.probe.now.addingTimeInterval(599)
+    await harness.store.refresh()
+    #expect(harness.probe.fetches.count == 4)
+}
+
+@Test @MainActor func claudeLimitsSurviveARelaunch() async throws {
+    let harness = try LimitsHarness()
+    defer { harness.cleanup() }
+    harness.settings.claudeLimitsEnabled = true
+    harness.probe.data = try claudeLimitsKeychain(token: "token-a", expiresAtMs: 1_800_000_000_000)
+    let expected = ClaudeLimits(
+        fiveHour: ClaudeLimitWindow(percentUsed: 3, resetsAt: Date(timeIntervalSince1970: 1_700_003_600)),
+        weekly: ClaudeLimitWindow(percentUsed: 12, resetsAt: nil),
+        extraUsage: ClaudeExtraUsage(percentUsed: nil, usedDollars: 0, monthlyLimitDollars: nil)
+    )
+    harness.probe.limits = expected
+    await harness.store.refresh()
+
+    let relaunched = harness.reopen()
+    #expect(relaunched.limits == expected)
+
+    harness.probe.fetchError = ClaudeLimitsClientError.rateLimited(retryAfter: nil)
+    await relaunched.refresh()
+    #expect(relaunched.limits == expected)
+    #expect(ClaudeLimitGauges.note(error: relaunched.limitsError, hasLimits: relaunched.limits != nil) == nil)
+
+    relaunched.clearPlanLimits()
+    #expect(harness.reopen().limits == nil)
+}
+
 @Test @MainActor func claudeLimitsFetchWaitsSixtySeconds() async throws {
     let harness = try LimitsHarness()
     defer { harness.cleanup() }
@@ -599,6 +661,17 @@ private final class LimitsHarness {
             settings: settings,
             anomalyMonitor: nil,
             projectsRoot: root,
+            cacheURL: base.appendingPathComponent("claude-index.json"),
+            planLimits: probe.dependency()
+        )
+    }
+
+    /// A fresh store on the same files, like the app relaunching.
+    func reopen() -> ClaudeCodeStore {
+        ClaudeCodeStore(
+            settings: settings,
+            anomalyMonitor: nil,
+            projectsRoot: base.appendingPathComponent("projects", isDirectory: true),
             cacheURL: base.appendingPathComponent("claude-index.json"),
             planLimits: probe.dependency()
         )
