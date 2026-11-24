@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.60.17
+
+- Claude Code always shows the Weekly limit row under the 5h limit. Before, the row disappeared whenever Anthropic left the 7-day window out of its reply, such as early in a fresh week. A window that isn't reported shows a dash.
+- Burnrate also reads the 5h and weekly windows from the newer limits list Anthropic sends, so they still show when the older fields are empty.
+- When you have signed out of Claude Code, the panel asks you to sign in again. Before, Burnrate tried to read the blank login and showed a less helpful error.
+
 ## 0.60.16
 
 - Keep awake has a Custom option. Type how long to stay awake, like 2h, 1h30, or 75 minutes, from 5 minutes up to 8 hours. Burnrate remembers the last length you typed.

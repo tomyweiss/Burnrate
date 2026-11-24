@@ -75,6 +75,8 @@ public struct ClaudeLimits: Sendable, Hashable {
     ///
     /// `seven_day_opus` and `seven_day_sonnet` use the same `{utilization, resets_at}`
     /// object as `seven_day`, and are null on plans without that quota.
+    /// `limits` is a newer list of `{kind, percent, resets_at}`; its `session`
+    /// and `weekly_all` entries stand in when `five_hour` or `seven_day` is null.
     /// `extra_usage` is present only when `is_enabled` is true. `used_credits`
     /// and `monthly_limit` are minor units (cents when `decimal_places` is
     /// missing or 2); `utilization` is already a 0–100 percent and is ignored
@@ -85,8 +87,8 @@ public struct ClaudeLimits: Sendable, Hashable {
     /// https://github.com/projectvelox/claude-usage-widget/commit/d8947c44004b45b1620f3485ef5c494bf6313963
     /// https://github.com/NousResearch/hermes-agent/pull/94883
     public static func parse(json: [String: Any]) -> ClaudeLimits? {
-        let fiveHour = window(json["five_hour"])
-        let weekly = window(json["seven_day"])
+        let fiveHour = window(json["five_hour"]) ?? limitEntry(json["limits"], kind: "session")
+        let weekly = window(json["seven_day"]) ?? limitEntry(json["limits"], kind: "weekly_all")
         let weeklyOpus = window(json["seven_day_opus"])
         let weeklySonnet = window(json["seven_day_sonnet"])
         let extra = extraUsage(json["extra_usage"])
@@ -136,6 +138,14 @@ public struct ClaudeLimits: Sendable, Hashable {
               let percent = percent(object["utilization"])
         else { return nil }
         return ClaudeLimitWindow(percentUsed: percent, resetsAt: resetDate(object["resets_at"]))
+    }
+
+    private static func limitEntry(_ value: Any?, kind: String) -> ClaudeLimitWindow? {
+        guard let entries = value as? [[String: Any]],
+              let entry = entries.first(where: { $0["kind"] as? String == kind }),
+              let percent = percent(entry["percent"])
+        else { return nil }
+        return ClaudeLimitWindow(percentUsed: percent, resetsAt: resetDate(entry["resets_at"]))
     }
 
     private static func percent(_ value: Any?) -> Double? {
@@ -188,18 +198,20 @@ public struct ClaudeLimits: Sendable, Hashable {
 /// The payload is JSON `{"claudeAiOauth":{"accessToken":"…","expiresAt":<ms>}}`.
 /// `expiresAt` is epoch milliseconds, as written by current Claude Code
 /// (https://github.com/XueshiQiao/CCSwitcher/blob/main/ARCHITECTURE.md).
+/// A signed-out login keeps the item with an empty `accessToken`.
 public enum ClaudeOAuthToken: Equatable, Sendable {
     case valid(accessToken: String)
     case expired
+    case signedOut
     case unreadable
 
     public static func extract(from data: Data, now: Date) -> ClaudeOAuthToken {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let oauth = json["claudeAiOauth"] as? [String: Any],
-              let accessToken = oauth["accessToken"] as? String,
-              !accessToken.isEmpty,
-              let expiresAt = expires(oauth["expiresAt"])
+              let accessToken = oauth["accessToken"] as? String
         else { return .unreadable }
+        if accessToken.isEmpty { return .signedOut }
+        guard let expiresAt = expires(oauth["expiresAt"]) else { return .unreadable }
         if expiresAt <= now { return .expired }
         return .valid(accessToken: accessToken)
     }

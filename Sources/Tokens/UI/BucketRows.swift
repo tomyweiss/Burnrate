@@ -62,9 +62,18 @@ enum ClaudeLimitGauges {
         BucketMeter(title: "Weekly limit", percent: nil, detail: nil, help: help)
     ]
 
-    /// Present buckets only, in panel order. A missing window or a disabled
-    /// extra-usage pool is left out, the same way an absent Other models bucket
-    /// hides its row.
+    /// Text that replaces the limit rows, or nil to show the rows. A generic
+    /// failure keeps the last rows and only shows when there are none.
+    static func note(error: String?, hasLimits: Bool) -> String? {
+        guard let error else { return nil }
+        if error == ClaudeLimitsClient.unavailable, hasLimits { return nil }
+        return error
+    }
+
+    /// Panel order. The 5h and weekly rows come as a pair once either loads, with
+    /// "—" for a window the response left out. Per-model windows and a disabled
+    /// extra-usage pool are left out when absent, the same way an absent Other
+    /// models bucket hides its row.
     static func make(
         fiveHour: ClaudeLimitWindow?,
         weekly: ClaudeLimitWindow?,
@@ -75,10 +84,8 @@ enum ClaudeLimitGauges {
         calendar: Calendar = .current
     ) -> [BucketMeter] {
         var meters: [BucketMeter] = []
-        if let fiveHour {
+        if fiveHour != nil || weekly != nil {
             meters.append(meter("5h limit", window: fiveHour, now: now, calendar: calendar))
-        }
-        if let weekly {
             meters.append(meter("Weekly limit", window: weekly, now: now, calendar: calendar))
         }
         if let weeklyOpus {
@@ -100,14 +107,14 @@ enum ClaudeLimitGauges {
 
     private static func meter(
         _ title: String,
-        window: ClaudeLimitWindow,
+        window: ClaudeLimitWindow?,
         now: Date,
         calendar: Calendar
     ) -> BucketMeter {
         BucketMeter(
             title: title,
-            percent: window.percentUsed,
-            detail: window.resetsDetail(now: now, calendar: calendar),
+            percent: window?.percentUsed,
+            detail: window?.resetsDetail(now: now, calendar: calendar),
             help: help
         )
     }

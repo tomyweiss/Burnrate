@@ -59,6 +59,19 @@ import Testing
     #expect(ClaudeLimitGauges.placeholders.map(\.percent) == [nil, nil])
 }
 
+@Test func claudeLimitNoteShowsSignInProblemsAndFailuresWithNothingToShow() {
+    #expect(ClaudeLimitGauges.note(error: nil, hasLimits: false) == nil)
+    #expect(ClaudeLimitGauges.note(error: ClaudeLimitsClient.unavailable, hasLimits: true) == nil)
+    #expect(
+        ClaudeLimitGauges.note(error: ClaudeLimitsClient.unavailable, hasLimits: false)
+            == ClaudeLimitsClient.unavailable
+    )
+    #expect(
+        ClaudeLimitGauges.note(error: ClaudeLimitsClient.noLogin, hasLimits: true)
+            == ClaudeLimitsClient.noLogin
+    )
+}
+
 @Test func bucketRowsReserveTheirStackedHeight() {
     #expect(BucketLayout.metersHeight(rows: 0) == 0)
     #expect(BucketLayout.metersHeight(rows: 1) == BucketLayout.rowHeight)
