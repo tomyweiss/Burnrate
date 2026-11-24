@@ -242,7 +242,9 @@ final class ClaudeCodeStore {
             return
         }
 
-        guard var data = planLimits.readKeychain() else {
+        guard var data = planLimits.readKeychain(),
+              ClaudeOAuthToken.extract(from: data, now: now) != .signedOut
+        else {
             limitsError = ClaudeLimitsClient.noLogin
             return
         }

@@ -67,6 +67,25 @@ import TokensCore
     ))
 }
 
+@Test func claudeLimitsParseFallsBackToTheLimitsList() throws {
+    let json: [String: Any] = [
+        "five_hour": ["utilization": 3, "resets_at": "2026-11-24T22:59:59Z"],
+        "seven_day": NSNull(),
+        "limits": [
+            ["kind": "session", "percent": 9, "resets_at": "2026-11-24T22:59:59Z"],
+            ["kind": "weekly_all", "percent": 12, "resets_at": "2026-11-30T02:59:59Z"],
+            ["kind": "weekly_scoped", "percent": 40, "resets_at": "2026-11-30T03:00:00Z"],
+        ],
+    ]
+
+    let limits = try #require(ClaudeLimits.parse(json: json))
+    #expect(limits.fiveHour?.percentUsed == 3)
+    #expect(limits.weekly == ClaudeLimitWindow(
+        percentUsed: 12,
+        resetsAt: Date(timeIntervalSince1970: 1_796_007_599)
+    ))
+}
+
 @Test func claudeLimitsParseAllBuckets() throws {
     let json: [String: Any] = [
         "five_hour": ["utilization": 62, "resets_at": "2026-11-15T15:40:00Z"],
@@ -232,9 +251,22 @@ import TokensCore
         now: now,
         calendar: calendar
     )
-    #expect(partial.map(\.title) == ["5h limit", "Opus weekly", "Extra usage"])
-    try #require(partial.count == 3)
-    #expect(partial[2].detail == nil)
+    #expect(partial.map(\.title) == ["5h limit", "Weekly limit", "Opus weekly", "Extra usage"])
+    try #require(partial.count == 4)
+    #expect(partial[1].percent == nil)
+    #expect(partial[1].detail == nil)
+    #expect(partial[3].detail == nil)
+
+    let extraOnly = ClaudeLimitGauges.make(
+        fiveHour: nil,
+        weekly: nil,
+        weeklyOpus: nil,
+        weeklySonnet: nil,
+        extraUsage: extra,
+        now: now,
+        calendar: calendar
+    )
+    #expect(extraOnly.map(\.title) == ["Extra usage"])
 
     let none = ClaudeLimitGauges.make(
         fiveHour: nil,
@@ -270,6 +302,29 @@ import TokensCore
     let now = Date(timeIntervalSince1970: 1_700_000_000)
     #expect(ClaudeOAuthToken.extract(from: Data("not-json".utf8), now: now) == .unreadable)
     #expect(ClaudeOAuthToken.extract(from: Data("{}".utf8), now: now) == .unreadable)
+}
+
+@Test func claudeOAuthTokenReadsABlankedLoginAsSignedOut() throws {
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    let data = try JSONSerialization.data(withJSONObject: [
+        "claudeAiOauth": ["accessToken": "", "refreshToken": "", "expiresAt": 0]
+    ])
+    #expect(ClaudeOAuthToken.extract(from: data, now: now) == .signedOut)
+}
+
+@Test @MainActor func claudeLimitsBlankedLoginAsksToSignIn() async throws {
+    let harness = try LimitsHarness()
+    defer { harness.cleanup() }
+    harness.settings.claudeLimitsEnabled = true
+    harness.probe.data = try JSONSerialization.data(withJSONObject: [
+        "claudeAiOauth": ["accessToken": "", "refreshToken": "", "expiresAt": 0]
+    ])
+
+    await harness.store.refresh()
+
+    #expect(harness.probe.fetches.isEmpty)
+    #expect(harness.probe.renewals == 0)
+    #expect(harness.store.limitsError == ClaudeLimitsClient.noLogin)
 }
 
 @Test func claudeLimitsRequestUsesTheOAuthUsageEndpoint() {

@@ -498,11 +498,12 @@ struct UsagePanel: View {
         CursorBucketMeters.make(pools: store.includedPools, grokBot: store.grokBotUsage)
     }
 
-    /// Sign-in problems replace the limit rows with a note. A generic limits
-    /// failure keeps the last rows and shows no note.
+    private var claudeLimitsNote: String? {
+        ClaudeLimitGauges.note(error: claudeCode.limitsError, hasLimits: claudeCode.limits != nil)
+    }
+
     private var claudeLimitsBlocked: Bool {
-        guard let message = claudeCode.limitsError else { return false }
-        return message != ClaudeLimitsClient.unavailable
+        claudeLimitsNote != nil
     }
 
     private var claudeMeters: [BucketMeter] {
@@ -608,7 +609,7 @@ struct UsagePanel: View {
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-            } else if claudeLimitsBlocked, let note = claudeCode.limitsError {
+            } else if let note = claudeLimitsNote {
                 BucketNoteRow(title: "Plan limits") {
                     Text(note)
                         .font(.caption)
