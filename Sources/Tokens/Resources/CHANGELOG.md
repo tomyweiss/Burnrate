@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.60.18
+
+- Claude Code plan limits keep showing after a restart. Burnrate remembers the last limits it read, so a relaunch while Anthropic is busy shows those rows instead of "Limits unavailable".
+- When Anthropic says Burnrate is checking limits too often, Burnrate waits before asking again: 2 minutes at first, longer if it keeps happening, up to 30 minutes. Before, it asked every minute, which could keep the limits from coming back.
+
 ## 0.60.17
 
 - Claude Code always shows the Weekly limit row under the 5h limit. Before, the row disappeared whenever Anthropic left the 7-day window out of its reply, such as early in a fresh week. A window that isn't reported shows a dash.

@@ -32,6 +32,9 @@ enum ClaudeLimitsClient {
     static let noLogin = "No Claude Code login found. Sign in to Claude Code."
     static let minimumInterval: TimeInterval = 60
     static let renewInterval: TimeInterval = 300
+    /// Wait after a 429, doubling on each one in a row up to `maximumBackoff`.
+    static let minimumBackoff: TimeInterval = 120
+    static let maximumBackoff: TimeInterval = 1800
     static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 
     static func makeRequest(accessToken: String, userAgent: String) -> URLRequest {
@@ -58,6 +61,10 @@ enum ClaudeLimitsClient {
             reportFailure("Claude plan limits request failed")
             throw error
         }
+        if let http = response as? HTTPURLResponse, http.statusCode == 429 {
+            reportFailure("Claude plan limits request failed (HTTP 429)")
+            throw ClaudeLimitsClientError.rateLimited(retryAfter: retryAfter(http))
+        }
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             let status = (response as? HTTPURLResponse)?.statusCode ?? -1
             reportFailure("Claude plan limits request failed (HTTP \(status))")
@@ -70,6 +77,15 @@ enum ClaudeLimitsClient {
             throw ClaudeLimitsClientError.unrecognized
         }
         return limits
+    }
+
+    /// `Retry-After` in seconds. The HTTP-date form is not used by this endpoint.
+    private static func retryAfter(_ response: HTTPURLResponse) -> TimeInterval? {
+        guard let value = response.value(forHTTPHeaderField: "Retry-After"),
+              let seconds = TimeInterval(value.trimmingCharacters(in: .whitespaces)),
+              seconds.isFinite, seconds > 0
+        else { return nil }
+        return seconds
     }
 
     /// Generic password for service `Claude Code-credentials`. The token stays
@@ -188,5 +204,6 @@ enum ClaudeLimitsClient {
 
 enum ClaudeLimitsClientError: Error {
     case httpStatus(Int)
+    case rateLimited(retryAfter: TimeInterval?)
     case unrecognized
 }
