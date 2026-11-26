@@ -32,6 +32,11 @@ enum SettingsSummary {
         "\(MoneyFormat.dollars(thresholdDollars)) in \(windowMinutes) min"
     }
 
+    static func stopClaude(isArmed: Bool, isTripped: Bool) -> String {
+        if isTripped { return "Stopped" }
+        return isArmed ? "Armed" : "Off"
+    }
+
     static func panel(visibleTabCount: Int) -> String {
         visibleTabCount == 1 ? "1 tab" : "\(visibleTabCount) tabs"
     }

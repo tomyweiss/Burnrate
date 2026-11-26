@@ -49,11 +49,11 @@ struct RootPanel: View {
         return source?.costStyle ?? .billed
     }
 
-    private let panelWidth: CGFloat = 500
+    private let panelWidth: CGFloat = 580
 
-    /// List tabs are 620pt. Bench keeps a taller scatter.
+    /// List tabs are 720pt. Bench keeps a taller scatter.
     private var panelHeight: CGFloat {
-        route == .usage && panelTabRaw == UsageTab.bench.rawValue ? 660 : 620
+        route == .usage && panelTabRaw == UsageTab.bench.rawValue ? 760 : 720
     }
 
     var body: some View {
@@ -74,7 +74,11 @@ struct RootPanel: View {
                     onUsageTabChange: { tab in
                         interactionTracker.recordTabChange(tab.rawValue)
                     },
-                    awake: awake
+                    awake: awake,
+                    onOpenStopSettings: {
+                        settingsPage = .stopClaude
+                        route = .settings
+                    }
                 )
             case .settings:
                 SettingsPanel(

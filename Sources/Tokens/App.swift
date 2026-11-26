@@ -11,6 +11,7 @@ struct TokensApp: App {
     @State private var community: CommunityStore
     @State private var interactionTracker: InteractionTracker
     @State private var awake: AwakeSessionController
+    @State private var spendCap: SpendCapController
 
     init() {
         if CommandLine.arguments.contains("--status") {
@@ -26,6 +27,8 @@ struct TokensApp: App {
         let anomalyMonitor = AnomalyMonitor()
         let store = UsageStore(settings: settings, anomalyMonitor: anomalyMonitor)
         let claudeCodeStore = ClaudeCodeStore(settings: settings, anomalyMonitor: anomalyMonitor)
+        let spendCap = SpendCapController(notifier: anomalyMonitor)
+        claudeCodeStore.setSpendCap(spendCap)
         claudeCodeStore.setInstalledObserver { installed in
             store.noteClaudeCodeInstalled(installed)
         }
@@ -46,6 +49,8 @@ struct TokensApp: App {
         let awake = AwakeSessionController()
         AwakeQuit.controller = awake
         _awake = State(initialValue: awake)
+        _spendCap = State(initialValue: spendCap)
+        SpendCapQuit.controller = spendCap
     }
 
     private static func runStatusAndExit() -> Never {
@@ -108,6 +113,7 @@ struct TokensApp: App {
                 awake: awake
             )
                 .environment(claudeCodeStore)
+                .environment(spendCap)
                 .onAppear {
                     store.start()
                     claudeCodeStore.start()

@@ -15,6 +15,7 @@ final class BurnrateAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard SpendCapQuit.confirm() else { return .terminateCancel }
         guard let controller = AwakeQuit.controller, controller.holdsAwake else {
             return .terminateNow
         }

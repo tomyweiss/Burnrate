@@ -156,6 +156,7 @@ struct UsagePanel: View {
     var onOpenChangeLog: (_ highlightVersion: String?, _ releaseNotes: String?) -> Void
     var onUsageTabChange: (UsageTab) -> Void = { _ in }
     var awake: AwakeSessionController
+    var onOpenStopSettings: () -> Void = {}
 
     @AppStorage("panelTab") private var panelTabRaw = UsageTab.models.rawValue
     @State private var expandedModels: Set<String> = []
@@ -173,6 +174,7 @@ struct UsagePanel: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.costStyle) private var costStyle
     @Environment(ClaudeCodeStore.self) private var claudeCode
+    @Environment(SpendCapController.self) private var spendCap
     @AppStorage("panelSource") private var panelSourceRaw = ""
 
     private var storedSource: UsageSource? {
@@ -392,12 +394,13 @@ struct UsagePanel: View {
     /// actions menu on the right. Keep awake drops its title when the row is too narrow.
     private var topBar: some View {
         ViewThatFits(in: .horizontal) {
-            topBarRow(awakeShowsTitle: true)
-            topBarRow(awakeShowsTitle: false)
+            topBarRow(awakeShowsTitle: true, guardShowsTitle: true)
+            topBarRow(awakeShowsTitle: false, guardShowsTitle: true)
+            topBarRow(awakeShowsTitle: false, guardShowsTitle: false)
         }
     }
 
-    private func topBarRow(awakeShowsTitle: Bool) -> some View {
+    private func topBarRow(awakeShowsTitle: Bool, guardShowsTitle: Bool) -> some View {
         HStack(alignment: .center, spacing: 8) {
             timelinePicker
             windowChrome
@@ -406,6 +409,10 @@ struct UsagePanel: View {
 
             AwakeButton(awake: awake, showsTitle: awakeShowsTitle) {
                 settings.dismissAwakeIntro()
+            }
+            SpendGuardButton(settings: settings, showsTitle: guardShowsTitle) {
+                onOpenStopSettings()
+                MenuBarPanelKeeper.keepOpen()
             }
             if AppIdentity.isDevBuild {
                 Text("DEV")
@@ -687,7 +694,7 @@ struct UsagePanel: View {
             : store.isStale
         let unpriced = showsClaudeBranch ? ClaudeTokenLine.unpricedCaption(claudeCode.unpricedModels) : nil
 
-        if status != nil || unpriced != nil || awake.lastStopMessage != nil {
+        if status != nil || unpriced != nil || awake.lastStopMessage != nil || spendCap.isTripped {
             VStack(alignment: .leading, spacing: 2) {
                 if let unpriced {
                     headerNote(unpriced)
@@ -699,6 +706,10 @@ struct UsagePanel: View {
                 }
                 if let message = awake.lastStopMessage {
                     headerNote(message)
+                }
+                if spendCap.isTripped {
+                    headerNote("Claude Code stopped: \(spendCap.tripDetail ?? "guard tripped")")
+                        .foregroundStyle(Color.orange)
                 }
             }
         }

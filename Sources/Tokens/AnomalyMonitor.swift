@@ -119,6 +119,12 @@ final class AnomalyMonitor {
         }
     }
 
+    /// Posts an alert when notifications are allowed. Delivery failures are ignored.
+    func notify(title: String, body: String) async {
+        guard await ensureAuthorized() else { return }
+        try? await postNotification(title: title, body: body)
+    }
+
     private func ensureAuthorized() async -> Bool {
         var settings = await center.notificationSettings()
         if settings.authorizationStatus == .notDetermined {

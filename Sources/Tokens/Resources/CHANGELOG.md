@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.60.19
+
+- New Stop agents button in the top bar. Arm it before you leave agents running, and Burnrate stops Claude Code when estimated spend since you armed it reaches a cap you pick ($5 to $500), or when a Claude plan limit (5-hour or weekly) is used up, so overnight runs don't turn into extra-usage bills. You get a notification at 80% of the cap.
+- When the stop trips, Burnrate first asks every agent to stop and summarize where it got to, through an optional stop hook you can install from Settings → Stop Claude Code. Two minutes later it stops any Claude Code processes still running. You can turn the process stop off.
+- The stop hook does nothing until the stop trips. Burnrate backs up `~/.claude/settings.json` before adding it, and Remove stop hook takes it out again.
+- While the stop is armed, Burnrate asks before quitting, because nothing watches spend while it's closed. Settings → Stop Claude Code can also turn on Launch at login.
+- The Burnrate panel is bigger: 580 × 720 points, up from 500 × 620.
+
 ## 0.60.18
 
 - Claude Code plan limits keep showing after a restart. Burnrate remembers the last limits it read, so a relaunch while Anthropic is busy shows those rows instead of "Limits unavailable".
