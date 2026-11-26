@@ -62,6 +62,10 @@ private final class SparkleDelegate: NSObject, SPUUpdaterDelegate, @preconcurren
 
     // MARK: SPUUpdaterDelegate
 
+    nonisolated func feedURLString(for updater: SPUUpdater) -> String? {
+        SparkleConfig.freshFeedURLString()
+    }
+
     func updater(
         _ updater: SPUUpdater,
         willInstallUpdateOnQuit item: SUAppcastItem,

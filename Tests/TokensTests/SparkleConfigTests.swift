@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Tokens
 
@@ -30,4 +31,11 @@ import Testing
 @Test func pendingUpdateCopy() {
     #expect(UpdateManager.PendingUpdate.available(version: "1.2").title == "Burnrate 1.2 is available")
     #expect(UpdateManager.PendingUpdate.readyToInstall(version: "1.2").actionTitle == "Restart to Update")
+}
+
+@Test func freshFeedURLChangesEachCheckSoNoSavedCopyIsReused() {
+    let first = SparkleConfig.freshFeedURLString(now: Date(timeIntervalSince1970: 1_800_000_000))
+    let second = SparkleConfig.freshFeedURLString(now: Date(timeIntervalSince1970: 1_800_000_060))
+    #expect(first == "https://raw.githubusercontent.com/tomyweiss/Burnrate/main/appcast.xml?check=1800000000")
+    #expect(first != second)
 }
