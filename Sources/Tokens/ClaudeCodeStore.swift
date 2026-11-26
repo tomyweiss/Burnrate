@@ -44,6 +44,11 @@ final class ClaudeCodeStore {
     private var refreshInFlight = false
     private var installedObserver: (@MainActor (Bool) -> Void)?
     private weak var communityStore: CommunityStore?
+    private weak var spendCap: SpendCapController?
+
+    func setSpendCap(_ controller: SpendCapController?) {
+        spendCap = controller
+    }
 
     func setCommunityStore(_ store: CommunityStore?) {
         communityStore = store
@@ -187,7 +192,8 @@ final class ClaudeCodeStore {
             timeZone: settings.resolvedTimeZone,
             billingDayOfMonth: settings.billingDayOfMonth
         ).dateRange(now: now).start
-        let fetchStart = min(communityStart, cycleStart)
+        let capStart = spendCap?.armedAt
+        let fetchStart = min(communityStart, cycleStart, capStart ?? cycleStart)
         let fetchStartMs = fetchStart.timeIntervalSince1970 * 1000
 
         let installed = ClaudeTranscriptIndex.isClaudeCodeInstalled(root: projectsRoot)
@@ -251,6 +257,10 @@ final class ClaudeCodeStore {
         indexingProgress = nil
         isSpikeActive = next.recentCostCents >= settings.anomalyThresholdDollars * 100
         await anomalyMonitor?.evaluate(snapshot: next, settings: settings, source: .claudeCode)
+        if let spendCap, let capStart = spendCap.armedAt {
+            let spent = Self.cycleSpendCents(events: events, since: capStart, until: now)
+            await spendCap.evaluate(spentCents: spent, limits: limits, now: now)
+        }
         await communityStore?.handleClaudeRefreshIfNeeded()
     }
 

@@ -1,10 +1,12 @@
 import SwiftUI
+import TokensCore
 
 /// A page opened from the Settings list.
 enum SettingsPage: String, CaseIterable, Identifiable {
     case sources
     case menuBar
     case spikeAlert
+    case stopClaude
     case panel
     case data
     case updates
@@ -16,6 +18,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .sources: "Sources"
         case .menuBar: "Menu bar"
         case .spikeAlert: "Spike alert"
+        case .stopClaude: "Stop Claude Code"
         case .panel: "Panel"
         case .data: "Data"
         case .updates: "Updates"
@@ -33,6 +36,7 @@ struct SettingsPanel: View {
     var onBack: () -> Void
     var onOpenChangeLog: () -> Void
     @Environment(ClaudeCodeStore.self) private var claudeCode
+    @Environment(SpendCapController.self) private var spendCap
 
     var body: some View {
         VStack(spacing: 0) {
@@ -48,6 +52,7 @@ struct SettingsPanel: View {
                 case .sources: sourcesSections
                 case .menuBar: menuBarSections
                 case .spikeAlert: spikeAlertSections
+                case .stopClaude: stopClaudeSections
                 case .panel: panelSections
                 case .data: dataSections
                 case .updates: updatesSections
@@ -125,6 +130,11 @@ struct SettingsPanel: View {
             SettingsSummary.spikeAlert(
                 thresholdDollars: settings.anomalyThresholdDollars,
                 windowMinutes: settings.anomalyWindowMinutes
+            )
+        case .stopClaude:
+            SettingsSummary.stopClaude(
+                isArmed: spendCap.isArmed,
+                isTripped: spendCap.isTripped
             )
         case .panel:
             SettingsSummary.panel(visibleTabCount: settings.visibleUsageTabs.count)
@@ -312,6 +322,127 @@ struct SettingsPanel: View {
                     )
             }
         }
+    }
+
+    // MARK: - Stop Claude Code
+
+    @ViewBuilder
+    private var stopClaudeSections: some View {
+        @Bindable var spendCap = spendCap
+
+        Section {
+            keepOpenToggle("Estimated spend reaches a cap", isOn: $spendCap.capEnabled)
+            if spendCap.capEnabled {
+                Picker("Cap", selection: $spendCap.capDollars) {
+                    ForEach(capChoices, id: \.self) { dollars in
+                        Text(MoneyFormat.dollars(dollars)).tag(dollars)
+                    }
+                }
+                .onChange(of: spendCap.capDollars) { _, _ in MenuBarPanelKeeper.keepOpen() }
+            }
+            keepOpenToggle("A plan limit is used up", isOn: planLimitBinding)
+            caption(
+                "Spend is Burnrate's estimate since you arm the stop. Plan limits are the 5-hour "
+                    + "and weekly windows; past them, work may be billed as extra usage."
+            )
+        } header: {
+            Text("Stop agents when")
+        }
+
+        Section {
+            keepOpenToggle(
+                "Stop processes after \(Int(SpendCap.graceInterval / 60)) min",
+                isOn: $spendCap.stopsProcesses
+            )
+            caption(
+                spendCap.hookInstalled
+                    ? "Agents are first asked to stop by the stop hook. Processes still running after the grace period get SIGTERM, then SIGKILL."
+                    : "Without the stop hook, Claude Code processes are stopped right away."
+            )
+        }
+
+        Section {
+            Text(stopStatus)
+                .foregroundStyle(spendCap.isTripped ? Color.orange : Color.primary)
+            if spendCap.isTripped {
+                Button("Re-arm") { spendCap.arm(); MenuBarPanelKeeper.keepOpen() }
+                if spendCap.stopsProcesses, !spendCap.processesStopped {
+                    Button("Stop processes now") { spendCap.stopProcessesNow(); MenuBarPanelKeeper.keepOpen() }
+                        .disabled(spendCap.isStoppingProcesses)
+                }
+                Button("Turn off") { spendCap.disarm(); MenuBarPanelKeeper.keepOpen() }
+            } else if spendCap.isArmed {
+                Button("Turn off") { spendCap.disarm(); MenuBarPanelKeeper.keepOpen() }
+            } else {
+                Button("Arm now") { spendCap.arm(); MenuBarPanelKeeper.keepOpen() }
+                    .disabled(!settings.claudeCodeEnabled || !spendCap.hasTrigger)
+            }
+            if !settings.claudeCodeEnabled {
+                caption("Turn on Claude Code in Sources to use the stop.")
+            }
+        }
+
+        Section {
+            keepOpenToggle("Launch Burnrate at login", isOn: $settings.launchAtLogin)
+            caption(
+                "The stop only watches while Burnrate is open. Launching at login keeps it "
+                    + "going after a restart, and Burnrate asks before quitting while the stop is armed."
+            )
+        }
+
+        Section {
+            HStack {
+                Text("Stop hook")
+                Spacer()
+                Text(spendCap.hookInstalled ? "Installed" : "Not installed")
+                    .foregroundStyle(.secondary)
+            }
+            if spendCap.hookInstalled {
+                Button("Remove stop hook") { spendCap.removeHook(); MenuBarPanelKeeper.keepOpen() }
+            } else {
+                Button("Install stop hook") { spendCap.installHook(); MenuBarPanelKeeper.keepOpen() }
+            }
+            caption(
+                "Adds a PreToolUse hook to ~/.claude/settings.json (a backup is kept next to it). "
+                    + "It does nothing until the stop trips, then blocks every tool call and tells "
+                    + "Claude to stop and summarize. New Claude Code sessions pick it up; running ones may need a restart."
+            )
+            if let error = spendCap.hookError {
+                Text(error).font(.caption).foregroundStyle(.orange)
+            }
+        }
+        .onAppear { spendCap.refreshHookStatus() }
+    }
+
+    private var capChoices: [Double] {
+        let choices = SpendCap.dollarChoices
+        return choices.contains(spendCap.capDollars) ? choices : (choices + [spendCap.capDollars]).sorted()
+    }
+
+    private var planLimitBinding: Binding<Bool> {
+        Binding(
+            get: { spendCap.planLimitEnabled },
+            set: { on in
+                spendCap.planLimitEnabled = on
+                if on { settings.claudeLimitsEnabled = true }
+            }
+        )
+    }
+
+    private var stopStatus: String {
+        if spendCap.isTripped {
+            return "Stopped: \(spendCap.tripDetail ?? "the stop tripped")"
+        }
+        if spendCap.isArmed {
+            return SpendCapSummary.armed(
+                capEnabled: spendCap.capEnabled,
+                capDollars: spendCap.capDollars,
+                spentCents: spendCap.spentCents,
+                planLimitEnabled: spendCap.planLimitEnabled,
+                armedAt: spendCap.armedAt
+            )
+        }
+        return "Off"
     }
 
     // MARK: - Panel
