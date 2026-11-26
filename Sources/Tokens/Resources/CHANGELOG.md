@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.60.20
+
+- Check for Updates always asks for the latest version. Before, a check within 5 minutes of the previous one could reuse a saved answer and say you were up to date right after a release went out.
+
 ## 0.60.19
 
 - New Stop agents button in the top bar. Arm it before you leave agents running, and Burnrate stops Claude Code when estimated spend since you armed it reaches a cap you pick ($5 to $500), or when a Claude plan limit (5-hour or weekly) is used up, so overnight runs don't turn into extra-usage bills. You get a notification at 80% of the cap.

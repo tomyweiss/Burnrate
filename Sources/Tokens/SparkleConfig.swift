@@ -9,6 +9,16 @@ enum SparkleConfig {
         string: "https://raw.githubusercontent.com/tomyweiss/Burnrate/main/appcast.xml"
     )!
 
+    /// The feed with a per-check query, so no check reuses a saved copy. GitHub sends
+    /// `max-age=300`, and the system URL cache would otherwise answer a click on
+    /// Check for Updates with a feed up to 5 minutes old, missing a release that
+    /// just went out. GitHub ignores the query.
+    static func freshFeedURLString(base: URL = feedURL, now: Date = Date()) -> String {
+        var components = URLComponents(url: base, resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "check", value: String(Int(now.timeIntervalSince1970)))]
+        return components?.string ?? base.absoluteString
+    }
+
     /// Daily, matching Sparkle's default and Network Traffic Light.
     static let scheduledCheckInterval: TimeInterval = 86_400
 
